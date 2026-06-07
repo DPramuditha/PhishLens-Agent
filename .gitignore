@@ -1,0 +1,32 @@
+# Environment files
+.env
+
+# Python / Django
+backend/.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.sqlite3
+*.db
+
+# Node / frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Media / generated files
+media/
+
+# IDE files
+node_modules
+
+# Other
+media
