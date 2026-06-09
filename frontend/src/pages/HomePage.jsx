@@ -17,6 +17,8 @@ import {
   Eye,
   Code,
   Terminal,
+  Pencil,
+  Trash2,
   ExternalLink,
   ChevronDown,
   ChevronUp
@@ -319,6 +321,7 @@ export default function HomePage() {
   const [input, setInput] = useState('');
   const [showProfilePopup, setShowProfilePopup] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isTitleMenuOpen, setIsTitleMenuOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [hasSentMessage, setHasSentMessage] = useState(false);
   const [showOrbs, setShowOrbs] = useState(false);
@@ -336,6 +339,7 @@ export default function HomePage() {
   const inputBarRef = useRef(null);
   const orbLeftRef = useRef(null);
   const orbRightRef = useRef(null);
+  const titleMenuRef = useRef(null);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -350,6 +354,32 @@ export default function HomePage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    if (!titleMenuRef.current) return;
+
+    if (isTitleMenuOpen) {
+      titleMenuRef.current.style.pointerEvents = 'auto';
+      gsap.fromTo(
+        titleMenuRef.current,
+        { opacity: 0, y: -8, scale: 0.96 },
+        { opacity: 1, y: 0, scale: 1, duration: 0.22, ease: 'power3.out' }
+      );
+    } else {
+      gsap.to(titleMenuRef.current, {
+        opacity: 0,
+        y: -8,
+        scale: 0.96,
+        duration: 0.16,
+        ease: 'power2.in',
+        onComplete: () => {
+          if (titleMenuRef.current) {
+            titleMenuRef.current.style.pointerEvents = 'none';
+          }
+        },
+      });
+    }
+  }, [isTitleMenuOpen]);
 
   const triggerOrbAnimation = useCallback(() => {
     setShowOrbs(true);
@@ -538,7 +568,7 @@ export default function HomePage() {
             />
           </div>
           {/* Tooltip (Styled as Chat Bubble) */}
-          <div className="sidebar-tooltip absolute left-16 px-3.5 py-2 rounded-2xl rounded-tl-none bg-gray-200 dark:bg-[#2f2f2f] text-gray-800 dark:text-gray-100 text-xs font-semibold shadow-xl whitespace-nowrap opacity-0 pointer-events-none border border-gray-300/30 dark:border-gray-700/30">
+          <div className="sidebar-tooltip absolute left-16 px-3.5 py-2 rounded-2xl rounded-bl-none bg-gray-200 dark:bg-[#2f2f2f] text-gray-800 dark:text-gray-100 text-xs font-semibold shadow-xl whitespace-nowrap opacity-0 pointer-events-none border border-gray-300/30 dark:border-gray-700/30">
             PhishLens Agent
           </div>
         </div>
@@ -695,7 +725,38 @@ export default function HomePage() {
         )}
 
         <header className="h-16 flex items-center justify-between px-6 shrink-0" style={{ position: 'relative', zIndex: 10 }}>
-          <div className="font-semibold text-lg text-gray-700 dark:text-gray-300">Scan Dashboard</div>
+          <div className="relative flex items-center gap-3">
+            <div className="font-semibold text-lg text-gray-700 dark:text-gray-300">Scan Chatgpt site</div>
+            <button
+              type="button"
+              onClick={() => setIsTitleMenuOpen((prev) => !prev)}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-indigo-50 hover:text-indigo-600 dark:border-gray-700 dark:bg-[#2a2a2a]/80 dark:text-gray-200 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-200 cursor-pointer"
+              aria-label="Open scan dashboard actions"
+            >
+              {isTitleMenuOpen ? <ChevronUp size={20} strokeWidth={3} /> : <ChevronDown size={20} strokeWidth={3} />}
+            </button>
+
+            <div
+              ref={titleMenuRef}
+              className="absolute left-0 top-12 w-44 rounded-2xl border border-gray-200/80 bg-white/95 p-1.5 shadow-xl backdrop-blur-xl dark:border-gray-700 dark:bg-[#1f1f1f]/95"
+              style={{ opacity: 0, transformOrigin: 'top left', pointerEvents: 'none' }}
+            >
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-gray-700 transition hover:bg-indigo-50 hover:text-indigo-700 dark:text-gray-200 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-100"
+              >
+                <Pencil size={14} />
+                Rename
+              </button>
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-rose-600 transition hover:bg-rose-500/10 dark:text-rose-300 dark:hover:bg-rose-500/10"
+              >
+                <Trash2 size={14} />
+                Delete
+              </button>
+            </div>
+          </div>
         </header>
 
         {/* Messages area — only visible after first message (NO SCROLLBAR) */}
@@ -749,85 +810,110 @@ export default function HomePage() {
           </section>
         )}
 
-        {/* Centered hero — only visible before first message */}
+        {/* Centered hero + input — only visible before first message */}
         {!hasSentMessage && (
           <div
-            className="flex-1 flex flex-col items-center justify-center text-slate-500 dark:text-slate-500 pointer-events-none select-none"
+            className="flex-1 flex items-center justify-center px-4 md:px-8"
             style={{ position: 'relative', zIndex: 10 }}
           >
-            <div className="w-40 h-40 shrink-0">
-              <Lottie
-                lottieRef={chatbotLottieRef}
-                animationData={chatbotAnimData}
-                autoplay={true}
-                loop={true}
-                style={{ width: '100%', height: '100%' }}
-              />
+            <div className="w-full max-w-3xl flex flex-col items-center text-center text-slate-500 dark:text-slate-400 select-none">
+              <h1 className="text-3xl md:text-5xl font-black tracking-tight text-gray-900 dark:text-white mb-3">How can I assist your security?</h1>
+              <p className="text-sm md:text-base text-gray-500 dark:text-gray-400 max-w-xl">Paste a suspicious URL, email snippet, or ask about phishing trends.</p>
+
+              <div className="mt-8 w-full max-w-2xl">
+                <div
+                  ref={inputBarRef}
+                  className="relative z-20 w-full"
+                >
+                  <div
+                    className="absolute inset-0 pointer-events-none rounded-[28px]"
+                    style={{
+                      backdropFilter: 'blur(18px)',
+                      WebkitBackdropFilter: 'blur(18px)',
+                    }}
+                  />
+
+                  <div className="relative mx-auto w-full" style={{ zIndex: 1 }}>
+                    <form
+                      onSubmit={handleSend}
+                      className="relative flex items-center shadow-lg overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500 dark:focus-within:ring-indigo-400 transition-all rounded-full bg-white/70 dark:bg-[#2f2f2f]/80 backdrop-blur-2xl border border-white/40 dark:border-gray-600/60"
+                      style={{
+                        boxShadow: '0 8px 32px 0 rgba(66,46,168,0.18), 0 1.5px 8px 0 rgba(138,43,226,0.10)',
+                      }}
+                    >
+                      <input
+                        type="text"
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        placeholder="Paste URL to scan for phishing..."
+                        disabled={isLoading}
+                        className="w-full bg-transparent py-4 pl-5 pr-14 outline-none text-[15px] text-gray-700 dark:text-gray-200 placeholder-gray-400"
+                      />
+                      <button
+                        type="submit"
+                        disabled={!input.trim() || isLoading}
+                        className={"absolute right-3 p-2 rounded-xl flex items-center justify-center transition-all cursor-pointer hover:scale-105 duration-500 " + (input.trim() && !isLoading ? "bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-white dark:text-black dark:hover:bg-gray-200" : "bg-gray-300 text-gray-500 dark:bg-[#424242] dark:text-gray-500")}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" className="lucide lucide-arrow-up-icon lucide-arrow-up"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
+                      </button>
+                    </form>
+                    <p className="text-xs text-center text-gray-500 dark:text-gray-400 mt-2.5">
+                      PhishLens can make mistakes. Verify important security warnings.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
-            <h1 className="text-2xl font-semibold text-gray-800 dark:text-gray-200 mb-2 mt-2">How can I assist your security?</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Paste a suspicious URL, email snippet, or ask about phishing trends.</p>
           </div>
         )}
 
-        {/* Input bar wrapper */}
-        <div
-          ref={inputBarRef}
-          className={
-            hasSentMessage
-              ? "absolute bottom-0 left-0 w-full px-4 md:px-12 pt-16 pb-6 bg-gradient-to-t from-white dark:from-[#212121] via-white/80 dark:via-[#212121]/80 to-transparent"
-              : "w-full px-4 md:px-12 pb-12 flex flex-col items-center"
-          }
-          style={
-            hasSentMessage
-              ? { zIndex: 20 }
-              : { position: 'relative', zIndex: 20 }
-          }
-        >
-          {/* Backdrop blur layer behind the input (visible in both states) */}
+        {/* Input bar wrapper (shown after scan starts) */}
+        {hasSentMessage && (
           <div
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              backdropFilter: 'blur(18px)',
-              WebkitBackdropFilter: 'blur(18px)',
-              maskImage: hasSentMessage
-                ? 'linear-gradient(to top, black 50%, transparent 100%)'
-                : 'none',
-              WebkitMaskImage: hasSentMessage
-                ? 'linear-gradient(to top, black 50%, transparent 100%)'
-                : 'none',
-              borderRadius: hasSentMessage ? 0 : 24,
-            }}
-          />
-
-          <div className="max-w-2xl w-full mx-auto relative" style={{ zIndex: 1 }}>
-            <form
-              onSubmit={handleSend}
-              className="relative flex items-center shadow-lg overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500 dark:focus-within:ring-indigo-400 transition-all rounded-full bg-white/60 dark:bg-[#2f2f2f]/70 backdrop-blur-2xl border border-white/40 dark:border-gray-600/60"
+            ref={inputBarRef}
+            className="absolute bottom-0 left-0 w-full px-4 md:px-12 pt-16 pb-6 bg-gradient-to-t from-white dark:from-[#212121] via-white/80 dark:via-[#212121]/80 to-transparent"
+            style={{ zIndex: 20 }}
+          >
+            <div
+              className="absolute inset-0 pointer-events-none"
               style={{
-                boxShadow: '0 8px 32px 0 rgba(66,46,168,0.18), 0 1.5px 8px 0 rgba(138,43,226,0.10)',
+                backdropFilter: 'blur(18px)',
+                WebkitBackdropFilter: 'blur(18px)',
+                maskImage: 'linear-gradient(to top, black 50%, transparent 100%)',
+                WebkitMaskImage: 'linear-gradient(to top, black 50%, transparent 100%)',
               }}
-            >
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Paste URL to scan for phishing..."
-                disabled={isLoading}
-                className="w-full bg-transparent py-4 pl-5 pr-14 outline-none text-[15px] text-gray-700 dark:text-gray-200 placeholder-gray-400"
-              />
-              <button
-                type="submit"
-                disabled={!input.trim() || isLoading}
-                className={"absolute right-3 p-2 rounded-xl flex items-center justify-center transition-all cursor-pointer hover:scale-105 duration-500 " + (input.trim() && !isLoading ? "bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-white dark:text-black dark:hover:bg-gray-200" : "bg-gray-300 text-gray-500 dark:bg-[#424242] dark:text-gray-500")}
+            />
+
+            <div className="max-w-2xl w-full mx-auto relative" style={{ zIndex: 1 }}>
+              <form
+                onSubmit={handleSend}
+                className="relative flex items-center shadow-lg overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500 dark:focus-within:ring-indigo-400 transition-all rounded-full bg-white/60 dark:bg-[#2f2f2f]/70 backdrop-blur-2xl border border-white/40 dark:border-gray-600/60"
+                style={{
+                  boxShadow: '0 8px 32px 0 rgba(66,46,168,0.18), 0 1.5px 8px 0 rgba(138,43,226,0.10)',
+                }}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" className="lucide lucide-arrow-up-icon lucide-arrow-up"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
-              </button>
-            </form>
-            <p className="text-xs text-center text-gray-500 dark:text-gray-400 mt-2.5">
-              PhishLens can make mistakes. Verify important security warnings.
-            </p>
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="Paste URL to scan for phishing..."
+                  disabled={isLoading}
+                  className="w-full bg-transparent py-4 pl-5 pr-14 outline-none text-[15px] text-gray-700 dark:text-gray-200 placeholder-gray-400"
+                />
+                <button
+                  type="submit"
+                  disabled={!input.trim() || isLoading}
+                  className={"absolute right-3 p-2 rounded-xl flex items-center justify-center transition-all cursor-pointer hover:scale-105 duration-500 " + (input.trim() && !isLoading ? "bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-white dark:text-black dark:hover:bg-gray-200" : "bg-gray-300 text-gray-500 dark:bg-[#424242] dark:text-gray-500")}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" className="lucide lucide-arrow-up-icon lucide-arrow-up"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
+                </button>
+              </form>
+              <p className="text-xs text-center text-gray-500 dark:text-gray-400 mt-2.5">
+                PhishLens can make mistakes. Verify important security warnings.
+              </p>
+            </div>
           </div>
-        </div>
+        )}
       </main>
 
       {/* Global Modals */}
