@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import {
   MessageSquare,
   Settings,
@@ -35,6 +35,13 @@ import darkHistoryAnimData from '../sidebar_images/dark-history.json';
 import chatbotAnimData from '../sidebar_images/claude.json';
 
 import SearchChat from './SearchChat';
+
+const HERO_TITLE = 'How can I assist your security?';
+const HERO_SUGGESTIONS = [
+  'Scan suspicious URL',
+  'Check phishing trends',
+  'Analyze email snippet',
+];
 import ProfileBottomSheet from '../components/ProfileBottomSheet';
 
 /* ── Orb background that persists & floats in idle state ── */
@@ -342,6 +349,15 @@ export default function HomePage() {
   const titleMenuRef = useRef(null);
   const messagesEndRef = useRef(null);
 
+  const heroRef = useRef(null);
+  const heroTitleRef = useRef(null);
+  const heroTitleTextRef = useRef(null);
+  const heroTitleCursorRef = useRef(null);
+  const heroSubtitleRef = useRef(null);
+  const heroInputWrapRef = useRef(null);
+  const heroSuggestionsRef = useRef(null);
+  const heroBadgeRef = useRef(null);
+
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
@@ -411,6 +427,87 @@ export default function HomePage() {
       { opacity: 0, y: 40 },
       { opacity: 1, y: 0, duration: 0.65, ease: 'power3.out' }
     );
+  }, [hasSentMessage]);
+
+  /* Hero entrance: bottom-to-top reveal + h1 typing */
+  useLayoutEffect(() => {
+    if (hasSentMessage) return;
+
+    const root = heroRef.current;
+    const titleEl = heroTitleRef.current;
+    const titleSpan = heroTitleTextRef.current;
+    const cursorEl = heroTitleCursorRef.current;
+    const subtitleEl = heroSubtitleRef.current;
+    const inputWrap = heroInputWrapRef.current;
+    const suggestionsEl = heroSuggestionsRef.current;
+    const badgeEl = heroBadgeRef.current;
+    if (!root || !titleEl || !titleSpan || !subtitleEl || !inputWrap) return;
+
+    const ctx = gsap.context(() => {
+      gsap.set([inputWrap, subtitleEl, titleEl, badgeEl].filter(Boolean), {
+        opacity: 0,
+        y: 56,
+      });
+      if (suggestionsEl) gsap.set(suggestionsEl, { opacity: 1 });
+
+      titleSpan.textContent = '';
+      if (cursorEl) gsap.set(cursorEl, { opacity: 1 });
+
+      const tl = gsap.timeline({
+        defaults: { ease: 'power3.out' },
+        onComplete: () => {
+          titleSpan.textContent = HERO_TITLE;
+        },
+      });
+
+      // Bottom → top: input rises first, then subtitle, title, badge
+      tl.to(inputWrap, { opacity: 1, y: 0, duration: 0.75 })
+        .to(subtitleEl, { opacity: 1, y: 0, duration: 0.6 }, '-=0.42')
+        .to(titleEl, { opacity: 1, y: 0, duration: 0.65 }, '-=0.38');
+
+      const typeState = { charIndex: 0 };
+      tl.set(typeState, { charIndex: 0 })
+        .to(typeState, {
+          charIndex: HERO_TITLE.length,
+          duration: HERO_TITLE.length * 0.05,
+          ease: 'none',
+          onUpdate: () => {
+            titleSpan.textContent = HERO_TITLE.slice(0, Math.round(typeState.charIndex));
+          },
+          onComplete: () => {
+            titleSpan.textContent = HERO_TITLE;
+          },
+        });
+
+      if (cursorEl) {
+        tl.to(cursorEl, { opacity: 0, duration: 0.25, ease: 'power2.in' }, '+=0.4');
+      }
+
+      if (badgeEl) {
+        tl.to(badgeEl, { opacity: 1, y: 0, duration: 0.55 }, '-=1.1');
+      }
+
+      if (suggestionsEl) {
+        const pills = suggestionsEl.querySelectorAll('.hero-suggestion-pill');
+        if (pills.length) {
+          tl.fromTo(
+            pills,
+            { opacity: 0, y: 20, scale: 0.94 },
+            {
+              opacity: 1,
+              y: 0,
+              scale: 1,
+              duration: 0.42,
+              stagger: 0.08,
+              ease: 'back.out(1.5)',
+            },
+            0
+          );
+        }
+      }
+    }, root);
+
+    return () => ctx.revert();
   }, [hasSentMessage]);
 
   const handleSend = async (e) => {
@@ -813,54 +910,111 @@ export default function HomePage() {
         {/* Centered hero + input — only visible before first message */}
         {!hasSentMessage && (
           <div
+            ref={heroRef}
             className="flex-1 flex items-center justify-center px-4 md:px-8"
             style={{ position: 'relative', zIndex: 10 }}
           >
             <div className="w-full max-w-3xl flex flex-col items-center text-center text-slate-500 dark:text-slate-400 select-none">
-              <h1 className="text-3xl md:text-5xl font-black tracking-tight text-gray-900 dark:text-white mb-3">How can I assist your security?</h1>
-              <p className="text-sm md:text-base text-gray-500 dark:text-gray-400 max-w-xl">Paste a suspicious URL, email snippet, or ask about phishing trends.</p>
+              <div
+                ref={heroBadgeRef}
+                className="mb-5 inline-flex items-center gap-2 rounded-full border border-indigo-500/25 bg-indigo-500/8 px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-indigo-600 dark:border-indigo-400/30 dark:bg-indigo-500/12 dark:text-indigo-300"
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-60" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-indigo-500 dark:bg-indigo-400" />
+                </span>
+                PhishLens AI Agent Beta
+              </div>
+
+              <h1
+                ref={heroTitleRef}
+                className="text-3xl md:text-5xl font-black tracking-tight mb-3 min-h-[1.2em]"
+                aria-label={HERO_TITLE}
+              >
+                <span
+                  ref={heroTitleTextRef}
+                  className="hero-title-text bg-gradient-to-r from-gray-900 via-indigo-800 to-violet-700 bg-clip-text text-transparent dark:from-white dark:via-indigo-200 dark:to-violet-300"
+                />
+                <span
+                  ref={heroTitleCursorRef}
+                  className="hero-title-cursor ml-0.5 inline-block w-[3px] h-[0.85em] align-middle rounded-sm bg-indigo-500 dark:bg-indigo-400 animate-pulse"
+                  aria-hidden="true"
+                />
+              </h1>
+
+              <p
+                ref={heroSubtitleRef}
+                className="text-sm md:text-base text-gray-500 dark:text-gray-400 max-w-xl leading-relaxed"
+              >
+                Paste a suspicious URL, email snippet, or ask about phishing trends.
+              </p>
 
               <div className="mt-8 w-full max-w-2xl">
                 <div
-                  ref={inputBarRef}
+                  ref={(el) => {
+                    inputBarRef.current = el;
+                    heroInputWrapRef.current = el;
+                  }}
                   className="relative z-20 w-full"
                 >
                   <div
-                    className="absolute inset-0 pointer-events-none rounded-[28px]"
+                    className="absolute -inset-1 pointer-events-none rounded-[32px] opacity-60 blur-xl"
                     style={{
-                      backdropFilter: 'blur(18px)',
-                      WebkitBackdropFilter: 'blur(18px)',
+                      background: 'linear-gradient(90deg, rgba(66,46,168,0.35), rgba(138,43,226,0.28), rgba(99,102,241,0.35))',
                     }}
+                    aria-hidden="true"
                   />
 
                   <div className="relative mx-auto w-full" style={{ zIndex: 1 }}>
                     <form
                       onSubmit={handleSend}
-                      className="relative flex items-center shadow-lg overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500 dark:focus-within:ring-indigo-400 transition-all rounded-full bg-white/70 dark:bg-[#2f2f2f]/80 backdrop-blur-2xl border border-white/40 dark:border-gray-600/60"
+                      className="hero-input-form relative flex items-center shadow-lg overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500/80 dark:focus-within:ring-indigo-400/80 transition-all rounded-[28px] bg-white/75 dark:bg-[#2a2a2a]/85 backdrop-blur-2xl border border-white/50 dark:border-gray-600/50"
                       style={{
-                        boxShadow: '0 8px 32px 0 rgba(66,46,168,0.18), 0 1.5px 8px 0 rgba(138,43,226,0.10)',
+                        boxShadow: '0 12px 40px 0 rgba(66,46,168,0.16), 0 2px 12px 0 rgba(138,43,226,0.12)',
                       }}
                     >
+                      <div className="pl-4 pr-1 flex items-center text-indigo-500 dark:text-indigo-400 shrink-0">
+                        <ShieldAlert size={18} strokeWidth={2.25} />
+                      </div>
                       <input
                         type="text"
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         placeholder="Paste URL to scan for phishing..."
                         disabled={isLoading}
-                        className="w-full bg-transparent py-4 pl-5 pr-14 outline-none text-[15px] text-gray-700 dark:text-gray-200 placeholder-gray-400"
+                        className="w-full bg-transparent py-4 pl-2 pr-14 outline-none text-[15px] text-gray-700 dark:text-gray-200 placeholder-gray-400/90"
                       />
                       <button
                         type="submit"
                         disabled={!input.trim() || isLoading}
-                        className={"absolute right-3 p-2 rounded-xl flex items-center justify-center transition-all cursor-pointer hover:scale-105 duration-500 " + (input.trim() && !isLoading ? "bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-white dark:text-black dark:hover:bg-gray-200" : "bg-gray-300 text-gray-500 dark:bg-[#424242] dark:text-gray-500")}
+                        className={"absolute right-2.5 p-2.5 rounded-2xl flex items-center justify-center transition-all cursor-pointer hover:scale-105 duration-300 " + (input.trim() && !isLoading ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-500/30 dark:bg-white dark:text-black dark:hover:bg-gray-200 dark:shadow-white/10" : "bg-gray-200/80 text-gray-400 dark:bg-[#3d3d3d] dark:text-gray-500")}
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" className="lucide lucide-arrow-up-icon lucide-arrow-up"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-arrow-up"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
                       </button>
                     </form>
-                    <p className="text-xs text-center text-gray-500 dark:text-gray-400 mt-2.5">
-                      PhishLens can make mistakes. Verify important security warnings.
-                    </p>
                   </div>
+                </div>
+
+                <div
+                  ref={heroSuggestionsRef}
+                  className="mt-5 flex flex-wrap items-center justify-center gap-2"
+                >
+                  {HERO_SUGGESTIONS.map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      onClick={() => {
+                        if (suggestion === 'Scan suspicious URL') {
+                          setInput('https://');
+                        } else {
+                          setInput(suggestion);
+                        }
+                      }}
+                      className="hero-suggestion-pill rounded-full border border-gray-200/80 bg-white/60 px-3.5 py-1.5 text-xs font-medium text-gray-600 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 dark:border-gray-700/80 dark:bg-[#2a2a2a]/60 dark:text-gray-400 dark:hover:border-indigo-500/40 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-200 cursor-pointer"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
