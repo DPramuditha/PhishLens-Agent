@@ -1,27 +1,19 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import {
-  MessageSquare,
-  Settings,
-  LogOut,
-  Plus,
   ShieldAlert,
-  HelpCircle,
-  BookOpen,
-  Sun,
-  Moon,
-  Globe,
-  Activity,
-  Clock,
-  Check,
   AlertCircle,
   Eye,
-  Code,
   Terminal,
   Pencil,
   Trash2,
   ExternalLink,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Activity,
+  Clock,
+  Plus,
+  BarChart3,
+  Maximize2,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Lottie from 'lottie-react';
@@ -35,6 +27,8 @@ import darkHistoryAnimData from '../sidebar_images/dark-history.json';
 import chatbotAnimData from '../sidebar_images/claude.json';
 
 import SearchChat from './SearchChat';
+import ProfileBottomSheet from '../components/ProfileBottomSheet';
+import SidebarDock from '../components/SidebarDock';
 
 const HERO_TITLE = 'How can I assist your security?';
 const HERO_SUGGESTIONS = [
@@ -42,7 +36,6 @@ const HERO_SUGGESTIONS = [
   'Check phishing trends',
   'Analyze email snippet',
 ];
-import ProfileBottomSheet from '../components/ProfileBottomSheet';
 
 /* ── Orb background that persists & floats in idle state ── */
 function BackgroundOrbs({ hasSentMessage }) {
@@ -165,7 +158,7 @@ function TraceStepList({ steps }) {
 }
 
 // Subcomponent for rendering the beautiful, complete scan report dashboard
-function ReportDashboard({ report, duration, screenshotUrl, toolTrace }) {
+function ReportDashboard({ report, duration, screenshotUrl, toolTrace, onViewFullDashboard }) {
   const [showScreenshot, setShowScreenshot] = useState(false);
   if (!report) return null;
 
@@ -309,8 +302,8 @@ function ReportDashboard({ report, duration, screenshotUrl, toolTrace }) {
         <p className="text-[14px] leading-relaxed font-medium">{report.safety_advice}</p>
       </div>
 
-      {/* 7. Extra Stats & Trace */}
-      <div className="flex flex-col gap-2">
+      {/* 7. Extra Stats & Trace & Full Dashboard Button */}
+      <div className="flex flex-col gap-4">
         <div className="flex items-center gap-4 text-xs text-gray-500">
           <span className="flex items-center gap-1"><Clock size={12} /> Duration: {duration}s</span>
           <span className="flex items-center gap-1"><Activity size={12} /> System: ReAct Multi-Agent Pipeline</span>
@@ -357,6 +350,70 @@ export default function HomePage() {
   const heroInputWrapRef = useRef(null);
   const heroSuggestionsRef = useRef(null);
   const heroBadgeRef = useRef(null);
+
+  // ── Dock item configs ──────────────────────────────────────────────────────
+  const dockTopItems = [
+    {
+      id: 'logo',
+      label: 'PhishLens Agent',
+      lottieData: chatbotAnimData,
+      lottieRef: chatbotLottieRef,
+      onClick: () => {},
+      hasDot: false,
+    },
+    {
+      id: 'new-scan',
+      label: 'New Scan',
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style={{ width: '100%', height: '100%' }}>
+          <path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25ZM12.75 9a.75.75 0 0 0-1.5 0v2.25H9a.75.75 0 0 0 0 1.5h2.25V15a.75.75 0 0 0 1.5 0v-2.25H15a.75.75 0 0 0 0-1.5h-2.25V9Z" clipRule="evenodd" />
+        </svg>
+      ),
+      onClick: () => {},
+      hasDot: false,
+    },
+    {
+      id: 'search',
+      label: 'Search History',
+      lottieData: isDarkMode ? searchAnimData : darkSearchAnimData,
+      lottieRef: searchLottieRef,
+      onClick: () => setIsSearchOpen(true),
+      hasDot: false,
+    },
+    {
+      id: 'chat',
+      label: 'AI Chat Assistant',
+      lottieData: isDarkMode ? chatAnimData : darkChatAnimData,
+      lottieRef: chatLottieRef,
+      onClick: () => {},
+      hasDot: false,
+    },
+    {
+      id: 'history',
+      label: 'Scan Logs',
+      lottieData: isDarkMode ? historyAnimData : darkHistoryAnimData,
+      lottieRef: historyLottieRef,
+      onClick: () => {},
+      hasDot: false,
+    },
+  ];
+
+  const dockBottomItems = [
+    {
+      id: 'profile',
+      label: `Profile: ${profileName}`,
+      icon: (
+        <div
+          className="w-full h-full rounded-full bg-indigo-500 text-white flex items-center justify-center text-sm font-semibold shadow-sm"
+          style={{ fontSize: 15, fontWeight: 700 }}
+        >
+          {profileInitial}
+        </div>
+      ),
+      onClick: () => setShowProfilePopup((prev) => !prev),
+      hasDot: false,
+    },
+  ];
 
   useEffect(() => {
     if (isDarkMode) {
@@ -617,170 +674,25 @@ export default function HomePage() {
     }
   };
 
-  // GSAP Tooltip hover animations
-  const handleTooltipEnter = (e) => {
-    const tooltip = e.currentTarget.querySelector('.sidebar-tooltip');
-    if (tooltip) {
-      gsap.killTweensOf(tooltip);
-      gsap.fromTo(tooltip, 
-        { opacity: 0, scale: 0.85, x: -12 },
-        { opacity: 1, scale: 1, x: 0, duration: 0.25, ease: 'power2.out' }
-      );
-    }
-  };
-
-  const handleTooltipLeave = (e) => {
-    const tooltip = e.currentTarget.querySelector('.sidebar-tooltip');
-    if (tooltip) {
-      gsap.killTweensOf(tooltip);
-      gsap.to(tooltip, {
-        opacity: 0,
-        scale: 0.85,
-        x: -12,
-        duration: 0.18,
-        ease: 'power2.in'
-      });
-    }
-  };
-
   return (
     <div className="flex h-screen overflow-hidden font-sans text-gray-800 dark:text-gray-200">
-      {/* Sidebar (Permanently Collapsed Icon-Only View) */}
-      <aside 
-        className="w-[72px] bg-gray-50 dark:bg-[#3a3a3a] flex flex-col border-r border-gray-200 dark:border-gray-700 relative shrink-0 z-30"
-      >
-        {/* Logo / Header */}
-        <div 
-          className="flex items-center justify-center h-14 border-b border-gray-200 dark:border-gray-700 px-4 cursor-pointer relative"
-          onMouseEnter={handleTooltipEnter}
-          onMouseLeave={handleTooltipLeave}
-        >
-          <div className="w-20 h-20 shrink-0">
-            <Lottie
-              lottieRef={chatbotLottieRef}
-              animationData={chatbotAnimData}
-              autoplay={true}
-              loop={true}
-              style={{ width: '100%', height: '100%' }}
-            />
-          </div>
-          {/* Tooltip (Styled as Chat Bubble) */}
-          <div className="sidebar-tooltip absolute left-16 px-3.5 py-2 rounded-2xl rounded-bl-none bg-gray-200 dark:bg-[#2f2f2f] text-gray-800 dark:text-gray-100 text-xs font-semibold shadow-xl whitespace-nowrap opacity-0 pointer-events-none border border-gray-300/30 dark:border-gray-700/30">
-            PhishLens Agent
-          </div>
-        </div>
+      {/* ── macOS-Style Sidebar Dock (floating, centered left) ── */}
+      <SidebarDock
+        items={dockTopItems}
+        bottomItems={dockBottomItems}
+        isDarkMode={isDarkMode}
+        activeItemId={null}
+      />
 
-        {/* Navigation Actions */}
-        <nav className="flex-1 py-4 flex flex-col gap-3 px-2">
-          {/* New Scan */}
-          <button 
-            className="w-full flex items-center justify-center rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-left shrink-0 cursor-pointer min-w-0 p-2.5 relative"
-            onMouseEnter={handleTooltipEnter}
-            onMouseLeave={handleTooltipLeave}
-          >
-            <div className="w-6 flex justify-center shrink-0 hover:scale-110 transition-all duration-300">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-5 text-[#48484A] dark:text-gray-200">
-                <path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25ZM12.75 9a.75.75 0 0 0-1.5 0v2.25H9a.75.75 0 0 0 0 1.5h2.25V15a.75.75 0 0 0 1.5 0v-2.25H15a.75.75 0 0 0 0-1.5h-2.25V9Z" clipRule="evenodd" />
-              </svg>
-            </div>
-            {/* Tooltip (Styled as Chat Bubble) */}
-            <div className="sidebar-tooltip absolute left-16 px-3.5 py-2 rounded-2xl rounded-tl-none bg-gray-200 dark:bg-[#2f2f2f] text-gray-800 dark:text-gray-100 text-xs font-semibold shadow-xl whitespace-nowrap opacity-0 pointer-events-none border border-gray-300/30 dark:border-gray-700/30">
-              New Scan
-            </div>
-          </button>
-
-          {/* Search */}
-          <button 
-            onClick={() => setIsSearchOpen(true)}
-            className="w-full flex items-center justify-center rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-left shrink-0 cursor-pointer min-w-0 p-2.5 relative"
-            onMouseEnter={(e) => { searchLottieRef.current?.play(); handleTooltipEnter(e); }}
-            onMouseLeave={(e) => { searchLottieRef.current?.stop(); handleTooltipLeave(e); }}
-          >
-            <div className="w-6 flex justify-center shrink-0 hover:scale-110 transition-all duration-300">
-              <Lottie
-                lottieRef={searchLottieRef}
-                animationData={isDarkMode ? searchAnimData : darkSearchAnimData}
-                autoplay={false}
-                loop={true}
-                style={{ width: 25, height: 25 }}
-              />
-            </div>
-            {/* Tooltip (Styled as Chat Bubble) */}
-            <div className="sidebar-tooltip absolute left-16 px-3.5 py-2 rounded-2xl rounded-tl-none bg-gray-200 dark:bg-[#2f2f2f] text-gray-800 dark:text-gray-100 text-xs font-semibold shadow-xl whitespace-nowrap opacity-0 pointer-events-none border border-gray-300/30 dark:border-gray-700/30">
-              Search History
-            </div>
-          </button>
-
-          {/* Chat */}
-          <button 
-            className="w-full flex items-center justify-center rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-left shrink-0 cursor-pointer min-w-0 p-2.5 relative"
-            onMouseEnter={(e) => { chatLottieRef.current?.play(); handleTooltipEnter(e); }}
-            onMouseLeave={(e) => { chatLottieRef.current?.stop(); handleTooltipLeave(e); }}
-          >
-            <div className="w-6 flex justify-center shrink-0 hover:scale-110 transition-all duration-300">
-              <Lottie
-                lottieRef={chatLottieRef}
-                animationData={isDarkMode ? chatAnimData : darkChatAnimData}
-                autoplay={false}
-                loop={true}
-                style={{ width: 25, height: 25 }}
-              />
-            </div>
-            {/* Tooltip (Styled as Chat Bubble) */}
-            <div className="sidebar-tooltip absolute left-16 px-3.5 py-2 rounded-2xl rounded-tl-none bg-gray-200 dark:bg-[#2f2f2f] text-gray-800 dark:text-gray-100 text-xs font-semibold shadow-xl whitespace-nowrap opacity-0 pointer-events-none border border-gray-300/30 dark:border-gray-700/30">
-              AI Chat Assistant
-            </div>
-          </button>
-
-          {/* Chat History */}
-          <button 
-            className="w-full flex items-center justify-center rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-left shrink-0 cursor-pointer min-w-0 p-2.5 relative"
-            onMouseEnter={(e) => { historyLottieRef.current?.play(); handleTooltipEnter(e); }}
-            onMouseLeave={(e) => { historyLottieRef.current?.stop(); handleTooltipLeave(e); }}
-          >
-            <div className="w-6 flex justify-center shrink-0 hover:scale-110 transition-all duration-300">
-              <Lottie
-                lottieRef={historyLottieRef}
-                animationData={isDarkMode ? historyAnimData : darkHistoryAnimData}
-                autoplay={false}
-                loop={true}
-                style={{ width: 25, height: 25 }}
-              />
-            </div>
-            {/* Tooltip (Styled as Chat Bubble) */}
-            <div className="sidebar-tooltip absolute left-16 px-3.5 py-2 rounded-2xl rounded-tl-none bg-gray-200 dark:bg-[#2f2f2f] text-gray-800 dark:text-gray-100 text-xs font-semibold shadow-xl whitespace-nowrap opacity-0 pointer-events-none border border-gray-300/30 dark:border-gray-700/30">
-              Scan Logs
-            </div>
-          </button>
-        </nav>
-
-        {/* Footer Profile Button */}
-        <div className="p-3 border-t border-gray-200 dark:border-gray-700 flex flex-col gap-2 relative">
-          <button 
-            onClick={() => setShowProfilePopup(!showProfilePopup)}
-            className="w-full flex items-center justify-center rounded-xl hover:scale-105 transition-all cursor-pointer duration-300 hover:bg-gray-200 dark:hover:bg-gray-700 text-left shrink-0 p-2 relative"
-            onMouseEnter={handleTooltipEnter}
-            onMouseLeave={handleTooltipLeave}
-          >
-            <div className="w-9 h-9 rounded-full bg-indigo-500 text-white flex items-center justify-center text-sm font-semibold aspect-square shadow-sm">
-              {profileInitial}
-            </div>
-            {/* Tooltip (Styled as Chat Bubble) */}
-            <div className="sidebar-tooltip absolute left-16 px-3.5 py-2 rounded-2xl rounded-tl-none bg-gray-200 dark:bg-[#2f2f2f] text-gray-800 dark:text-gray-100 text-xs font-semibold shadow-xl whitespace-nowrap opacity-0 pointer-events-none border border-gray-300/30 dark:border-gray-700/30">
-              Profile: {profileName}
-            </div>
-          </button>
-
-          <ProfileBottomSheet
-            isOpen={showProfilePopup}
-            onClose={() => setShowProfilePopup(false)}
-            isDarkMode={isDarkMode}
-            onToggleDarkMode={() => setIsDarkMode((prev) => !prev)}
-            profileName={profileName}
-            profileEmail={profileEmail}
-          />
-        </div>
-      </aside>
+      {/* Profile Bottom Sheet (positioned absolutely) */}
+      <ProfileBottomSheet
+        isOpen={showProfilePopup}
+        onClose={() => setShowProfilePopup(false)}
+        isDarkMode={isDarkMode}
+        onToggleDarkMode={() => setIsDarkMode((prev) => !prev)}
+        profileName={profileName}
+        profileEmail={profileEmail}
+      />
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col h-full bg-white dark:bg-[#212121] text-slate-700 dark:text-slate-400 relative transition-colors duration-300 overflow-hidden scroll-smooth no-scrollbar">
@@ -896,7 +808,7 @@ export default function HomePage() {
                           duration={msg.duration}
                           screenshotUrl={msg.screenshotUrl}
                           toolTrace={msg.toolTrace}
-                        />
+                       />
                       )}
                     </div>
                   </div>
