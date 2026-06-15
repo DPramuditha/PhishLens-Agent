@@ -40,10 +40,11 @@ def _extract_domain(url: str) -> str:
 @tool
 def capture_screenshot(url: str) -> str:
     """
-    Capture a full-page screenshot of the target URL using a headless browser.
+    Capture a full-page screenshot of the target URL using an optimized headless browser.
 
     Use this tool FIRST when analysing a website for phishing.
-    It navigates to the URL, waits for the page to fully render,
+    It navigates to the URL using an optimized network profile,
+    blocks unnecessary scripts/trackers to minimize load latency,
     and saves a PNG screenshot to disk.
 
     Returns a JSON object with:
@@ -58,7 +59,17 @@ def capture_screenshot(url: str) -> str:
     """
     async def _capture():
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
+            # Optimize startup time with lean arguments
+            browser = await p.chromium.launch(
+                headless=True,
+                args=[
+                    "--disable-gpu",
+                    "--disable-dev-shm-usage",
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--blink-settings=imagesEnabled=true" # Ensure images render for visual check
+                ]
+            )
             context = await browser.new_context(
                 viewport={"width": 1280, "height": 800},
                 user_agent=(
@@ -69,12 +80,48 @@ def capture_screenshot(url: str) -> str:
             )
             page = await context.new_page()
 
-            await page.goto(url, wait_until="networkidle", timeout=30000)
+            # Latency Optimization: Block analytical/ad resources that delay load times
+            # but don't impact the layout or branding of the site.
+            blocked_patterns = [
+                r"analytics", r"telemetry", r"tracking", r"doubleclick", r"google-analytics",
+                r"facebook\.net", r"hotjar", r"mixpanel", r"adsystem", r"optimizely"
+            ]
+            async def route_handler(route):
+                request_url = route.request.url.lower()
+                if any(re.search(pattern, request_url) for pattern in blocked_patterns):
+                    await route.abort()
+                else:
+                    await route.continue_()
 
-            title = await page.title()
-            final_url = page.url
+            await page.route("**/*", route_handler)
 
-            screenshot_bytes = await page.screenshot(full_page=True, type="png")
+            title = "Unknown Page"
+            final_url = url
+            status = "success"
+            err_msg = None
+
+            try:
+                # Latency Optimization: Use "load" instead of "networkidle" (which waits for 500ms quiet)
+                # and bound the load time to 8 seconds max.
+                await page.goto(url, wait_until="load", timeout=8000)
+                title = await page.title()
+                final_url = page.url
+            except Exception as nav_ex:
+                # Fallback: If page load times out, proceed to screenshot whatever has loaded anyway
+                err_msg = f"Navigation completed with warning/timeout: {str(nav_ex)}"
+                try:
+                    title = await page.title() or "Loaded partially"
+                    final_url = page.url
+                except Exception:
+                    pass
+
+            # Capture screenshot
+            try:
+                screenshot_bytes = await page.screenshot(full_page=True, type="png", timeout=4000)
+            except Exception as ss_ex:
+                # If full_page screenshot fails or times out, capture viewport screenshot immediately
+                screenshot_bytes = await page.screenshot(full_page=False, type="png")
+                err_msg = f"Full-page capture timed out, viewport captured instead: {str(ss_ex)}"
 
             # Save screenshot to disk
             timestamp = int(time.time())
@@ -93,7 +140,8 @@ def capture_screenshot(url: str) -> str:
                 "screenshot_b64": screenshot_b64,
                 "page_title": title,
                 "final_url": final_url,
-                "status": "success",
+                "status": status,
+                "warning": err_msg
             }
 
     try:
@@ -120,6 +168,7 @@ def capture_screenshot(url: str) -> str:
             "status": "error",
             "error": str(e),
         }, indent=2)
+
 
 
 # ---------------------------------------------------------------------------

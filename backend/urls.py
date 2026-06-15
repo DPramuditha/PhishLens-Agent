@@ -16,6 +16,8 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from django.conf import settings
+from django.conf.urls.static import static
 
 from backend.agents.views import scan_url_view, health_check
 
@@ -24,3 +26,7 @@ urlpatterns = [
     path('api/scan/', scan_url_view, name='scan_url'),
     path('api/health/', health_check, name='health_check'),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
