@@ -9,6 +9,8 @@ import {
   Plus,
   BarChart3,
   Maximize2,
+  Shield,
+  FileText,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Lottie from 'lottie-react';
@@ -27,13 +29,128 @@ import SearchChat from './SearchChat';
 import ProfileBottomSheet from '../components/ProfileBottomSheet';
 import SidebarDock from '../components/SidebarDock';
 import ReportDashboard from '../components/ReportDashboard';
+import { DotmHex2 } from '../components/ui/dotm-hex-2';
+
+const PLACEHOLDERS = [
+  'Paste URL to scan for phishing...',
+  'Analyze suspicious email links for safety...',
+  'Check domain registry age and SSL status...',
+  'Verify brand similarity warnings...',
+  'Scan for credential harvesting risks...'
+];
+
+function PlaceholderCycler({ leftPaddingClass }) {
+  const [index, setIndex] = useState(0);
+  const containerRef = useRef(null);
+  const isAnimatingRef = useRef(false);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (isAnimatingRef.current) return;
+
+      const container = containerRef.current;
+      if (!container) return;
+
+      const words = container.querySelectorAll('.placeholder-word');
+      if (words.length === 0) return;
+
+      isAnimatingRef.current = true;
+
+      // Animate current words out: bottom-to-top means sliding UPwards
+      gsap.to(words, {
+        y: -14,
+        opacity: 0,
+        duration: 0.35,
+        stagger: 0.02,
+        ease: 'power2.in',
+        onComplete: () => {
+          setIndex((prev) => (prev + 1) % PLACEHOLDERS.length);
+        }
+      });
+    }, 3800);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const words = container.querySelectorAll('.placeholder-word');
+    if (words.length === 0) return;
+
+    // Set initial position for incoming words: bottom-to-top means starting from below (y: 14)
+    gsap.set(words, {
+      y: 14,
+      opacity: 0
+    });
+
+    // Animate words in
+    gsap.to(words, {
+      y: 0,
+      opacity: 1,
+      duration: 0.45,
+      stagger: 0.02,
+      ease: 'power2.out',
+      onComplete: () => {
+        isAnimatingRef.current = false;
+      }
+    });
+  }, [index]);
+
+  return (
+    <div
+      ref={containerRef}
+      className={`absolute ${leftPaddingClass} top-1/2 -translate-y-1/2 pointer-events-none text-[15px] text-gray-400/90 dark:text-gray-500/90 select-none flex flex-wrap gap-x-[4px]`}
+    >
+      {PLACEHOLDERS[index].split(' ').map((word, wIdx) => (
+        <span key={wIdx} className="placeholder-word inline-block">
+          {word}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 const HERO_TITLE_PREFIX = 'How can I assist your';
 const CYCLING_WORDS = ['security', 'inboxes', 'domains', 'credentials', 'networks'];
 const HERO_SUGGESTIONS = [
-  'Scan suspicious URL',
-  'Check phishing trends',
-  'Analyze email snippet',
+  {
+    title: 'Scan URL',
+    description: 'Check lexical features, WHOIS registry, and brand similarity.',
+    value: 'https://',
+    icon: Shield,
+    color: 'text-indigo-500 dark:text-indigo-400',
+    bg: 'bg-gradient-to-br from-indigo-50/90 to-indigo-50/30 dark:from-indigo-950/20 dark:to-indigo-950/5',
+    border: 'border-indigo-100/90 dark:border-indigo-900/40',
+    hoverBorder: 'hover:border-indigo-300 dark:hover:border-indigo-500/30',
+    dotBg: 'bg-indigo-500',
+    pingBg: 'bg-indigo-400'
+  },
+  {
+    title: 'Analyze Email',
+    description: 'Scan email headers or body snippets for warning flags.',
+    value: 'Analyze email snippet',
+    icon: FileText,
+    color: 'text-violet-500 dark:text-violet-400',
+    bg: 'bg-gradient-to-br from-violet-50/90 to-violet-50/30 dark:from-violet-950/20 dark:to-violet-950/5',
+    border: 'border-violet-100/90 dark:border-violet-900/40',
+    hoverBorder: 'hover:border-violet-300 dark:hover:border-violet-500/30',
+    dotBg: 'bg-violet-500',
+    pingBg: 'bg-violet-400'
+  },
+  {
+    title: 'Phishing Trends',
+    description: 'Check live threat intelligence statistics and vectors.',
+    value: 'Check phishing trends',
+    icon: BarChart3,
+    color: 'text-emerald-550 dark:text-emerald-405',
+    bg: 'bg-gradient-to-br from-emerald-50/90 to-emerald-50/30 dark:from-emerald-950/20 dark:to-emerald-950/5',
+    border: 'border-emerald-100/90 dark:border-emerald-900/40',
+    hoverBorder: 'hover:border-emerald-300 dark:hover:border-emerald-500/30',
+    dotBg: 'bg-emerald-500',
+    pingBg: 'bg-emerald-400'
+  }
 ];
 
 /* ── Orb background that persists & floats in idle state ── */
@@ -122,6 +239,7 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(false);
 
   const [currentWordIdx, setCurrentWordIdx] = useState(0);
+  const [isThinking, setIsThinking] = useState(false);
   const isCyclingAnimating = useRef(false);
   const cycleTimeoutRef = useRef(null);
 
@@ -341,7 +459,7 @@ export default function HomePage() {
         .to(badgeEl, { opacity: 1, y: 0, duration: 0.6 }, '-=0.6');
 
       if (suggestionsEl) {
-        const pills = suggestionsEl.querySelectorAll('.hero-suggestion-pill');
+        const pills = suggestionsEl.querySelectorAll('.hero-suggestion-card');
         tl.to(suggestionsEl, { opacity: 1, y: 0, duration: 0.55 }, '-=0.5');
         if (pills.length > 0) {
           gsap.set(pills, { opacity: 0, scale: 0.92 });
@@ -367,20 +485,29 @@ export default function HomePage() {
     if (!titleEl) return;
 
     const currentLetters = titleEl.querySelectorAll('.hero-cycling-char');
+    const loaderWrap = titleEl.querySelector('.hero-cycling-loader-wrap');
     if (currentLetters.length === 0) return;
 
     isCyclingAnimating.current = true;
 
-    // 1. Animate current letters out (rotateX: 90)
-    gsap.to(currentLetters, {
+    // 1. Animate current letters and loader out (rotateX: 90)
+    const targets = loaderWrap ? [loaderWrap, ...currentLetters] : currentLetters;
+    gsap.to(targets, {
       rotateX: 90,
       opacity: 0,
       duration: 0.45,
-      stagger: 0.05,
+      stagger: 0.04,
       ease: 'power2.in',
       onComplete: () => {
-        // 2. Once out, change state to mount the next word
-        setCurrentWordIdx((prev) => (prev + 1) % CYCLING_WORDS.length);
+        // 2. Once out, change state to alternate between word and thinking
+        setIsThinking((prev) => {
+          if (prev) {
+            setCurrentWordIdx((idx) => (idx + 1) % CYCLING_WORDS.length);
+            return false;
+          } else {
+            return true;
+          }
+        });
       },
     });
   }, [hasSentMessage]);
@@ -393,31 +520,33 @@ export default function HomePage() {
     if (!titleEl) return;
 
     const newLetters = titleEl.querySelectorAll('.hero-cycling-char');
+    const loaderWrap = titleEl.querySelector('.hero-cycling-loader-wrap');
     if (newLetters.length === 0) return;
 
-    // 1. Immediately set initial state for new letters (rotateX: -90)
-    gsap.set(newLetters, {
+    // 1. Immediately set initial state for new letters and loader (rotateX: -90)
+    const targets = loaderWrap ? [loaderWrap, ...newLetters] : newLetters;
+    gsap.set(targets, {
       rotateX: -90,
       opacity: 0,
       transformPerspective: 1000,
     });
 
     // 2. Animate them in (rotateX: 0)
-    gsap.to(newLetters, {
+    gsap.to(targets, {
       rotateX: 0,
       opacity: 1,
-      duration: 0.55,
-      stagger: 0.05,
-      ease: 'back.out(1.4)',
+      duration: isThinking ? 0.45 : 0.55,
+      stagger: isThinking ? 0.06 : 0.05, // slightly slower stagger for typing feel
+      ease: isThinking ? 'power2.out' : 'back.out(1.4)',
       onComplete: () => {
         isCyclingAnimating.current = false;
         
-        // Schedule next cycle after 3.2 seconds
+        // Schedule next cycle
         if (cycleTimeoutRef.current) clearTimeout(cycleTimeoutRef.current);
-        cycleTimeoutRef.current = setTimeout(triggerCycle, 3200);
+        cycleTimeoutRef.current = setTimeout(triggerCycle, isThinking ? 2200 : 3200);
       },
     });
-  }, [currentWordIdx, triggerCycle, hasSentMessage]);
+  }, [currentWordIdx, isThinking, triggerCycle, hasSentMessage]);
 
   // ── Start initial cycle timeout ──
   useEffect(() => {
@@ -783,31 +912,50 @@ export default function HomePage() {
                 ))}
 
                 {/* Dynamic Cycling Word */}
-                <span className="inline-flex whitespace-nowrap" style={{ transformStyle: 'preserve-3d' }}>
-                  {CYCLING_WORDS[currentWordIdx].split('').map((char, cIdx) => (
+                {isThinking ? (
+                  <span className="inline-flex items-center gap-3 whitespace-nowrap" style={{ transformStyle: 'preserve-3d' }}>
+                    <span className="inline-flex shrink-0 hero-cycling-loader-wrap" style={{ backfaceVisibility: 'hidden', transformStyle: 'preserve-3d' }}>
+                      <DotmHex2 bloom={true} size={28} dotSize={4.5} className="text-indigo-600 dark:text-indigo-400" />
+                    </span>
+                    <span className="inline-flex" style={{ transformStyle: 'preserve-3d' }}>
+                      {"Thinking...".split('').map((char, cIdx) => (
+                        <span
+                          key={cIdx}
+                          className="hero-cycling-char inline-block bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent dark:from-indigo-400 dark:to-violet-400 origin-bottom transform-gpu"
+                          style={{ backfaceVisibility: 'hidden', transformStyle: 'preserve-3d' }}
+                        >
+                          {char}
+                        </span>
+                      ))}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="inline-flex whitespace-nowrap" style={{ transformStyle: 'preserve-3d' }}>
+                    {CYCLING_WORDS[currentWordIdx].split('').map((char, cIdx) => (
+                      <span
+                        key={cIdx}
+                        className="hero-cycling-char inline-block bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent dark:from-indigo-400 dark:to-violet-400 origin-bottom transform-gpu"
+                        style={{ backfaceVisibility: 'hidden', transformStyle: 'preserve-3d' }}
+                      >
+                        {char}
+                      </span>
+                    ))}
+                    {/* Append question mark at the end of the word */}
                     <span
-                      key={cIdx}
                       className="hero-cycling-char inline-block bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent dark:from-indigo-400 dark:to-violet-400 origin-bottom transform-gpu"
                       style={{ backfaceVisibility: 'hidden', transformStyle: 'preserve-3d' }}
                     >
-                      {char}
+                      ?
                     </span>
-                  ))}
-                  {/* Append question mark at the end of the word */}
-                  <span
-                    className="hero-cycling-char inline-block bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent dark:from-indigo-400 dark:to-violet-400 origin-bottom transform-gpu"
-                    style={{ backfaceVisibility: 'hidden', transformStyle: 'preserve-3d' }}
-                  >
-                    ?
                   </span>
-                </span>
+                )}
               </h1>
 
               <p
                 ref={heroSubtitleRef}
-                className="text-sm md:text-base text-gray-500 dark:text-gray-400 max-w-xl leading-relaxed"
+                className="text-sm md:text-base text-gray-550 dark:text-gray-405 max-w-xl leading-relaxed font-medium"
               >
-                Paste a suspicious URL, email snippet, or ask about phishing trends.
+                Real-time URL scanning, email snippet analysis, and threat intelligence models to protect your credentials, domains, and inboxes.
               </p>
 
               <div className="mt-8 w-full max-w-2xl">
@@ -837,14 +985,19 @@ export default function HomePage() {
                       <div className="pl-4 pr-1 flex items-center text-indigo-500 dark:text-indigo-400 shrink-0">
                         <ShieldAlert size={18} strokeWidth={2.25} />
                       </div>
-                      <input
-                        type="text"
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        placeholder="Paste URL to scan for phishing..."
-                        disabled={isLoading}
-                        className="w-full bg-transparent py-4 pl-2 pr-14 outline-none text-[15px] text-gray-700 dark:text-gray-200 placeholder-gray-400/90"
-                      />
+                      <div className="relative flex-1">
+                        <input
+                          type="text"
+                          value={input}
+                          onChange={(e) => setInput(e.target.value)}
+                          placeholder=""
+                          disabled={isLoading}
+                          className="w-full bg-transparent py-4 pl-2 pr-14 outline-none text-[15px] text-gray-700 dark:text-gray-200 placeholder-transparent"
+                        />
+                        {!input && (
+                          <PlaceholderCycler leftPaddingClass="left-2" />
+                        )}
+                      </div>
                       <button
                         type="submit"
                         disabled={!input.trim() || isLoading}
@@ -858,24 +1011,42 @@ export default function HomePage() {
 
                 <div
                   ref={heroSuggestionsRef}
-                  className="mt-5 flex flex-wrap items-center justify-center gap-2"
+                  className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-2xl px-4 sm:px-0"
                 >
-                  {HERO_SUGGESTIONS.map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      type="button"
-                      onClick={() => {
-                        if (suggestion === 'Scan suspicious URL') {
-                          setInput('https://');
-                        } else {
-                          setInput(suggestion);
-                        }
-                      }}
-                      className="hero-suggestion-pill rounded-full border border-gray-200/80 bg-white/60 px-3.5 py-1.5 text-xs font-medium text-gray-600 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 dark:border-gray-700/80 dark:bg-[#2a2a2a]/60 dark:text-gray-400 dark:hover:border-indigo-500/40 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-200 cursor-pointer"
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
+                  {HERO_SUGGESTIONS.map((suggestion, sIdx) => {
+                    const Icon = suggestion.icon;
+                    return (
+                      <button
+                        key={sIdx}
+                        type="button"
+                        onClick={() => setInput(suggestion.value)}
+                        className={`hero-suggestion-card group relative overflow-hidden flex flex-col items-start text-left p-4.5 rounded-xl border transition-all duration-300 cursor-pointer shadow-sm hover:shadow-md hover:-translate-y-0.5 ${suggestion.bg} ${suggestion.border} ${suggestion.hoverBorder}`}
+                      >
+                        {/* Large watermark background icon */}
+                        <div className="absolute right-1 top-1 opacity-[0.09] group-hover:opacity-[0.19] transition-opacity duration-300 pointer-events-none select-none">
+                          <Icon size={50} strokeWidth={2} className={suggestion.color} />
+                        </div>
+
+                        {/* Pulsing dot status badge */}
+                        <div className="mb-3.5 flex items-center gap-2 relative z-10">
+                          <span className="relative flex h-2 w-2">
+                            <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${suggestion.pingBg}`} />
+                            <span className={`relative inline-flex h-2 w-2 rounded-full ${suggestion.dotBg}`} />
+                          </span>
+                        </div>
+
+                        {/* Text section aligned to the bottom */}
+                        <div className="space-y-1 relative z-10 mt-auto">
+                          <h3 className="font-bold text-[13.5px] text-gray-800 dark:text-gray-200 group-hover:text-indigo-655 dark:group-hover:text-indigo-400 transition-colors">
+                            {suggestion.title}
+                          </h3>
+                          <p className="text-[11.5px] text-gray-500 dark:text-gray-400 leading-normal font-medium">
+                            {suggestion.description}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -907,14 +1078,19 @@ export default function HomePage() {
                   boxShadow: '0 8px 32px 0 rgba(66,46,168,0.18), 0 1.5px 8px 0 rgba(138,43,226,0.10)',
                 }}
               >
-                <input
-                  type="text"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Paste URL to scan for phishing..."
-                  disabled={isLoading}
-                  className="w-full bg-transparent py-4 pl-5 pr-14 outline-none text-[15px] text-gray-700 dark:text-gray-200 placeholder-gray-400"
-                />
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder=""
+                    disabled={isLoading}
+                    className="w-full bg-transparent py-4 pl-5 pr-14 outline-none text-[15px] text-gray-700 dark:text-gray-200 placeholder-transparent"
+                  />
+                  {!input && (
+                    <PlaceholderCycler leftPaddingClass="left-5" />
+                  )}
+                </div>
                 <button
                   type="submit"
                   disabled={!input.trim() || isLoading}
