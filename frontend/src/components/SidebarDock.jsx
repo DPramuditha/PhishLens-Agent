@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState, useLayoutEffect } from 'react';
+import { useRef, useEffect, useCallback, useState, useLayoutEffect, useMemo } from 'react';
 import gsap from 'gsap';
 import Lottie from 'lottie-react';
 
@@ -16,27 +16,21 @@ function gaussScale(distPx) {
   return Math.exp(-(distPx * distPx) / (2 * sigma * sigma));
 }
 
-// ─── Compute each item's target size given cursor Y ───────────────────────────
-// Returns array of sizes (px) for every item slot
-function computeSizes(cursorY, itemCentersY) {
-  return itemCentersY.map((cy) => {
-    const dist  = Math.abs(cursorY - cy);
-    const t     = gaussScale(dist);
-    return ITEM_BASE + (ITEM_PEAK - ITEM_BASE) * t;
-  });
-}
-
 // ─── Total dock pill height from an array of item sizes ──────────────────────
-function totalHeight(sizes) {
+function totalHeight(sizes, hasDivider) {
+  const dividerHeight = hasDivider ? 1 + ITEM_GAP * 2 : 0;
+  const numGaps = sizes.length - 1 + (hasDivider ? 1 : 0);
   return (
     DOCK_PX * 2 +
     sizes.reduce((sum, s) => sum + s, 0) +
-    (sizes.length - 1) * ITEM_GAP
+    numGaps * ITEM_GAP +
+    dividerHeight
   );
 }
 
 // ─── DockItem ─────────────────────────────────────────────────────────────────
 function DockItem({
+  id,
   icon,
   label,
   lottieData,
@@ -51,6 +45,7 @@ function DockItem({
 }) {
   const [showTooltip, setShowTooltip] = useState(false);
   const tooltipRef   = useRef(null);
+  const isLogo = id === 'logo';
 
   const handleEnter = useCallback(() => {
     setShowTooltip(true);
@@ -112,7 +107,7 @@ function DockItem({
       />
 
       {/* Icon content – scales with parent via % sizing */}
-      <div className="relative z-10 flex items-center justify-center" style={{ width: '58%', height: '58%' }}>
+      <div className="relative z-10 flex items-center justify-center" style={{ width: isLogo ? '92%' : '58%', height: isLogo ? '92%' : '58%', transform: isLogo ? 'scale(1.25)' : 'none' }}>
         {lottieData ? (
           <Lottie
             lottieRef={lottieRef}
@@ -186,22 +181,136 @@ function DockDivider({ isDarkMode }) {
   );
 }
 
+// ─── ChatHistoryPanel Subcomponent ───────────────────────────────────────────
+function ChatHistoryPanel({ isExpanded, isDarkMode, onSelectChat }) {
+  const containerRef = useRef(null);
+  const [search, setSearch] = useState('');
+  
+  // Dummy chat history data
+  const chatHistory = [
+    { id: 1, title: 'Analysis on suspicious email link', date: '2 hours ago' },
+    { id: 2, title: 'What is spear phishing?', date: 'Yesterday' },
+    { id: 3, title: 'Scan results for domain.com', date: 'May 18, 2026' },
+  ];
+
+  const filteredHistory = chatHistory.filter((chat) =>
+    chat.title.toLowerCase().includes(search.toLowerCase())
+  );
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    gsap.killTweensOf(containerRef.current);
+    if (isExpanded) {
+      gsap.fromTo(
+        containerRef.current,
+        { opacity: 0, x: 12 },
+        { opacity: 1, x: 0, duration: 0.35, delay: 0.18, ease: 'power2.out' }
+      );
+    } else {
+      gsap.to(containerRef.current, { opacity: 0, x: 8, duration: 0.15 });
+    }
+  }, [isExpanded]);
+
+  if (!isExpanded) return null;
+
+  return (
+    <div
+      ref={containerRef}
+      className="flex-1 flex flex-col pl-4 border-l overflow-hidden"
+      style={{
+        borderColor: isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+        width: 235,
+      }}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3.5">
+        <h3 className="text-sm font-bold tracking-wide text-gray-800 dark:text-gray-200">
+          Chat History
+        </h3>
+      </div>
+
+      {/* Search Input */}
+      <div className="relative mb-3 flex items-center">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          strokeWidth="2.2"
+          stroke="currentColor"
+          className="absolute left-2.5 w-3.5 h-3.5 text-gray-400 pointer-events-none"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+          />
+        </svg>
+        <input
+          type="text"
+          placeholder="Search chats..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full pl-8 pr-2.5 py-1.5 rounded-lg text-xs bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/5 outline-none text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:border-indigo-500/50 transition-colors"
+        />
+      </div>
+
+      {/* Chat List */}
+      <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col gap-1.5 pb-2">
+        {filteredHistory.map((chat) => (
+          <div
+            key={chat.id}
+            className="group p-2.5 rounded-xl text-left cursor-pointer transition-all duration-300 bg-gray-50/50 dark:bg-white/2 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 border border-gray-200/40 dark:border-white/2 hover:border-indigo-500/20 active:scale-[0.98]"
+            onClick={() => {
+              if (onSelectChat) {
+                onSelectChat(chat.id);
+              }
+            }}
+          >
+            <div className="text-[12px] font-semibold text-gray-700 dark:text-gray-300 truncate mb-0.5 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+              {chat.title}
+            </div>
+            <div className="text-[10px] text-gray-400 font-medium">
+              {chat.date}
+            </div>
+          </div>
+        ))}
+        {filteredHistory.length === 0 && (
+          <div className="text-[11px] text-gray-400 text-center py-6">
+            No chats found
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main SidebarDock ─────────────────────────────────────────────────────────
 export default function SidebarDock({
   items       = [],
   bottomItems = [],
   isDarkMode  = true,
   activeItemId = null,
+  isExpanded  = false,
+  onSelectChat = null,
 }) {
   const dockRef    = useRef(null);
   const pillRef    = useRef(null);           // the background pill element
   const itemRefs   = useRef([]);
   const scalesRef  = useRef([]);            // live scale ratios per item
   const isHovering = useRef(false);
+  const isMounted  = useRef(false);
 
   const allItems     = [...items, ...bottomItems];
   const totalItems   = allItems.length;
-  const dividerIndex = items.length;        // divider sits between top & bottom groups
+  const hasDivider   = bottomItems.length > 0;
+
+  const { itemBases, itemPeaks } = useMemo(() => {
+    const bases = allItems.map(() => ITEM_BASE);
+    const peaks = allItems.map(() => ITEM_PEAK);
+    return { itemBases: bases, itemPeaks: peaks };
+  }, [items, bottomItems]);
+
+  const maxBase = useMemo(() => Math.max(...itemBases, ITEM_BASE), [itemBases]);
 
   // ── Register item refs ──────────────────────────────────────────────────────
   const setItemRef = useCallback((el, idx) => {
@@ -211,6 +320,7 @@ export default function SidebarDock({
 
   // ── Recompute and apply magnification ──────────────────────────────────────
   const applyMagnify = useCallback((cursorY) => {
+    if (isExpanded) return; // Disable hover zoom when sidebar is expanded
     const els = itemRefs.current;
     if (!pillRef.current) return;
 
@@ -222,13 +332,20 @@ export default function SidebarDock({
     });
 
     // Compute target sizes
-    const sizes = computeSizes(cursorY, centersY);
+    const targetSizes = centersY.map((cy, i) => {
+      const dist  = Math.abs(cursorY - cy);
+      const t     = gaussScale(dist);
+      const base  = itemBases[i] || ITEM_BASE;
+      const peak  = itemPeaks[i] || ITEM_PEAK;
+      return base + (peak - base) * t;
+    });
 
     // Update each item's width & height via GSAP (keeps layout flow)
     els.forEach((el, i) => {
       if (!el) return;
-      const sz = sizes[i];
-      scalesRef.current[i] = sz / ITEM_BASE;
+      const sz = targetSizes[i];
+      const base = itemBases[i] || ITEM_BASE;
+      scalesRef.current[i] = sz / base;
       gsap.to(el, {
         width:  sz,
         height: sz,
@@ -239,24 +356,26 @@ export default function SidebarDock({
     });
 
     // Expand/contract the pill to fit the new total height
-    const newH = totalHeight(sizes);
+    const newH = totalHeight(targetSizes, hasDivider);
     gsap.to(pillRef.current, {
       height: newH,
       duration: 0.18,
       ease: 'power2.out',
       overwrite: 'auto',
     });
-  }, []);
+  }, [isExpanded, itemBases, itemPeaks, hasDivider]);
 
   // ── Reset all sizes ────────────────────────────────────────────────────────
   const resetSizes = useCallback(() => {
-    const restH = totalHeight(Array(totalItems).fill(ITEM_BASE));
+    if (isExpanded) return;
+    const restH = totalHeight(itemBases);
 
-    itemRefs.current.forEach((el) => {
+    itemRefs.current.forEach((el, i) => {
       if (!el) return;
+      const base = itemBases[i] || ITEM_BASE;
       gsap.to(el, {
-        width:  ITEM_BASE,
-        height: ITEM_BASE,
+        width:  base,
+        height: base,
         duration: 0.42,
         ease: 'elastic.out(1, 0.6)',
         overwrite: 'auto',
@@ -271,7 +390,7 @@ export default function SidebarDock({
         overwrite: 'auto',
       });
     }
-  }, [totalItems]);
+  }, [isExpanded, itemBases, hasDivider]);
 
   // ── Mouse handlers ─────────────────────────────────────────────────────────
   const handleMouseMove = useCallback((e) => {
@@ -286,11 +405,12 @@ export default function SidebarDock({
 
   // ── Set initial pill height and run entrance animation ─────────────────────
   useLayoutEffect(() => {
-    const restH = totalHeight(Array(totalItems).fill(ITEM_BASE));
+    if (isExpanded) return;
+    const restH = totalHeight(itemBases, hasDivider);
     if (pillRef.current) {
       pillRef.current.style.height = `${restH}px`;
     }
-  }, [totalItems]);
+  }, [isExpanded, itemBases, hasDivider]);
 
   useEffect(() => {
     const pill  = pillRef.current;
@@ -309,20 +429,85 @@ export default function SidebarDock({
     );
   }, []);
 
+  // ── Handle expansion state changes with GSAP ────────────────────────────────
+  useEffect(() => {
+    if (!isMounted.current) {
+      isMounted.current = true;
+      return;
+    }
+
+    if (!pillRef.current) return;
+
+    if (isExpanded) {
+      // 1. Animate items to their resting base sizes
+      itemRefs.current.forEach((el, i) => {
+        if (!el) return;
+        const base = itemBases[i] || ITEM_BASE;
+        gsap.to(el, {
+          width: base,
+          height: base,
+          duration: 0.3,
+          ease: 'power3.out',
+          overwrite: 'auto'
+        });
+      });
+
+      // 2. Expand pill: height top/bottom stretch, width panel reveal
+      gsap.to(pillRef.current, {
+        width: 320,
+        height: 'calc(100vh - 24px)',
+        padding: '24px 16px',
+        borderRadius: 24,
+        opacity: 1,
+        x: 0,
+        duration: 0.5,
+        ease: 'power3.inOut',
+        overwrite: 'auto'
+      });
+    } else {
+      // 1. Animate items back to resting base sizes
+      itemRefs.current.forEach((el, i) => {
+        if (!el) return;
+        const base = itemBases[i] || ITEM_BASE;
+        gsap.to(el, {
+          width: base,
+          height: base,
+          duration: 0.3,
+          ease: 'power3.out',
+          overwrite: 'auto'
+        });
+      });
+
+      // 2. Contract pill back to floating MacOS Dock sizing
+      const restH = totalHeight(itemBases, hasDivider);
+      gsap.to(pillRef.current, {
+        width: maxBase + 14,
+        height: restH,
+        padding: `${DOCK_PX}px 7px`,
+        borderRadius: 22,
+        opacity: 1,
+        x: 0,
+        duration: 0.5,
+        ease: 'power3.inOut',
+        overwrite: 'auto'
+      });
+    }
+  }, [isExpanded, itemBases, maxBase, hasDivider]);
+
   return (
     /* Outer wrapper: full-height column, left-edge, centered vertically */
     <div
       className="fixed left-0 top-0 h-screen flex items-center z-40 pointer-events-none"
       style={{ paddingLeft: 10 }}
     >
-      {/* The floating pill – height is animated by GSAP */}
+      {/* The floating pill – height and width animated dynamically */}
       <div
         ref={pillRef}
-        className="relative flex flex-col items-center pointer-events-auto overflow-visible"
+        className="relative flex flex-row items-stretch pointer-events-auto overflow-visible"
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
         style={{
-          width: ITEM_BASE + 14,        // pill width = icon + side padding
+          width: maxBase + 14,
           padding: `${DOCK_PX}px 7px`,
           gap: ITEM_GAP,
           borderRadius: 22,
@@ -339,7 +524,7 @@ export default function SidebarDock({
           boxShadow: isDarkMode
             ? '0 20px 60px rgba(0,0,0,0.60), inset 0 1px 0 rgba(255,255,255,0.07), inset 0 -1px 0 rgba(0,0,0,0.25)'
             : '0 20px 60px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.95)',
-          willChange: 'height',
+          willChange: 'width, height, padding',
         }}
       >
         {/* Inner specular shine */}
@@ -353,34 +538,44 @@ export default function SidebarDock({
           aria-hidden
         />
 
-        {/* Top items */}
-        {items.map((item, i) => (
-          <DockItem
-            key={item.id}
-            {...item}
-            isDarkMode={isDarkMode}
-            isActive={item.id === activeItemId}
-            dockItemRef={(el) => setItemRef(el, i)}
-            onPlayLottie={() => item.lottieRef?.current?.play()}
-            onStopLottie={() => item.lottieRef?.current?.stop()}
-          />
-        ))}
+        {/* LEFT COLUMN: Dock Icons */}
+        <div className="flex flex-col items-center shrink-0" style={{ width: maxBase, gap: ITEM_GAP }}>
+          {/* Top items */}
+          {items.map((item, i) => (
+            <DockItem
+              key={item.id}
+              {...item}
+              isDarkMode={isDarkMode}
+              isActive={item.id === activeItemId}
+              dockItemRef={(el) => setItemRef(el, i)}
+              onPlayLottie={() => item.lottieRef?.current?.play()}
+              onStopLottie={() => item.lottieRef?.current?.stop()}
+            />
+          ))}
 
-        {/* Divider */}
-        {bottomItems.length > 0 && <DockDivider isDarkMode={isDarkMode} />}
+          {/* Divider */}
+          {bottomItems.length > 0 && <DockDivider isDarkMode={isDarkMode} />}
 
-        {/* Bottom items */}
-        {bottomItems.map((item, i) => (
-          <DockItem
-            key={item.id}
-            {...item}
-            isDarkMode={isDarkMode}
-            isActive={item.id === activeItemId}
-            dockItemRef={(el) => setItemRef(el, items.length + i)}
-            onPlayLottie={() => item.lottieRef?.current?.play()}
-            onStopLottie={() => item.lottieRef?.current?.stop()}
-          />
-        ))}
+          {/* Bottom items */}
+          {bottomItems.map((item, i) => (
+            <DockItem
+              key={item.id}
+              {...item}
+              isDarkMode={isDarkMode}
+              isActive={item.id === activeItemId}
+              dockItemRef={(el) => setItemRef(el, items.length + i)}
+              onPlayLottie={() => item.lottieRef?.current?.play()}
+              onStopLottie={() => item.lottieRef?.current?.stop()}
+            />
+          ))}
+        </div>
+
+        {/* RIGHT COLUMN: Chat History Panel */}
+        <ChatHistoryPanel
+          isExpanded={isExpanded}
+          isDarkMode={isDarkMode}
+          onSelectChat={onSelectChat}
+        />
       </div>
     </div>
   );
