@@ -28,7 +28,8 @@ import ProfileBottomSheet from '../components/ProfileBottomSheet';
 import SidebarDock from '../components/SidebarDock';
 import ReportDashboard from '../components/ReportDashboard';
 
-const HERO_TITLE = 'How can I assist your security?';
+const HERO_TITLE_PREFIX = 'How can I assist your';
+const CYCLING_WORDS = ['security', 'inboxes', 'domains', 'credentials', 'networks'];
 const HERO_SUGGESTIONS = [
   'Scan suspicious URL',
   'Check phishing trends',
@@ -120,6 +121,10 @@ export default function HomePage() {
   const [showOrbs, setShowOrbs] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  const [currentWordIdx, setCurrentWordIdx] = useState(0);
+  const isCyclingAnimating = useRef(false);
+  const cycleTimeoutRef = useRef(null);
+
   const profileName = 'Dimuthu Pramuditha';
   const profileEmail = 'dimuthu@example.com';
   const profileInitial = profileName.trim().charAt(0).toUpperCase();
@@ -138,8 +143,6 @@ export default function HomePage() {
 
   const heroRef = useRef(null);
   const heroTitleRef = useRef(null);
-  const heroTitleTextRef = useRef(null);
-  const heroTitleCursorRef = useRef(null);
   const heroSubtitleRef = useRef(null);
   const heroInputWrapRef = useRef(null);
   const heroSuggestionsRef = useRef(null);
@@ -288,86 +291,145 @@ export default function HomePage() {
     );
   }, [hasSentMessage]);
 
-  /* Hero entrance: bottom-to-top reveal + h1 typing */
+  /* Hero entrance: bottom-to-top reveal + h1 Text 3D Flip */
   useLayoutEffect(() => {
     if (hasSentMessage) return;
 
     const root = heroRef.current;
     const titleEl = heroTitleRef.current;
-    const titleSpan = heroTitleTextRef.current;
-    const cursorEl = heroTitleCursorRef.current;
     const subtitleEl = heroSubtitleRef.current;
     const inputWrap = heroInputWrapRef.current;
     const suggestionsEl = heroSuggestionsRef.current;
     const badgeEl = heroBadgeRef.current;
-    if (!root || !titleEl || !titleSpan || !subtitleEl || !inputWrap) return;
+    if (!root || !titleEl || !subtitleEl || !inputWrap) return;
 
     const ctx = gsap.context(() => {
-      gsap.set([inputWrap, subtitleEl, titleEl, badgeEl].filter(Boolean), {
+      // 1. Set initial states for elements
+      gsap.set([inputWrap, subtitleEl, badgeEl].filter(Boolean), {
         opacity: 0,
-        y: 56,
+        y: 40,
       });
-      if (suggestionsEl) gsap.set(suggestionsEl, { opacity: 1 });
 
-      titleSpan.textContent = '';
-      if (cursorEl) gsap.set(cursorEl, { opacity: 1 });
+      const chars = titleEl.querySelectorAll('.hero-title-char');
+      gsap.set(chars, {
+        opacity: 0,
+        rotationX: -95,
+        y: 40,
+        transformOrigin: '50% 100% -20px',
+      });
 
+      if (suggestionsEl) {
+        gsap.set(suggestionsEl, { opacity: 0, y: 20 });
+      }
+
+      // 2. Timeline
       const tl = gsap.timeline({
         defaults: { ease: 'power3.out' },
-        onComplete: () => {
-          titleSpan.textContent = HERO_TITLE;
-        },
       });
 
-      // Bottom → top: input rises first, then subtitle, title, badge
-      tl.to(inputWrap, { opacity: 1, y: 0, duration: 0.75 })
-        .to(subtitleEl, { opacity: 1, y: 0, duration: 0.6 }, '-=0.42')
-        .to(titleEl, { opacity: 1, y: 0, duration: 0.65 }, '-=0.38');
-
-      const typeState = { charIndex: 0 };
-      tl.set(typeState, { charIndex: 0 })
-        .to(typeState, {
-          charIndex: HERO_TITLE.length,
-          duration: HERO_TITLE.length * 0.05,
-          ease: 'none',
-          onUpdate: () => {
-            titleSpan.textContent = HERO_TITLE.slice(0, Math.round(typeState.charIndex));
-          },
-          onComplete: () => {
-            titleSpan.textContent = HERO_TITLE;
-          },
-        });
-
-      if (cursorEl) {
-        tl.to(cursorEl, { opacity: 0, duration: 0.25, ease: 'power2.in' }, '+=0.4');
-      }
-
-      if (badgeEl) {
-        tl.to(badgeEl, { opacity: 1, y: 0, duration: 0.55 }, '-=1.1');
-      }
+      // Bottom → Top staggered animation
+      tl.to(inputWrap, { opacity: 1, y: 0, duration: 0.85 })
+        .to(subtitleEl, { opacity: 1, y: 0, duration: 0.65 }, '-=0.5')
+        .to(chars, {
+          opacity: 1,
+          rotationX: 0,
+          y: 0,
+          duration: 0.8,
+          stagger: 0.02,
+          ease: 'back.out(2.0)',
+        }, '-=0.45')
+        .to(badgeEl, { opacity: 1, y: 0, duration: 0.6 }, '-=0.6');
 
       if (suggestionsEl) {
         const pills = suggestionsEl.querySelectorAll('.hero-suggestion-pill');
-        if (pills.length) {
-          tl.fromTo(
-            pills,
-            { opacity: 0, y: 20, scale: 0.94 },
-            {
-              opacity: 1,
-              y: 0,
-              scale: 1,
-              duration: 0.42,
-              stagger: 0.08,
-              ease: 'back.out(1.5)',
-            },
-            0
-          );
+        tl.to(suggestionsEl, { opacity: 1, y: 0, duration: 0.55 }, '-=0.5');
+        if (pills.length > 0) {
+          gsap.set(pills, { opacity: 0, scale: 0.92 });
+          tl.to(pills, {
+            opacity: 1,
+            scale: 1,
+            duration: 0.5,
+            stagger: 0.06,
+            ease: 'back.out(1.8)',
+          }, '-=0.4');
         }
       }
     }, root);
 
     return () => ctx.revert();
   }, [hasSentMessage]);
+
+  // ── Cycle to the next word ──
+  const triggerCycle = useCallback(() => {
+    if (hasSentMessage || isCyclingAnimating.current) return;
+    
+    const titleEl = heroTitleRef.current;
+    if (!titleEl) return;
+
+    const currentLetters = titleEl.querySelectorAll('.hero-cycling-char');
+    if (currentLetters.length === 0) return;
+
+    isCyclingAnimating.current = true;
+
+    // 1. Animate current letters out (rotateX: 90)
+    gsap.to(currentLetters, {
+      rotateX: 90,
+      opacity: 0,
+      duration: 0.45,
+      stagger: 0.05,
+      ease: 'power2.in',
+      onComplete: () => {
+        // 2. Once out, change state to mount the next word
+        setCurrentWordIdx((prev) => (prev + 1) % CYCLING_WORDS.length);
+      },
+    });
+  }, [hasSentMessage]);
+
+  // ── Handle incoming (mounted) letters animation ──
+  useLayoutEffect(() => {
+    if (hasSentMessage) return;
+
+    const titleEl = heroTitleRef.current;
+    if (!titleEl) return;
+
+    const newLetters = titleEl.querySelectorAll('.hero-cycling-char');
+    if (newLetters.length === 0) return;
+
+    // 1. Immediately set initial state for new letters (rotateX: -90)
+    gsap.set(newLetters, {
+      rotateX: -90,
+      opacity: 0,
+      transformPerspective: 1000,
+    });
+
+    // 2. Animate them in (rotateX: 0)
+    gsap.to(newLetters, {
+      rotateX: 0,
+      opacity: 1,
+      duration: 0.55,
+      stagger: 0.05,
+      ease: 'back.out(1.4)',
+      onComplete: () => {
+        isCyclingAnimating.current = false;
+        
+        // Schedule next cycle after 3.2 seconds
+        if (cycleTimeoutRef.current) clearTimeout(cycleTimeoutRef.current);
+        cycleTimeoutRef.current = setTimeout(triggerCycle, 3200);
+      },
+    });
+  }, [currentWordIdx, triggerCycle, hasSentMessage]);
+
+  // ── Start initial cycle timeout ──
+  useEffect(() => {
+    if (hasSentMessage) return;
+
+    // Initial delay before first cycle (e.g. 4 seconds)
+    cycleTimeoutRef.current = setTimeout(triggerCycle, 4200);
+
+    return () => {
+      if (cycleTimeoutRef.current) clearTimeout(cycleTimeoutRef.current);
+    };
+  }, [triggerCycle, hasSentMessage]);
 
   const handleSend = async (e) => {
     e.preventDefault();
@@ -701,18 +763,44 @@ export default function HomePage() {
 
               <h1
                 ref={heroTitleRef}
-                className="text-3xl md:text-5xl font-black tracking-tight mb-3 min-h-[1.2em]"
-                aria-label={HERO_TITLE}
+                className="text-3xl md:text-5xl font-black tracking-tight mb-4 min-h-[1.2em] flex flex-wrap justify-center gap-x-2.5 gap-y-1.5"
+                aria-label="How can I assist your security?"
+                style={{ perspective: '1000px', transformStyle: 'preserve-3d' }}
               >
-                <span
-                  ref={heroTitleTextRef}
-                  className="hero-title-text bg-gradient-to-r from-gray-900 via-indigo-800 to-violet-700 bg-clip-text text-transparent dark:from-white dark:via-indigo-200 dark:to-violet-300"
-                />
-                <span
-                  ref={heroTitleCursorRef}
-                  className="hero-title-cursor ml-0.5 inline-block w-[3px] h-[0.85em] align-middle rounded-sm bg-indigo-500 dark:bg-indigo-400 animate-pulse"
-                  aria-hidden="true"
-                />
+                {/* Static Prefix: "How can I assist your" */}
+                {HERO_TITLE_PREFIX.split(' ').map((word, wIdx) => (
+                  <span key={wIdx} className="inline-flex whitespace-nowrap" style={{ transformStyle: 'preserve-3d' }}>
+                    {word.split('').map((char, cIdx) => (
+                      <span
+                        key={cIdx}
+                        className="hero-title-char inline-block bg-gradient-to-r from-gray-900 via-indigo-800 to-violet-700 bg-clip-text text-transparent dark:from-white dark:via-indigo-200 dark:to-violet-300 origin-bottom transform-gpu"
+                        style={{ backfaceVisibility: 'hidden', transformStyle: 'preserve-3d' }}
+                      >
+                        {char}
+                      </span>
+                    ))}
+                  </span>
+                ))}
+
+                {/* Dynamic Cycling Word */}
+                <span className="inline-flex whitespace-nowrap" style={{ transformStyle: 'preserve-3d' }}>
+                  {CYCLING_WORDS[currentWordIdx].split('').map((char, cIdx) => (
+                    <span
+                      key={cIdx}
+                      className="hero-cycling-char inline-block bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent dark:from-indigo-400 dark:to-violet-400 origin-bottom transform-gpu"
+                      style={{ backfaceVisibility: 'hidden', transformStyle: 'preserve-3d' }}
+                    >
+                      {char}
+                    </span>
+                  ))}
+                  {/* Append question mark at the end of the word */}
+                  <span
+                    className="hero-cycling-char inline-block bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent dark:from-indigo-400 dark:to-violet-400 origin-bottom transform-gpu"
+                    style={{ backfaceVisibility: 'hidden', transformStyle: 'preserve-3d' }}
+                  >
+                    ?
+                  </span>
+                </span>
               </h1>
 
               <p
