@@ -102,8 +102,8 @@ def capture_screenshot(url: str) -> str:
 
             try:
                 # Latency Optimization: Use "load" instead of "networkidle" (which waits for 500ms quiet)
-                # and bound the load time to 8 seconds max.
-                await page.goto(url, wait_until="load", timeout=8000)
+                # and bound the load time to 20 seconds max.
+                await page.goto(url, wait_until="load", timeout=20000)
                 title = await page.title()
                 final_url = page.url
             except Exception as nav_ex:
@@ -117,7 +117,7 @@ def capture_screenshot(url: str) -> str:
 
             # Capture screenshot
             try:
-                screenshot_bytes = await page.screenshot(full_page=True, type="png", timeout=4000)
+                screenshot_bytes = await page.screenshot(full_page=True, type="png", timeout=15000)
             except Exception as ss_ex:
                 # If full_page screenshot fails or times out, capture viewport screenshot immediately
                 screenshot_bytes = await page.screenshot(full_page=False, type="png")
@@ -130,14 +130,10 @@ def capture_screenshot(url: str) -> str:
             filepath = SCREENSHOTS_DIR / filename
             filepath.write_bytes(screenshot_bytes)
 
-            # Also encode base64 for the report (to be stored, not sent to LLM)
-            screenshot_b64 = base64.b64encode(screenshot_bytes).decode("utf-8")
-
             await browser.close()
 
             return {
                 "screenshot_path": str(filepath),
-                "screenshot_b64": screenshot_b64,
                 "page_title": title,
                 "final_url": final_url,
                 "status": status,

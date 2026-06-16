@@ -46,6 +46,7 @@ class OrchestratorAgent:
             azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-5.4-mini"),
             api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview"),
             temperature=0,
+            max_retries=10,
         )
 
         # Tools
