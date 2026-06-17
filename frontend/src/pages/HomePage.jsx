@@ -30,6 +30,7 @@ import ProfileBottomSheet from '../components/ProfileBottomSheet';
 import SidebarDock from '../components/SidebarDock';
 import ReportDashboard from '../components/ReportDashboard';
 import { DotmHex2 } from '../components/ui/dotm-hex-2';
+import OrchestratorProgress from '../components/OrchestratorProgress';
 
 const PLACEHOLDERS = [
   'Paste URL to scan for phishing...',
@@ -577,7 +578,8 @@ export default function HomePage() {
       id: botMsgId,
       text: `Scanning URL: ${processedUrl}... Processing DOM structure, lexical attributes, WHOIS details, and visual similarity features. Please wait.`,
       isUser: false,
-      status: 'loading'
+      status: 'loading',
+      url: processedUrl
     };
 
     setMessages((prev) => [...prev, userMsg, loadingBotMsg]);
@@ -633,13 +635,14 @@ export default function HomePage() {
       }
 
       // Update bot message with structured report details
+      const isFailed = data.overall_status === 'FAILED';
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === botMsgId
             ? {
                 ...msg,
-                text: null,
-                status: 'completed',
+                text: isFailed ? `Scan failed: ${data.error || 'Unknown error occurred.'}` : null,
+                status: isFailed ? 'failed' : 'completed',
                 report: data.report,
                 screenshotUrl: resolvedScreenshotUrl,
                 toolTrace: data.tool_trace,
@@ -833,34 +836,28 @@ export default function HomePage() {
                     {msg.text}
                   </div>
                 ) : (
-                  <div className="w-full flex gap-4">
-                    <div className="w-8 h-8 rounded-full bg-indigo-600 shrink-0 flex items-center justify-center text-white font-extrabold text-xs shadow-md">
-                      PL
-                    </div>
-                    <div className="flex-1 min-w-0 bg-transparent py-1.5">
-                      {msg.status === 'loading' ? (
-                        <div className="flex flex-col gap-3 max-w-[85%]">
-                          <p className="text-[14px] text-gray-500 dark:text-gray-400 italic animate-pulse">
-                            {msg.text}
-                          </p>
-                          <div className="flex gap-2.5 items-center mt-1">
-                            <span className="w-2.5 h-2.5 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                            <span className="w-2.5 h-2.5 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                            <span className="w-2.5 h-2.5 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                          </div>
-                        </div>
-                      ) : msg.status === 'failed' ? (
+                  <div className="w-full">
+                    <div className="flex-1 min-w-0 bg-transparent py-1.5 flex flex-col gap-4">
+                      {(msg.status === 'loading' || msg.status === 'completed') && (
+                        <OrchestratorProgress 
+                          targetUrl={msg.url || 'Target URL'} 
+                          status={msg.status}
+                          duration={msg.duration}
+                        />
+                      )}
+                      {msg.status === 'failed' && (
                         <div className="p-4 rounded-2xl bg-rose-500/10 dark:bg-rose-500/15 border border-rose-500/30 text-rose-600 dark:text-rose-400 flex items-center gap-3 text-sm max-w-[85%] shadow-sm">
                           <AlertCircle size={20} className="shrink-0" />
                           <p>{msg.text}</p>
                         </div>
-                      ) : (
+                      )}
+                      {msg.status === 'completed' && (
                         <ReportDashboard 
                           report={msg.report}
                           duration={msg.duration}
                           screenshotUrl={msg.screenshotUrl}
                           toolTrace={msg.toolTrace}
-                       />
+                        />
                       )}
                     </div>
                   </div>
