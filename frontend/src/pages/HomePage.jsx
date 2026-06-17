@@ -225,11 +225,48 @@ function BackgroundOrbs({ hasSentMessage }) {
 }
 
 
+function AnimatedTitle({ title }) {
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const chars = containerRef.current.querySelectorAll('.title-char');
+    if (chars.length === 0) return;
+
+    gsap.killTweensOf(chars);
+    gsap.fromTo(chars, 
+      { opacity: 0, y: 12, rotateX: -45 },
+      { opacity: 1, y: 0, rotateX: 0, duration: 0.5, stagger: 0.03, ease: 'power2.out' }
+    );
+  }, [title]);
+
+  return (
+    <div 
+      ref={containerRef} 
+      className="font-semibold text-lg text-gray-700 dark:text-gray-300 flex flex-wrap"
+      style={{ perspective: '1000px' }}
+    >
+      {title.split('').map((char, idx) => (
+        <span 
+          key={idx} 
+          className="title-char inline-block origin-bottom transform-gpu"
+          style={{ whiteSpace: char === ' ' ? 'pre' : 'normal' }}
+        >
+          {char}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+
 
 export default function HomePage() {
   const navigate = useNavigate();
   const [isExpanded, setIsExpanded] = useState(false);
+  const [chatTitle, setChatTitle] = useState('New Scan');
   const [messages, setMessages] = useState([]);
+  const mainRef = useRef(null);
   const [input, setInput] = useState('');
   const [showProfilePopup, setShowProfilePopup] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -254,7 +291,7 @@ export default function HomePage() {
   const chatbotLottieRef = useRef(null);
   const expandLottieRef = useRef(null);
 
-  const inputBarRef = useRef(null);
+  const bottomInputBarRef = useRef(null);
   const orbLeftRef = useRef(null);
   const orbRightRef = useRef(null);
   const titleMenuRef = useRef(null);
@@ -285,7 +322,11 @@ export default function HomePage() {
           <path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25ZM12.75 9a.75.75 0 0 0-1.5 0v2.25H9a.75.75 0 0 0 0 1.5h2.25V15a.75.75 0 0 0 1.5 0v-2.25H15a.75.75 0 0 0 0-1.5h-2.25V9Z" clipRule="evenodd" />
         </svg>
       ),
-      onClick: () => {},
+      onClick: () => {
+        setMessages([]);
+        setHasSentMessage(false);
+        setChatTitle('New Scan');
+      },
       hasDot: false,
     },
     {
@@ -402,9 +443,9 @@ export default function HomePage() {
 
   /* Animate the input bar into its bottom position on first message send */
   useEffect(() => {
-    if (!hasSentMessage || !inputBarRef.current) return;
+    if (!hasSentMessage || !bottomInputBarRef.current) return;
     gsap.fromTo(
-      inputBarRef.current,
+      bottomInputBarRef.current,
       { opacity: 0, y: 40 },
       { opacity: 1, y: 0, duration: 0.65, ease: 'power3.out' }
     );
@@ -561,6 +602,28 @@ export default function HomePage() {
     };
   }, [triggerCycle, hasSentMessage]);
 
+  // GSAP animation for expanding/collapsing sidebar layout displacement
+  useEffect(() => {
+    if (!mainRef.current) return;
+    
+    // Animate the padding-left of the main chat container
+    gsap.to(mainRef.current, {
+      paddingLeft: isExpanded ? 330 : 0,
+      duration: 0.5,
+      ease: 'power3.inOut',
+    });
+
+    // Also animate the bottom input bar wrapper positioning if it exists
+    if (bottomInputBarRef.current) {
+      gsap.to(bottomInputBarRef.current, {
+        left: isExpanded ? 330 : 0,
+        width: isExpanded ? 'calc(100% - 330px)' : '100%',
+        duration: 0.5,
+        ease: 'power3.inOut',
+      });
+    }
+  }, [isExpanded, hasSentMessage]);
+
   const handleSend = async (e) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
@@ -585,6 +648,7 @@ export default function HomePage() {
     setMessages((prev) => [...prev, userMsg, loadingBotMsg]);
     setInput('');
     setIsLoading(true);
+    setChatTitle(query);
 
     if (isFirst) {
       setHasSentMessage(true);
@@ -695,12 +759,14 @@ export default function HomePage() {
         }
       ]);
       setHasSentMessage(true);
+      setChatTitle('Analysis on suspicious email link');
     } else if (chatId === 2) {
       setMessages([
         { id: 1, text: 'What is spear phishing?', sender: 'user' },
         { id: 2, text: 'Spear phishing is a highly targeted phishing method where attackers customize their emails/messages specifically for a particular individual or organization, often using personal details to build trust.', sender: 'bot' }
       ]);
       setHasSentMessage(true);
+      setChatTitle('What is spear phishing?');
     } else if (chatId === 3) {
       setMessages([
         { id: 1, text: 'Please check domain.com', sender: 'user' },
@@ -724,6 +790,7 @@ export default function HomePage() {
         }
       ]);
       setHasSentMessage(true);
+      setChatTitle('Scan results for domain.com');
     }
   };
 
@@ -750,7 +817,10 @@ export default function HomePage() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col h-full bg-white dark:bg-[#212121] text-slate-700 dark:text-slate-400 relative transition-colors duration-300 overflow-hidden scroll-smooth no-scrollbar">
+      <main 
+        ref={mainRef}
+        className="flex-1 flex flex-col h-full bg-white dark:bg-[#212121] text-slate-700 dark:text-slate-400 relative transition-colors duration-300 overflow-hidden scroll-smooth no-scrollbar"
+      >
 
         {/* ── Persistent floating background orbs ── */}
         <BackgroundOrbs hasSentMessage={hasSentMessage} />
@@ -790,7 +860,7 @@ export default function HomePage() {
 
         <header className="h-16 flex items-center justify-between px-6 shrink-0" style={{ position: 'relative', zIndex: 10 }}>
           <div className="relative flex items-center gap-3">
-            <div className="font-semibold text-lg text-gray-700 dark:text-gray-300">Scan Chatgpt site</div>
+            <AnimatedTitle title={chatTitle} />
             <button
               type="button"
               onClick={() => setIsTitleMenuOpen((prev) => !prev)}
@@ -958,7 +1028,6 @@ export default function HomePage() {
               <div className="mt-8 w-full max-w-2xl">
                 <div
                   ref={(el) => {
-                    inputBarRef.current = el;
                     heroInputWrapRef.current = el;
                   }}
                   className="relative z-20 w-full"
@@ -1053,9 +1122,15 @@ export default function HomePage() {
         {/* Input bar wrapper (shown after scan starts) */}
         {hasSentMessage && (
           <div
-            ref={inputBarRef}
-            className="absolute bottom-0 left-0 w-full px-4 md:px-12 pt-16 pb-6 bg-gradient-to-t from-white dark:from-[#212121] via-white/80 dark:via-[#212121]/80 to-transparent"
-            style={{ zIndex: 20 }}
+            ref={bottomInputBarRef}
+            className="absolute bottom-0 pt-16 pb-6 bg-gradient-to-t from-white dark:from-[#212121] via-white/80 dark:via-[#212121]/80 to-transparent"
+            style={{ 
+              zIndex: 20,
+              left: isExpanded ? '330px' : '0px',
+              width: isExpanded ? 'calc(100% - 330px)' : '100%',
+              paddingLeft: '48px',
+              paddingRight: '48px',
+            }}
           >
             <div
               className="absolute inset-0 pointer-events-none"
