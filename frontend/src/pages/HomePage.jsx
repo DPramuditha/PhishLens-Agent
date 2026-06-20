@@ -15,6 +15,11 @@ import {
 import { useNavigate } from 'react-router-dom';
 import Lottie from 'lottie-react';
 import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { ScrollSmoother } from 'gsap/ScrollSmoother';
+
+gsap.registerPlugin(ScrollTrigger, ScrollSmoother);
+
 import chatAnimData from '../sidebar_images/chat.json';
 import darkChatAnimData from '../sidebar_images/dark-chat.json';
 import searchAnimData from '../sidebar_images/search.json';
@@ -186,7 +191,7 @@ function BackgroundOrbs({ hasSentMessage }) {
 
   return (
     <div
-      className="pointer-events-none absolute inset-0 overflow-hidden"
+      className="pointer-events-none fixed inset-0 overflow-hidden"
       style={{ zIndex: 0 }}
       aria-hidden="true"
     >
@@ -394,6 +399,7 @@ export default function HomePage() {
   const orbRightRef = useRef(null);
   const titleMenuRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const smootherRef = useRef(null);
 
   const heroRef = useRef(null);
   const heroTitleRef = useRef(null);
@@ -486,9 +492,33 @@ export default function HomePage() {
     }
   }, [isDarkMode]);
 
+  // Initialize GSAP ScrollSmoother
+  useEffect(() => {
+    const smoother = ScrollSmoother.create({
+      wrapper: '#smooth-wrapper',
+      content: '#smooth-content',
+      smooth: 1.2,
+      effects: true,
+    });
+    smootherRef.current = smoother;
+
+    return () => {
+      smoother.kill();
+    };
+  }, []);
+
+  // Refresh ScrollTrigger and ScrollSmoother when messages are added
+  useEffect(() => {
+    ScrollTrigger.refresh();
+  }, [messages]);
+
   // Autoscroll message container when new messages arrive
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (smootherRef.current) {
+      smootherRef.current.scrollTo(messagesEndRef.current, true);
+    } else {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
 
   useEffect(() => {
@@ -857,7 +887,7 @@ export default function HomePage() {
       {/* Main Content Area */}
       <main 
         ref={mainRef}
-        className="flex-1 flex flex-col h-full bg-white dark:bg-[#212121] text-slate-700 dark:text-slate-400 relative transition-colors duration-300 overflow-hidden scroll-smooth no-scrollbar"
+        className="flex-1 flex flex-col h-full bg-white dark:bg-[#212121] text-slate-700 dark:text-slate-400 relative transition-colors duration-300 overflow-hidden"
       >
 
         {/* ── Persistent floating background orbs ── */}
@@ -866,7 +896,7 @@ export default function HomePage() {
         {/* ── Send-burst orb flash (triggered on each send) ── */}
         {showOrbs && (
           <div
-            className={"pointer-events-none absolute inset-0 flex justify-center " + (hasSentMessage ? "items-end pb-20" : "items-center")}
+            className={"pointer-events-none fixed inset-0 flex justify-center " + (hasSentMessage ? "items-end pb-20" : "items-center")}
             style={{ zIndex: 2 }}
           >
             <div
@@ -896,7 +926,10 @@ export default function HomePage() {
           </div>
         )}
 
-        <header className="h-16 flex items-center justify-center px-6 shrink-0" style={{ position: 'relative', zIndex: 10 }}>
+        <div id="smooth-wrapper" className="flex-1 w-full h-full overflow-y-auto no-scrollbar relative z-10">
+          <div id="smooth-content" className="w-full flex flex-col min-h-full">
+
+            <header className="h-16 flex items-center justify-center px-6 shrink-0" style={{ position: 'relative', zIndex: 10 }}>
           {hasSentMessage && (
             <div className="relative flex items-center gap-3">
               <AnimatedTitle title={chatTitle} />
@@ -933,10 +966,10 @@ export default function HomePage() {
           )}
         </header>
 
-        {/* Messages area — only visible after first message (NO SCROLLBAR) */}
+        {/* Messages area — only visible after first message */}
         {hasSentMessage && (
           <section
-            className="flex-1 overflow-y-auto no-scrollbar px-4 pb-44 md:px-12 w-full max-w-4xl mx-auto flex flex-col gap-6 pt-4"
+            className="w-full max-w-4xl mx-auto flex flex-col gap-6 pt-4 px-4 pb-44 md:px-12"
             style={{ position: 'relative', zIndex: 10 }}
           >
             {messages.map((msg) => (
@@ -1125,11 +1158,14 @@ export default function HomePage() {
           </div>
         )}
 
+          </div>
+        </div>
+
         {/* Input bar wrapper (shown after scan starts) */}
         {hasSentMessage && (
           <div
             ref={bottomInputBarRef}
-            className="absolute bottom-0 left-0 w-full pt-16 pb-6 bg-gradient-to-t from-white dark:from-[#212121] via-white/80 dark:via-[#212121]/80 to-transparent"
+            className="fixed bottom-0 left-0 w-full pt-16 pb-6 bg-gradient-to-t from-white dark:from-[#212121] via-white/80 dark:via-[#212121]/80 to-transparent"
             style={{ 
               zIndex: 20,
               paddingLeft: '48px',
