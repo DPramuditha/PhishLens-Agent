@@ -15,6 +15,11 @@ import {
 import { useNavigate } from 'react-router-dom';
 import Lottie from 'lottie-react';
 import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { ScrollSmoother } from 'gsap/ScrollSmoother';
+
+gsap.registerPlugin(ScrollTrigger, ScrollSmoother);
+
 import chatAnimData from '../sidebar_images/chat.json';
 import darkChatAnimData from '../sidebar_images/dark-chat.json';
 import searchAnimData from '../sidebar_images/search.json';
@@ -186,7 +191,7 @@ function BackgroundOrbs({ hasSentMessage }) {
 
   return (
     <div
-      className="pointer-events-none absolute inset-0 overflow-hidden"
+      className="pointer-events-none fixed inset-0 overflow-hidden"
       style={{ zIndex: 0 }}
       aria-hidden="true"
     >
@@ -225,11 +230,147 @@ function BackgroundOrbs({ hasSentMessage }) {
 }
 
 
+function AnimatedTitle({ title }) {
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const chars = containerRef.current.querySelectorAll('.title-char');
+    if (chars.length === 0) return;
+
+    gsap.killTweensOf(chars);
+    gsap.fromTo(chars, 
+      { opacity: 0, y: 12, rotateX: -45 },
+      { opacity: 1, y: 0, rotateX: 0, duration: 0.5, stagger: 0.03, ease: 'power2.out' }
+    );
+  }, [title]);
+
+  return (
+    <div 
+      ref={containerRef} 
+      className="font-semibold text-lg text-gray-700 dark:text-gray-300 flex flex-wrap"
+      style={{ perspective: '1000px' }}
+    >
+      {title.split('').map((char, idx) => (
+        <span 
+          key={idx} 
+          className="title-char inline-block origin-bottom transform-gpu"
+          style={{ whiteSpace: char === ' ' ? 'pre' : 'normal' }}
+        >
+          {char}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function AnimatedCyclingWord({ word, isThinking }) {
+  const containerRef = useRef(null);
+  const placeholderRef = useRef(null);
+  const cursorRef = useRef(null);
+
+  const targetText = isThinking ? "Thinking..." : word + '?';
+  const [displayText, setDisplayText] = useState('');
+
+  // Typing animation loop: reactive to targetText prop changes
+  useEffect(() => {
+    let timer;
+
+    // Find longest common prefix
+    let commonPrefixLength = 0;
+    const minLen = Math.min(displayText.length, targetText.length);
+    for (let i = 0; i < minLen; i++) {
+      if (displayText[i] === targetText[i]) {
+        commonPrefixLength++;
+      } else {
+        break;
+      }
+    }
+
+    if (displayText.length > commonPrefixLength) {
+      // Need to delete characters from the end
+      timer = setTimeout(() => {
+        setDisplayText((prev) => prev.slice(0, -1));
+      }, 30); // fast deletion speed
+    } else if (displayText.length < targetText.length) {
+      // Need to type next character
+      timer = setTimeout(() => {
+        setDisplayText((prev) => targetText.slice(0, prev.length + 1));
+      }, 70); // smooth typing speed
+    }
+
+    return () => clearTimeout(timer);
+  }, [targetText, displayText]);
+
+  // Smooth width transition based on the placeholder
+  useLayoutEffect(() => {
+    if (!placeholderRef.current || !containerRef.current) return;
+    const newWidth = placeholderRef.current.offsetWidth;
+    
+    gsap.to(containerRef.current, {
+      width: newWidth,
+      duration: 0.5,
+      ease: 'power3.out',
+      overwrite: 'auto',
+    });
+  }, [word, isThinking]);
+
+  // Cursor blink timeline matching the requested animation
+  useEffect(() => {
+    if (!cursorRef.current) return;
+    const tl = gsap.timeline({ repeat: -1 });
+    tl.to(cursorRef.current, { opacity: 0, duration: 0.5, ease: 'none', delay: 0.15 })
+      .to(cursorRef.current, { opacity: 1, duration: 0.5, ease: 'none', delay: 0.15 });
+    return () => {
+      tl.kill();
+    };
+  }, []);
+
+  // Show loader only when isThinking is active and the text has deleted and started typing "Thinking..."
+  const showLoader = isThinking && displayText.startsWith('T');
+
+  return (
+    <span
+      ref={containerRef}
+      className="inline-block relative overflow-visible vertical-middle align-middle"
+      style={{ transformStyle: 'preserve-3d', perspective: '1000px', height: '1.2em' }}
+    >
+      <span
+        className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center whitespace-nowrap font-black"
+        style={{ transformStyle: 'preserve-3d' }}
+      >
+        {showLoader && (
+          <span
+            className="inline-flex shrink-0 hero-cycling-loader-wrap mr-3 origin-bottom transform-gpu"
+            style={{ backfaceVisibility: 'hidden', transformStyle: 'preserve-3d' }}
+          >
+            <DotmHex2 bloom={true} size={28} dotSize={4.5} className="text-indigo-600 dark:text-indigo-400" />
+          </span>
+        )}
+        <span className="bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent dark:from-indigo-400 dark:to-violet-400">
+          {displayText}
+        </span>
+        <span ref={cursorRef} className="scramble-cursor inline-block text-indigo-600 dark:text-indigo-400 ml-0.5 font-bold">_</span>
+      </span>
+      
+      {/* Invisible placeholder to reserve vertical height and structure */}
+      <span ref={placeholderRef} className="opacity-0 select-none pointer-events-none font-black flex items-center whitespace-nowrap">
+        {isThinking && (
+          <span className="w-[40px] shrink-0 mr-3 inline-block" />
+        )}
+        <span>{targetText}</span>
+        <span className="ml-0.5">_</span>
+      </span>
+    </span>
+  );
+}
 
 export default function HomePage() {
   const navigate = useNavigate();
   const [isExpanded, setIsExpanded] = useState(false);
+  const [chatTitle, setChatTitle] = useState('New Scan');
   const [messages, setMessages] = useState([]);
+  const mainRef = useRef(null);
   const [input, setInput] = useState('');
   const [showProfilePopup, setShowProfilePopup] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -242,7 +383,6 @@ export default function HomePage() {
   const [currentWordIdx, setCurrentWordIdx] = useState(0);
   const [isThinking, setIsThinking] = useState(false);
   const isCyclingAnimating = useRef(false);
-  const cycleTimeoutRef = useRef(null);
 
   const profileName = 'Dimuthu Pramuditha';
   const profileEmail = 'dimuthu@example.com';
@@ -254,11 +394,12 @@ export default function HomePage() {
   const chatbotLottieRef = useRef(null);
   const expandLottieRef = useRef(null);
 
-  const inputBarRef = useRef(null);
+  const bottomInputBarRef = useRef(null);
   const orbLeftRef = useRef(null);
   const orbRightRef = useRef(null);
   const titleMenuRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const smootherRef = useRef(null);
 
   const heroRef = useRef(null);
   const heroTitleRef = useRef(null);
@@ -285,7 +426,11 @@ export default function HomePage() {
           <path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25ZM12.75 9a.75.75 0 0 0-1.5 0v2.25H9a.75.75 0 0 0 0 1.5h2.25V15a.75.75 0 0 0 1.5 0v-2.25H15a.75.75 0 0 0 0-1.5h-2.25V9Z" clipRule="evenodd" />
         </svg>
       ),
-      onClick: () => {},
+      onClick: () => {
+        setMessages([]);
+        setHasSentMessage(false);
+        setChatTitle('New Scan');
+      },
       hasDot: false,
     },
     {
@@ -347,9 +492,33 @@ export default function HomePage() {
     }
   }, [isDarkMode]);
 
+  // Initialize GSAP ScrollSmoother
+  useEffect(() => {
+    const smoother = ScrollSmoother.create({
+      wrapper: '#smooth-wrapper',
+      content: '#smooth-content',
+      smooth: 1.2,
+      effects: true,
+    });
+    smootherRef.current = smoother;
+
+    return () => {
+      smoother.kill();
+    };
+  }, []);
+
+  // Refresh ScrollTrigger and ScrollSmoother when messages are added
+  useEffect(() => {
+    ScrollTrigger.refresh();
+  }, [messages]);
+
   // Autoscroll message container when new messages arrive
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (smootherRef.current) {
+      smootherRef.current.scrollTo(messagesEndRef.current, true);
+    } else {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
 
   useEffect(() => {
@@ -402,9 +571,9 @@ export default function HomePage() {
 
   /* Animate the input bar into its bottom position on first message send */
   useEffect(() => {
-    if (!hasSentMessage || !inputBarRef.current) return;
+    if (!hasSentMessage || !bottomInputBarRef.current) return;
     gsap.fromTo(
-      inputBarRef.current,
+      bottomInputBarRef.current,
       { opacity: 0, y: 40 },
       { opacity: 1, y: 0, duration: 0.65, ease: 'power3.out' }
     );
@@ -480,86 +649,48 @@ export default function HomePage() {
 
   // ── Cycle to the next word ──
   const triggerCycle = useCallback(() => {
-    if (hasSentMessage || isCyclingAnimating.current) return;
-    
-    const titleEl = heroTitleRef.current;
-    if (!titleEl) return;
-
-    const currentLetters = titleEl.querySelectorAll('.hero-cycling-char');
-    const loaderWrap = titleEl.querySelector('.hero-cycling-loader-wrap');
-    if (currentLetters.length === 0) return;
-
-    isCyclingAnimating.current = true;
-
-    // 1. Animate current letters and loader out (rotateX: 90)
-    const targets = loaderWrap ? [loaderWrap, ...currentLetters] : currentLetters;
-    gsap.to(targets, {
-      rotateX: 90,
-      opacity: 0,
-      duration: 0.45,
-      stagger: 0.04,
-      ease: 'power2.in',
-      onComplete: () => {
-        // 2. Once out, change state to alternate between word and thinking
-        setIsThinking((prev) => {
-          if (prev) {
-            setCurrentWordIdx((idx) => (idx + 1) % CYCLING_WORDS.length);
-            return false;
-          } else {
-            return true;
-          }
-        });
-      },
+    if (hasSentMessage) return;
+    setIsThinking((prev) => {
+      if (prev) {
+        setCurrentWordIdx((idx) => (idx + 1) % CYCLING_WORDS.length);
+        return false;
+      } else {
+        return true;
+      }
     });
   }, [hasSentMessage]);
 
-  // ── Handle incoming (mounted) letters animation ──
-  useLayoutEffect(() => {
-    if (hasSentMessage) return;
-
-    const titleEl = heroTitleRef.current;
-    if (!titleEl) return;
-
-    const newLetters = titleEl.querySelectorAll('.hero-cycling-char');
-    const loaderWrap = titleEl.querySelector('.hero-cycling-loader-wrap');
-    if (newLetters.length === 0) return;
-
-    // 1. Immediately set initial state for new letters and loader (rotateX: -90)
-    const targets = loaderWrap ? [loaderWrap, ...newLetters] : newLetters;
-    gsap.set(targets, {
-      rotateX: -90,
-      opacity: 0,
-      transformPerspective: 1000,
-    });
-
-    // 2. Animate them in (rotateX: 0)
-    gsap.to(targets, {
-      rotateX: 0,
-      opacity: 1,
-      duration: isThinking ? 0.45 : 0.55,
-      stagger: isThinking ? 0.06 : 0.05, // slightly slower stagger for typing feel
-      ease: isThinking ? 'power2.out' : 'back.out(1.4)',
-      onComplete: () => {
-        isCyclingAnimating.current = false;
-        
-        // Schedule next cycle
-        if (cycleTimeoutRef.current) clearTimeout(cycleTimeoutRef.current);
-        cycleTimeoutRef.current = setTimeout(triggerCycle, isThinking ? 2200 : 3200);
-      },
-    });
-  }, [currentWordIdx, isThinking, triggerCycle, hasSentMessage]);
-
-  // ── Start initial cycle timeout ──
+  // ── Cycle scheduling ──
   useEffect(() => {
     if (hasSentMessage) return;
 
-    // Initial delay before first cycle (e.g. 4 seconds)
-    cycleTimeoutRef.current = setTimeout(triggerCycle, 4200);
+    const delay = isThinking ? 2200 : 3200;
+    const timer = setTimeout(triggerCycle, delay);
 
-    return () => {
-      if (cycleTimeoutRef.current) clearTimeout(cycleTimeoutRef.current);
-    };
-  }, [triggerCycle, hasSentMessage]);
+    return () => clearTimeout(timer);
+  }, [currentWordIdx, isThinking, triggerCycle, hasSentMessage]);
+
+  // GSAP animation for expanding/collapsing sidebar layout displacement
+  useEffect(() => {
+    if (!mainRef.current) return;
+    
+    // Animate the padding-left of the main chat container
+    gsap.to(mainRef.current, {
+      paddingLeft: isExpanded ? 330 : 0,
+      duration: 0.5,
+      ease: 'power3.inOut',
+    });
+
+    // Also animate the bottom input bar wrapper positioning if it exists
+    if (bottomInputBarRef.current) {
+      gsap.to(bottomInputBarRef.current, {
+        left: isExpanded ? 330 : 0,
+        width: isExpanded ? 'calc(100% - 330px)' : '100%',
+        duration: 0.5,
+        ease: 'power3.inOut',
+      });
+    }
+  }, [isExpanded, hasSentMessage]);
 
   const handleSend = async (e) => {
     e.preventDefault();
@@ -585,6 +716,7 @@ export default function HomePage() {
     setMessages((prev) => [...prev, userMsg, loadingBotMsg]);
     setInput('');
     setIsLoading(true);
+    setChatTitle(query);
 
     if (isFirst) {
       setHasSentMessage(true);
@@ -695,12 +827,14 @@ export default function HomePage() {
         }
       ]);
       setHasSentMessage(true);
+      setChatTitle('Analysis on suspicious email link');
     } else if (chatId === 2) {
       setMessages([
         { id: 1, text: 'What is spear phishing?', sender: 'user' },
         { id: 2, text: 'Spear phishing is a highly targeted phishing method where attackers customize their emails/messages specifically for a particular individual or organization, often using personal details to build trust.', sender: 'bot' }
       ]);
       setHasSentMessage(true);
+      setChatTitle('What is spear phishing?');
     } else if (chatId === 3) {
       setMessages([
         { id: 1, text: 'Please check domain.com', sender: 'user' },
@@ -724,6 +858,7 @@ export default function HomePage() {
         }
       ]);
       setHasSentMessage(true);
+      setChatTitle('Scan results for domain.com');
     }
   };
 
@@ -750,7 +885,10 @@ export default function HomePage() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col h-full bg-white dark:bg-[#212121] text-slate-700 dark:text-slate-400 relative transition-colors duration-300 overflow-hidden scroll-smooth no-scrollbar">
+      <main 
+        ref={mainRef}
+        className="flex-1 flex flex-col h-full bg-white dark:bg-[#212121] text-slate-700 dark:text-slate-400 relative transition-colors duration-300 overflow-hidden"
+      >
 
         {/* ── Persistent floating background orbs ── */}
         <BackgroundOrbs hasSentMessage={hasSentMessage} />
@@ -758,7 +896,7 @@ export default function HomePage() {
         {/* ── Send-burst orb flash (triggered on each send) ── */}
         {showOrbs && (
           <div
-            className={"pointer-events-none absolute inset-0 flex justify-center " + (hasSentMessage ? "items-end pb-20" : "items-center")}
+            className={"pointer-events-none fixed inset-0 flex justify-center " + (hasSentMessage ? "items-end pb-20" : "items-center")}
             style={{ zIndex: 2 }}
           >
             <div
@@ -788,45 +926,50 @@ export default function HomePage() {
           </div>
         )}
 
-        <header className="h-16 flex items-center justify-between px-6 shrink-0" style={{ position: 'relative', zIndex: 10 }}>
-          <div className="relative flex items-center gap-3">
-            <div className="font-semibold text-lg text-gray-700 dark:text-gray-300">Scan Chatgpt site</div>
-            <button
-              type="button"
-              onClick={() => setIsTitleMenuOpen((prev) => !prev)}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-indigo-50 hover:text-indigo-600 dark:border-gray-700 dark:bg-[#2a2a2a]/80 dark:text-gray-200 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-200 cursor-pointer"
-              aria-label="Open scan dashboard actions"
-            >
-              {isTitleMenuOpen ? <ChevronUp size={20} strokeWidth={3} /> : <ChevronDown size={20} strokeWidth={3} />}
-            </button>
+        <div id="smooth-wrapper" className="flex-1 w-full h-full overflow-y-auto no-scrollbar relative z-10">
+          <div id="smooth-content" className="w-full flex flex-col min-h-full">
 
-            <div
-              ref={titleMenuRef}
-              className="absolute left-0 top-12 w-44 rounded-2xl border border-gray-200/80 bg-white/95 p-1.5 shadow-xl backdrop-blur-xl dark:border-gray-700 dark:bg-[#1f1f1f]/95"
-              style={{ opacity: 0, transformOrigin: 'top left', pointerEvents: 'none' }}
-            >
+            <header className="h-16 flex items-center justify-center px-6 shrink-0" style={{ position: 'relative', zIndex: 10 }}>
+          {hasSentMessage && (
+            <div className="relative flex items-center gap-3">
+              <AnimatedTitle title={chatTitle} />
               <button
                 type="button"
-                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-gray-700 transition hover:bg-indigo-50 hover:text-indigo-700 dark:text-gray-200 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-100"
+                onClick={() => setIsTitleMenuOpen((prev) => !prev)}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-indigo-50 hover:text-indigo-600 dark:border-gray-700 dark:bg-[#2a2a2a]/80 dark:text-gray-200 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-200 cursor-pointer"
+                aria-label="Open scan dashboard actions"
               >
-                <Pencil size={14} />
-                Rename
+                {isTitleMenuOpen ? <ChevronUp size={20} strokeWidth={3} /> : <ChevronDown size={20} strokeWidth={3} />}
               </button>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-rose-600 transition hover:bg-rose-500/10 dark:text-rose-300 dark:hover:bg-rose-500/10"
+
+              <div
+                ref={titleMenuRef}
+                className="absolute left-0 top-12 w-44 rounded-2xl border border-gray-200/80 bg-white/95 p-1.5 shadow-xl backdrop-blur-xl dark:border-gray-700 dark:bg-[#1f1f1f]/95"
+                style={{ opacity: 0, transformOrigin: 'top left', pointerEvents: 'none' }}
               >
-                <Trash2 size={14} />
-                Delete
-              </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-gray-700 transition hover:bg-indigo-50 hover:text-indigo-700 dark:text-gray-200 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-100"
+                >
+                  <Pencil size={14} />
+                  Rename
+                </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-rose-600 transition hover:bg-rose-500/10 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                >
+                  <Trash2 size={14} />
+                  Delete
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </header>
 
-        {/* Messages area — only visible after first message (NO SCROLLBAR) */}
+        {/* Messages area — only visible after first message */}
         {hasSentMessage && (
           <section
-            className="flex-1 overflow-y-auto no-scrollbar px-4 pb-44 md:px-12 w-full max-w-4xl mx-auto flex flex-col gap-6 pt-4"
+            className="w-full max-w-4xl mx-auto flex flex-col gap-6 pt-4 px-4 pb-44 md:px-12"
             style={{ position: 'relative', zIndex: 10 }}
           >
             {messages.map((msg) => (
@@ -889,76 +1032,41 @@ export default function HomePage() {
 
               <h1
                 ref={heroTitleRef}
-                className="text-3xl md:text-5xl font-black tracking-tight mb-4 min-h-[1.2em] flex flex-wrap justify-center gap-x-2.5 gap-y-1.5"
+                className="text-3xl md:text-5xl font-black tracking-tight mb-4 flex flex-wrap justify-center items-center gap-x-2 min-h-[1.2em] w-full"
                 aria-label="How can I assist your security?"
                 style={{ perspective: '1000px', transformStyle: 'preserve-3d' }}
               >
                 {/* Static Prefix: "How can I assist your" */}
-                {HERO_TITLE_PREFIX.split(' ').map((word, wIdx) => (
-                  <span key={wIdx} className="inline-flex whitespace-nowrap" style={{ transformStyle: 'preserve-3d' }}>
-                    {word.split('').map((char, cIdx) => (
-                      <span
-                        key={cIdx}
-                        className="hero-title-char inline-block bg-gradient-to-r from-gray-900 via-indigo-800 to-violet-700 bg-clip-text text-transparent dark:from-white dark:via-indigo-200 dark:to-violet-300 origin-bottom transform-gpu"
-                        style={{ backfaceVisibility: 'hidden', transformStyle: 'preserve-3d' }}
-                      >
-                        {char}
-                      </span>
-                    ))}
-                  </span>
-                ))}
-
-                {/* Dynamic Cycling Word */}
-                {isThinking ? (
-                  <span className="inline-flex items-center gap-3 whitespace-nowrap" style={{ transformStyle: 'preserve-3d' }}>
-                    <span className="inline-flex shrink-0 hero-cycling-loader-wrap" style={{ backfaceVisibility: 'hidden', transformStyle: 'preserve-3d' }}>
-                      <DotmHex2 bloom={true} size={28} dotSize={4.5} className="text-indigo-600 dark:text-indigo-400" />
-                    </span>
-                    <span className="inline-flex" style={{ transformStyle: 'preserve-3d' }}>
-                      {"Thinking...".split('').map((char, cIdx) => (
+                <span className="flex whitespace-nowrap gap-x-2 md:gap-x-2.5" style={{ transformStyle: 'preserve-3d' }}>
+                  {HERO_TITLE_PREFIX.split(' ').map((word, wIdx) => (
+                    <span key={wIdx} className="inline-flex whitespace-nowrap" style={{ transformStyle: 'preserve-3d' }}>
+                      {word.split('').map((char, cIdx) => (
                         <span
                           key={cIdx}
-                          className="hero-cycling-char inline-block bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent dark:from-indigo-400 dark:to-violet-400 origin-bottom transform-gpu"
+                          className="hero-title-char inline-block bg-gradient-to-r from-gray-900 via-indigo-800 to-violet-700 bg-clip-text text-transparent dark:from-white dark:via-indigo-200 dark:to-violet-300 origin-bottom transform-gpu"
                           style={{ backfaceVisibility: 'hidden', transformStyle: 'preserve-3d' }}
                         >
                           {char}
                         </span>
                       ))}
                     </span>
-                  </span>
-                ) : (
-                  <span className="inline-flex whitespace-nowrap" style={{ transformStyle: 'preserve-3d' }}>
-                    {CYCLING_WORDS[currentWordIdx].split('').map((char, cIdx) => (
-                      <span
-                        key={cIdx}
-                        className="hero-cycling-char inline-block bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent dark:from-indigo-400 dark:to-violet-400 origin-bottom transform-gpu"
-                        style={{ backfaceVisibility: 'hidden', transformStyle: 'preserve-3d' }}
-                      >
-                        {char}
-                      </span>
-                    ))}
-                    {/* Append question mark at the end of the word */}
-                    <span
-                      className="hero-cycling-char inline-block bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent dark:from-indigo-400 dark:to-violet-400 origin-bottom transform-gpu"
-                      style={{ backfaceVisibility: 'hidden', transformStyle: 'preserve-3d' }}
-                    >
-                      ?
-                    </span>
-                  </span>
-                )}
+                  ))}
+                </span>
+
+                {/* Dynamic Cycling Word with smooth width animation */}
+                <AnimatedCyclingWord word={CYCLING_WORDS[currentWordIdx]} isThinking={isThinking} />
               </h1>
 
-              <p
+              {/* <p
                 ref={heroSubtitleRef}
                 className="text-sm md:text-base text-gray-550 dark:text-gray-405 max-w-xl leading-relaxed font-medium"
               >
                 Real-time URL scanning, email snippet analysis, and threat intelligence models to protect your credentials, domains, and inboxes.
-              </p>
+              </p> */}
 
               <div className="mt-8 w-full max-w-2xl">
                 <div
                   ref={(el) => {
-                    inputBarRef.current = el;
                     heroInputWrapRef.current = el;
                   }}
                   className="relative z-20 w-full"
@@ -1050,12 +1158,19 @@ export default function HomePage() {
           </div>
         )}
 
+          </div>
+        </div>
+
         {/* Input bar wrapper (shown after scan starts) */}
         {hasSentMessage && (
           <div
-            ref={inputBarRef}
-            className="absolute bottom-0 left-0 w-full px-4 md:px-12 pt-16 pb-6 bg-gradient-to-t from-white dark:from-[#212121] via-white/80 dark:via-[#212121]/80 to-transparent"
-            style={{ zIndex: 20 }}
+            ref={bottomInputBarRef}
+            className="fixed bottom-0 left-0 w-full pt-16 pb-6 bg-gradient-to-t from-white dark:from-[#212121] via-white/80 dark:via-[#212121]/80 to-transparent"
+            style={{ 
+              zIndex: 20,
+              paddingLeft: '48px',
+              paddingRight: '48px',
+            }}
           >
             <div
               className="absolute inset-0 pointer-events-none"
