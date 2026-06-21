@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Terminal,
   ChevronUp,
@@ -8,19 +8,81 @@ import {
   ExternalLink,
   Clock,
   Activity,
+  ShieldCheck,
+  ShieldAlert as AlertShield,
+  HelpCircle,
+  Lock,
+  RefreshCw,
+  X,
+  Maximize2,
 } from 'lucide-react';
+import gsap from 'gsap';
+import { AnimatedCircularProgressBar } from './ui/animated-circular-progress-bar';
 
-// Subcomponent for displaying execution trace logs
+// Helper component to type out text character by character
+function TypingText({ text, speed = 8 }) {
+  const [displayText, setDisplayText] = useState('');
+
+  useEffect(() => {
+    let index = 0;
+    setDisplayText('');
+    if (!text) return;
+    
+    const interval = setInterval(() => {
+      setDisplayText(() => {
+        if (index < text.length) {
+          index++;
+          return text.substring(0, index);
+        } else {
+          clearInterval(interval);
+          return text;
+        }
+      });
+    }, speed);
+
+    return () => clearInterval(interval);
+  }, [text, speed]);
+
+  return <span>{displayText}</span>;
+}
+
+// Subcomponent for displaying execution trace logs with smooth height animation
 function TraceStepList({ steps }) {
   const [isOpen, setIsOpen] = useState(false);
+  const contentRef = useRef(null);
+
+  useEffect(() => {
+    if (!contentRef.current) return;
+    if (isOpen) {
+      gsap.killTweensOf(contentRef.current);
+      gsap.fromTo(
+        contentRef.current,
+        { height: 0, opacity: 0 },
+        {
+          height: 'auto',
+          opacity: 1,
+          duration: 0.45,
+          ease: 'power3.out',
+        }
+      );
+    } else {
+      gsap.killTweensOf(contentRef.current);
+      gsap.to(contentRef.current, {
+        height: 0,
+        opacity: 0,
+        duration: 0.35,
+        ease: 'power3.in',
+      });
+    }
+  }, [isOpen]);
 
   if (!steps || steps.length === 0) return null;
 
   return (
-    <div className="mt-4 border border-gray-200 dark:border-gray-700/60 rounded-2xl overflow-hidden bg-gray-50/50 dark:bg-[#1e1e1e]/40">
+    <div className="mt-4 border border-gray-200/60 dark:border-gray-800/40 rounded-2xl overflow-hidden bg-white/50 dark:bg-[#151515]/30 backdrop-blur-md">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-4 py-3 flex items-center justify-between text-xs font-semibold tracking-wider uppercase text-gray-500 dark:text-gray-400 hover:bg-gray-100/50 dark:hover:bg-gray-800/40 transition-colors"
+        className="w-full px-5 py-3.5 flex items-center justify-between text-xs font-semibold tracking-wider uppercase text-gray-550 dark:text-gray-400 hover:bg-gray-100/50 dark:hover:bg-gray-800/40 transition-colors cursor-pointer"
       >
         <span className="flex items-center gap-2">
           <Terminal size={14} className="text-indigo-500" />
@@ -28,9 +90,13 @@ function TraceStepList({ steps }) {
         </span>
         {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
       </button>
-      
-      {isOpen && (
-        <div className="px-4 pb-4 pt-2 flex flex-col gap-3 font-mono text-[11px] leading-relaxed border-t border-gray-200 dark:border-gray-700/60 max-h-[300px] overflow-y-auto no-scrollbar">
+
+      <div
+        ref={contentRef}
+        className="overflow-hidden"
+        style={{ height: 0, opacity: 0 }}
+      >
+        <div className="px-5 pb-5 pt-2 flex flex-col gap-3 font-mono text-[11px] leading-relaxed border-t border-gray-200/50 dark:border-gray-800/40 max-h-[300px] overflow-y-auto no-scrollbar">
           {steps.map((step, idx) => {
             const isCall = step.step === 'tool_call';
             return (
@@ -55,164 +121,215 @@ function TraceStepList({ steps }) {
             );
           })}
         </div>
-      )}
+      </div>
     </div>
   );
 }
 
 // Subcomponent for rendering the beautiful, complete scan report dashboard
-export default function ReportDashboard({ report, duration, screenshotUrl, toolTrace, onViewFullDashboard }) {
-  const [showScreenshot, setShowScreenshot] = useState(false);
+export default function ReportDashboard({ report, duration, screenshotUrl, toolTrace }) {
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const containerRef = useRef(null);
+  const lightboxRef = useRef(null);
+
+  // Helper to extract clean URL from summary text
+  const getUrlFromSummary = (summaryText) => {
+    const match = summaryText?.match(/https?:\/\/[a-zA-Z0-9\-\.]+/);
+    return match ? match[0] : 'https://secure-login-update-bank.com';
+  };
+
+  // Entrance animations using GSAP
+  useEffect(() => {
+    if (!containerRef.current || !report) return;
+
+    const ctx = gsap.context(() => {
+      gsap.set('.animate-left', { x: -30, opacity: 0 });
+      gsap.set('.animate-report', { x: 30, opacity: 0 });
+      gsap.set('.animate-footer', { opacity: 0 });
+
+      const tl = gsap.timeline({ defaults: { ease: 'power4.out', duration: 0.9 } });
+
+      tl.to('.animate-left', { x: 0, opacity: 1, duration: 1.2 })
+        .to('.animate-report', { x: 0, opacity: 1, duration: 1.0 }, '-=0.9')
+        .to('.animate-footer', { opacity: 1, duration: 0.6 }, '-=0.5');
+    }, containerRef);
+
+    return () => ctx.revert();
+  }, [report]);
+
+  // Lightbox animation
+  useEffect(() => {
+    if (!lightboxRef.current) return;
+    if (isLightboxOpen) {
+      gsap.killTweensOf(lightboxRef.current);
+      gsap.fromTo(
+        lightboxRef.current,
+        { opacity: 0, scale: 0.95 },
+        { opacity: 1, scale: 1, duration: 0.35, ease: 'power3.out' }
+      );
+    }
+  }, [isLightboxOpen]);
+
   if (!report) return null;
 
-  // Determine badge colors based on risk score / level
   const score = report.risk_score ?? 0;
-  let scoreColor = "text-emerald-500 dark:text-emerald-400";
-  let scoreBg = "bg-emerald-50 dark:bg-emerald-950/20";
-  let scoreBorder = "border-emerald-200/50 dark:border-emerald-800/40";
-  let riskLevelLabel = "Safe";
-
-  if (score > 20 && score <= 40) {
-    scoreColor = "text-yellow-500 dark:text-yellow-400";
-    scoreBg = "bg-yellow-50 dark:bg-yellow-950/20";
-    scoreBorder = "border-yellow-200/50 dark:border-yellow-800/40";
-    riskLevelLabel = "Low Risk";
-  } else if (score > 40 && score <= 60) {
-    scoreColor = "text-orange-500 dark:text-orange-400";
-    scoreBg = "bg-orange-50 dark:bg-orange-950/20";
-    scoreBorder = "border-orange-200/50 dark:border-orange-800/40";
-    riskLevelLabel = "Medium Risk";
-  } else if (score > 60 && score <= 80) {
-    scoreColor = "text-rose-500 dark:text-rose-400";
-    scoreBg = "bg-rose-50 dark:bg-rose-950/20";
-    scoreBorder = "border-rose-200/50 dark:border-rose-800/40";
-    riskLevelLabel = "High Risk";
-  } else if (score > 80) {
-    scoreColor = "text-red-500 dark:text-red-400";
-    scoreBg = "bg-red-50 dark:bg-red-950/20";
-    scoreBorder = "border-red-200/50 dark:border-red-800/40";
-    riskLevelLabel = "Critical Risk";
-  }
+  const analyzedUrl = getUrlFromSummary(report.summary);
 
   return (
-    <div className="w-full flex flex-col gap-6 text-gray-800 dark:text-gray-100 animate-fade-in">
-      {/* 1. Header Overview Card */}
-      <div className={`p-6 rounded-3xl border ${scoreBorder} ${scoreBg} flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm`}>
-        <div className="flex flex-col gap-1.5 text-center md:text-left">
-          <div className="text-xs uppercase tracking-widest font-bold opacity-60">Security Analysis Completed</div>
-          <h2 className="text-xl font-bold tracking-tight">Status: {report.risk_level}</h2>
-          <p className="text-sm opacity-80 max-w-md">
-            PhishLens has analyzed the target site's DOM features, lexical signals, WHOIS registration record, and visual components.
-          </p>
-        </div>
+    <div
+      ref={containerRef}
+      className="w-full flex flex-col gap-6 text-gray-800 dark:text-gray-100"
+    >
+      {/* ─── TOP SECTION: Webpage Screenshot ─── */}
+      <div className="animate-left flex flex-col gap-2.5 w-full max-w-2xl mx-auto">
+        <h3 className="text-[10px] uppercase tracking-widest font-black text-gray-400 dark:text-gray-500 ml-1 text-left">
+          Visual Screenshot
+        </h3>
         
-        {/* Score Ring / Gauge */}
-        <div className="flex items-center gap-4 bg-white/40 dark:bg-black/20 p-4 rounded-2xl border border-white/20">
-          <div className="flex flex-col items-center">
-            <span className={`text-4xl font-extrabold tracking-tighter ${scoreColor}`}>{score}</span>
-            <span className="text-[10px] uppercase font-bold tracking-wider opacity-60">Risk Score</span>
-          </div>
-          <div className="h-8 w-[1px] bg-gray-300 dark:bg-gray-700" />
-          <div className="text-xs font-bold uppercase tracking-wider">{riskLevelLabel}</div>
-        </div>
-      </div>
-
-      {/* 2. Brand Impersonation Warning Banner */}
-      {report.brand_impersonation && report.brand_impersonation.detected && (
-        <div className="p-4 rounded-2xl bg-red-500/10 dark:bg-red-500/15 border border-red-500/30 text-red-600 dark:text-red-400 flex items-center gap-3">
-          <ShieldAlert size={20} className="shrink-0 animate-pulse" />
-          <div>
-            <span className="font-bold">Brand Impersonation Detected!</span> The site mimics visual or HTML elements of <span className="underline font-extrabold">{report.brand_impersonation.brand}</span> (Confidence: {Math.round((report.brand_impersonation.confidence ?? 0) * 100)}%).
-          </div>
-        </div>
-      )}
-
-      {/* 3. Executive Summary */}
-      <div className="flex flex-col gap-2">
-        <h3 className="text-xs uppercase tracking-widest font-bold text-gray-400">Executive Summary</h3>
-        <p className="text-[15px] leading-relaxed text-gray-700 dark:text-gray-300 bg-gray-50/50 dark:bg-[#1a1a1a]/30 p-5 rounded-2xl border border-gray-200/50 dark:border-gray-800/40">
-          {report.summary}
-        </p>
-      </div>
-
-      {/* 4. Structured Findings */}
-      {report.findings && report.findings.length > 0 && (
-        <div className="flex flex-col gap-3">
-          <h3 className="text-xs uppercase tracking-widest font-bold text-gray-400">Key Findings ({report.findings.length})</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {report.findings.map((finding, index) => {
-              const severity = (finding.severity ?? "low").toLowerCase();
-              let badgeBg = "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
-              if (severity === "medium") badgeBg = "bg-amber-500/10 text-amber-600 dark:text-amber-400";
-              if (severity === "high" || severity === "critical") badgeBg = "bg-rose-500/10 text-rose-600 dark:text-rose-400";
-
-              return (
-                <div key={index} className="p-4 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1b1b1b]/35 shadow-sm hover:border-indigo-500/30 transition-all duration-300">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold text-gray-400">{finding.category}</span>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider ${badgeBg}`}>
-                      {severity}
-                    </span>
-                  </div>
-                  <p className="text-sm leading-relaxed text-gray-700 dark:text-gray-300">{finding.detail}</p>
+        <div className="overflow-hidden rounded-xl border border-gray-200/60 dark:border-gray-800/60 bg-white dark:bg-[#121212] shadow-lg">
+          {screenshotUrl ? (
+            <div onClick={() => setIsLightboxOpen(true)} className="relative cursor-zoom-in">
+              <img
+                src={screenshotUrl}
+                alt="Captured Webpage"
+                className="w-full h-auto object-contain transition-transform duration-500 hover:scale-[1.01]"
+              />
+              
+              {/* Expand Hover Overlay */}
+              <div className="absolute inset-0 bg-black/20 opacity-0 hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                <div className="bg-black/75 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 shadow-md">
+                  <Maximize2 size={12} />
+                  View Fullscreen
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* 5. Captured Screenshot Section */}
-      {screenshotUrl && (
-        <div className="border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden bg-white dark:bg-[#1b1b1b]/20">
-          <button
-            onClick={() => setShowScreenshot(!showScreenshot)}
-            className="w-full px-5 py-4 flex items-center justify-between font-semibold text-sm hover:bg-gray-50 dark:hover:bg-[#1a1a1a]/30 transition-colors"
-          >
-            <span className="flex items-center gap-2">
-              <Eye size={16} className="text-indigo-500" />
-              Captured Webpage Screenshot
-            </span>
-            {showScreenshot ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-          </button>
-          
-          {showScreenshot && (
-            <div className="p-4 bg-gray-50 dark:bg-[#151515] border-t border-gray-100 dark:border-gray-800">
-              <div className="relative rounded-lg overflow-hidden border border-gray-200 dark:border-gray-800 shadow-md group">
-                <img
-                  src={screenshotUrl}
-                  alt="Captured Target Webpage"
-                  className="w-full h-auto object-contain max-h-[500px]"
-                />
-                <a
-                  href={screenshotUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="absolute bottom-3 right-3 bg-black/70 hover:bg-black/95 text-white p-2 rounded-lg text-xs flex items-center gap-1.5 transition-all opacity-0 group-hover:opacity-100"
-                >
-                  <ExternalLink size={12} />
-                  Open Full Resolution
-                </a>
               </div>
+            </div>
+          ) : (
+            <div className="h-[200px] flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 p-6 text-center select-none">
+              <ShieldAlert size={28} className="opacity-40 mb-2" />
+              <span className="text-xs font-semibold">No visual screenshot captured.</span>
             </div>
           )}
         </div>
-      )}
-
-      {/* 6. Safety Advice */}
-      <div className="p-5 rounded-2xl bg-indigo-500/5 dark:bg-indigo-500/10 border border-indigo-500/20 text-indigo-800 dark:text-indigo-300">
-        <div className="text-xs uppercase tracking-widest font-bold opacity-60 mb-1">Safety Recommendation</div>
-        <p className="text-[14px] leading-relaxed font-medium">{report.safety_advice}</p>
       </div>
 
-      {/* 7. Extra Stats & Trace & Full Dashboard Button */}
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center gap-4 text-xs text-gray-500">
-          <span className="flex items-center gap-1"><Clock size={12} /> Duration: {duration}s</span>
-          <span className="flex items-center gap-1"><Activity size={12} /> System: ReAct Multi-Agent Pipeline</span>
+      {/* ─── BOTTOM SECTION: Security Report Details (Structured Plain Text with Typing) ─── */}
+      <div className="animate-report flex flex-col gap-6 w-full max-w-2xl mx-auto text-left">
+        
+        {/* Verdict & Circular Progress Bar Row */}
+        <div className="flex items-center justify-between gap-6 border-b border-gray-200/50 dark:border-gray-850/40 pb-5">
+          <div className="flex flex-col gap-1.5">
+            <h4 className="text-[11px] uppercase tracking-widest font-black text-indigo-500 dark:text-indigo-400">
+              Analysis Verdict
+            </h4>
+            <h2 className="text-2xl md:text-3xl font-black tracking-tight mt-1 text-gray-900 dark:text-white">
+              VERDICT: {report.risk_level.toUpperCase()}
+            </h2>
+            <p className="text-[14.5px] md:text-[15.5px] font-bold text-gray-500 dark:text-gray-400">
+              Risk Score: {score}% | Duration: {duration}s
+            </p>
+          </div>
+          
+          {/* Animated Circular Progress Bar */}
+          <div className="shrink-0">
+            <AnimatedCircularProgressBar value={score} max={100} min={0} className="scale-95" />
+          </div>
         </div>
-        <TraceStepList steps={toolTrace} />
+
+        {/* Executive Summary */}
+        <div className="flex flex-col gap-2 mt-2">
+          <h3 className="text-[16px] md:text-[17.5px] font-black tracking-tight text-gray-900 dark:text-white uppercase">
+            Executive Summary
+          </h3>
+          <p className="text-[15px] md:text-[16.5px] leading-relaxed text-gray-650 dark:text-gray-300 font-medium">
+            <TypingText text={report.summary} speed={6} />
+          </p>
+        </div>
+
+        {/* Brand Impersonation (if detected) */}
+        {report.brand_impersonation && report.brand_impersonation.detected && (
+          <div className="flex flex-col gap-1.5 mt-2 border-l-4 border-l-rose-500 pl-4 py-1">
+            <h3 className="text-[14.5px] md:text-[15.5px] font-black tracking-tight text-rose-500 uppercase">
+              [!] Brand Impersonation Warning
+            </h3>
+            <p className="text-[15px] md:text-[16.5px] leading-relaxed text-gray-700 dark:text-gray-200 font-bold">
+              <TypingText text={`Target Mimics: ${report.brand_impersonation.brand} (Confidence: ${Math.round(report.brand_impersonation.confidence * 100)}%)`} speed={6} />
+            </p>
+          </div>
+        )}
+
+        {/* Key Findings */}
+        {report.findings && report.findings.length > 0 && (
+          <div className="flex flex-col gap-3.5 mt-2">
+            <h3 className="text-[16px] md:text-[17.5px] font-black tracking-tight text-gray-900 dark:text-white uppercase">
+              Key Findings
+            </h3>
+            <div className="flex flex-col gap-3">
+              {report.findings.map((f, idx) => {
+                const severity = f.severity ? ` [Severity: ${f.severity.toUpperCase()}]` : '';
+                return (
+                  <div key={idx} className="flex gap-2">
+                    <span className="font-bold text-indigo-500 shrink-0 select-none">•</span>
+                    <p className="text-[15px] md:text-[16.5px] leading-relaxed text-gray-650 dark:text-gray-300 font-medium">
+                      <span className="font-black text-gray-900 dark:text-white">{f.category}{severity}: </span>
+                      <TypingText text={f.detail} speed={6} />
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Safety Advice */}
+        {report.safety_advice && (
+          <div className="flex flex-col gap-2 mt-2">
+            <h3 className="text-[16px] md:text-[17.5px] font-black tracking-tight text-gray-900 dark:text-white uppercase">
+              Safety Advice & Recommendations
+            </h3>
+            <p className="text-[15px] md:text-[16.5px] leading-relaxed text-gray-650 dark:text-gray-300 font-medium">
+              <TypingText text={report.safety_advice} speed={6} />
+            </p>
+          </div>
+        )}
+
+        {/* Trace Logs */}
+        <div className="animate-footer mt-4">
+          <TraceStepList steps={toolTrace} />
+        </div>
       </div>
+
+      {/* ─── LIGHTBOX OVERLAY MODAL ─── */}
+      {isLightboxOpen && screenshotUrl && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md select-none">
+          <div
+            ref={lightboxRef}
+            className="relative max-w-5xl w-full max-h-[90vh] overflow-y-auto no-scrollbar rounded-2xl border border-white/10 shadow-2xl flex flex-col items-center bg-[#0d0d0d]"
+          >
+            {/* Modal Header */}
+            <div className="w-full flex items-center justify-between px-6 py-4 border-b border-white/5 bg-black/60 sticky top-0 backdrop-blur-md z-10">
+              <div className="flex items-center gap-2.5">
+                <span className="w-3 h-3 rounded-full bg-red-500" />
+                <span className="text-sm font-semibold text-white font-mono">{analyzedUrl}</span>
+              </div>
+              <button
+                onClick={() => setIsLightboxOpen(false)}
+                className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+            {/* Image Container */}
+            <div className="p-4 flex justify-center w-full bg-[#0d0d0d]">
+              <img
+                src={screenshotUrl}
+                alt="Webpage Full Screenshot"
+                className="w-full h-auto object-contain max-h-[80vh] rounded-lg"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
