@@ -125,7 +125,7 @@ export function AnimatedCircularProgressBar({
       {/* Percentage label in center */}
       <div className="absolute flex flex-col items-center justify-center select-none">
         <span className={`text-2xl font-extrabold tracking-tighter ${textClass}`}>
-          {animatedValue}
+          {animatedValue}%
         </span>
         <span className="text-[8px] uppercase font-bold tracking-widest opacity-60 text-gray-400 dark:text-gray-500">
           Risk
