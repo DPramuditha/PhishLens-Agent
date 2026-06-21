@@ -83,6 +83,10 @@ def analyze_url_features(url: str) -> str:
     Args:
         url: The full URL to analyse (e.g. "https://example.com/login")
     """
+    # Normalize URL scheme
+    if not re.match(r"^https?://", url, re.IGNORECASE):
+        url = "http://" + url
+
     try:
         parsed = urlparse(url)
         hostname = parsed.hostname or ""

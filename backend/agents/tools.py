@@ -57,6 +57,10 @@ def capture_screenshot(url: str) -> str:
     Args:
         url: The full URL to capture (e.g. "https://example.com")
     """
+    # Normalize URL scheme
+    if not re.match(r"^https?://", url, re.IGNORECASE):
+        url = "http://" + url
+
     async def _capture():
         async with async_playwright() as p:
             # Optimize startup time with lean arguments
@@ -72,6 +76,7 @@ def capture_screenshot(url: str) -> str:
             )
             context = await browser.new_context(
                 viewport={"width": 1280, "height": 800},
+                ignore_https_errors=True,  # Bypass certificate verification errors
                 user_agent=(
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -87,11 +92,17 @@ def capture_screenshot(url: str) -> str:
                 r"facebook\.net", r"hotjar", r"mixpanel", r"adsystem", r"optimizely"
             ]
             async def route_handler(route):
-                request_url = route.request.url.lower()
-                if any(re.search(pattern, request_url) for pattern in blocked_patterns):
-                    await route.abort()
-                else:
-                    await route.continue_()
+                try:
+                    request_url = route.request.url.lower()
+                    if any(re.search(pattern, request_url) for pattern in blocked_patterns):
+                        await route.abort()
+                    else:
+                        await route.continue_()
+                except Exception:
+                    try:
+                        await route.continue_()
+                    except Exception:
+                        pass
 
             await page.route("**/*", route_handler)
 
@@ -116,19 +127,31 @@ def capture_screenshot(url: str) -> str:
                     pass
 
             # Capture screenshot
+            screenshot_bytes = None
             try:
                 screenshot_bytes = await page.screenshot(full_page=True, type="png", timeout=15000)
             except Exception as ss_ex:
                 # If full_page screenshot fails or times out, capture viewport screenshot immediately
-                screenshot_bytes = await page.screenshot(full_page=False, type="png")
-                err_msg = f"Full-page capture timed out, viewport captured instead: {str(ss_ex)}"
+                try:
+                    screenshot_bytes = await page.screenshot(full_page=False, type="png", timeout=10000)
+                    err_msg = f"Full-page capture timed out, viewport captured instead: {str(ss_ex)}"
+                except Exception as ss_viewport_ex:
+                    err_msg = f"Screenshot capture failed entirely: {str(ss_viewport_ex)}"
 
             # Save screenshot to disk
             timestamp = int(time.time())
             safe_domain = re.sub(r"[^a-zA-Z0-9]", "_", _extract_domain(url))
             filename = f"{safe_domain}_{timestamp}.png"
             filepath = SCREENSHOTS_DIR / filename
-            filepath.write_bytes(screenshot_bytes)
+            
+            if screenshot_bytes:
+                filepath.write_bytes(screenshot_bytes)
+            else:
+                # Solid light-gray placeholder PNG
+                placeholder_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+                filepath.write_bytes(base64.b64decode(placeholder_b64))
+                if not err_msg:
+                    err_msg = "Could not capture screenshot of target website. A blank/placeholder image was saved instead."
 
             await browser.close()
 

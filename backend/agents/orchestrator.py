@@ -70,6 +70,10 @@ class OrchestratorAgent:
 
         Returns a structured report dictionary.
         """
+        import re
+        if not re.match(r"^https?://", url, re.IGNORECASE):
+            url = "http://" + url
+
         start_time = time.time()
 
         print(f"\n{'='*60}")
