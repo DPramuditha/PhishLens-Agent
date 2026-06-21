@@ -394,7 +394,6 @@ export default function HomePage() {
   const chatbotLottieRef = useRef(null);
   const expandLottieRef = useRef(null);
 
-  const bottomInputBarRef = useRef(null);
   const orbLeftRef = useRef(null);
   const orbRightRef = useRef(null);
   const titleMenuRef = useRef(null);
@@ -407,6 +406,10 @@ export default function HomePage() {
   const heroInputWrapRef = useRef(null);
   const heroSuggestionsRef = useRef(null);
   const heroBadgeRef = useRef(null);
+  const inputPlaceholderRef = useRef(null);
+  const inputFormRef = useRef(null);
+  const shieldIconRef = useRef(null);
+  const warningTextRef = useRef(null);
 
   // ── Dock item configs ──────────────────────────────────────────────────────
   const dockTopItems = [
@@ -507,10 +510,14 @@ export default function HomePage() {
     };
   }, []);
 
-  // Refresh ScrollTrigger and ScrollSmoother when messages are added
+  // Refresh ScrollTrigger and ScrollSmoother when messages are added or sidebar expands/collapses
   useEffect(() => {
     ScrollTrigger.refresh();
-  }, [messages]);
+    const timer = setTimeout(() => {
+      ScrollTrigger.refresh();
+    }, 550);
+    return () => clearTimeout(timer);
+  }, [messages, isExpanded]);
 
   // Autoscroll message container when new messages arrive
   useEffect(() => {
@@ -569,16 +576,6 @@ export default function HomePage() {
     });
   }, [showOrbs]);
 
-  /* Animate the input bar into its bottom position on first message send */
-  useEffect(() => {
-    if (!hasSentMessage || !bottomInputBarRef.current) return;
-    gsap.fromTo(
-      bottomInputBarRef.current,
-      { opacity: 0, y: 40 },
-      { opacity: 1, y: 0, duration: 0.65, ease: 'power3.out' }
-    );
-  }, [hasSentMessage]);
-
   /* Hero entrance: bottom-to-top reveal + h1 Text 3D Flip */
   useLayoutEffect(() => {
     if (hasSentMessage) return;
@@ -589,11 +586,20 @@ export default function HomePage() {
     const inputWrap = heroInputWrapRef.current;
     const suggestionsEl = heroSuggestionsRef.current;
     const badgeEl = heroBadgeRef.current;
-    if (!root || !titleEl || !subtitleEl || !inputWrap) return;
+    if (!root || !titleEl || !subtitleEl || !inputWrap || !inputPlaceholderRef.current) return;
 
     const ctx = gsap.context(() => {
+      // Calculate dy for inputWrap positioning
+      const rectPlaceholder = inputPlaceholderRef.current.getBoundingClientRect();
+      const rectInputBar = inputWrap.getBoundingClientRect();
+      const dy = rectPlaceholder.top - rectInputBar.top;
+
       // 1. Set initial states for elements
-      gsap.set([inputWrap, subtitleEl, badgeEl].filter(Boolean), {
+      gsap.set(inputWrap, {
+        opacity: 0,
+        y: dy + 40,
+      });
+      gsap.set([subtitleEl, badgeEl].filter(Boolean), {
         opacity: 0,
         y: 40,
       });
@@ -616,7 +622,7 @@ export default function HomePage() {
       });
 
       // Bottom → Top staggered animation
-      tl.to(inputWrap, { opacity: 1, y: 0, duration: 0.85 })
+      tl.to(inputWrap, { opacity: 1, y: dy, duration: 0.85 })
         .to(subtitleEl, { opacity: 1, y: 0, duration: 0.65 }, '-=0.5')
         .to(chars, {
           opacity: 1,
@@ -647,6 +653,27 @@ export default function HomePage() {
     return () => ctx.revert();
   }, [hasSentMessage]);
 
+  // ── Reset/Update Unified Input Bar position relative to its hero placeholder ──
+  const resetInputPosition = useCallback(() => {
+    if (hasSentMessage || !inputPlaceholderRef.current || !heroInputWrapRef.current) return;
+    const rectPlaceholder = inputPlaceholderRef.current.getBoundingClientRect();
+    const currentY = gsap.getProperty(heroInputWrapRef.current, "y") || 0;
+    const rectInputBar = heroInputWrapRef.current.getBoundingClientRect();
+    const untranslatedTop = rectInputBar.top - currentY;
+    const dy = rectPlaceholder.top - untranslatedTop;
+    gsap.set(heroInputWrapRef.current, { y: dy });
+  }, [hasSentMessage]);
+
+  useEffect(() => {
+    resetInputPosition();
+    const t = setTimeout(resetInputPosition, 50);
+    window.addEventListener('resize', resetInputPosition);
+    return () => {
+      window.removeEventListener('resize', resetInputPosition);
+      clearTimeout(t);
+    };
+  }, [resetInputPosition, isExpanded]);
+
   // ── Cycle to the next word ──
   const triggerCycle = useCallback(() => {
     if (hasSentMessage) return;
@@ -670,27 +697,7 @@ export default function HomePage() {
     return () => clearTimeout(timer);
   }, [currentWordIdx, isThinking, triggerCycle, hasSentMessage]);
 
-  // GSAP animation for expanding/collapsing sidebar layout displacement
-  useEffect(() => {
-    if (!mainRef.current) return;
-    
-    // Animate the padding-left of the main chat container
-    gsap.to(mainRef.current, {
-      paddingLeft: isExpanded ? 330 : 0,
-      duration: 0.5,
-      ease: 'power3.inOut',
-    });
 
-    // Also animate the bottom input bar wrapper positioning if it exists
-    if (bottomInputBarRef.current) {
-      gsap.to(bottomInputBarRef.current, {
-        left: isExpanded ? 330 : 0,
-        width: isExpanded ? 'calc(100% - 330px)' : '100%',
-        duration: 0.5,
-        ease: 'power3.inOut',
-      });
-    }
-  }, [isExpanded, hasSentMessage]);
 
   const handleSend = async (e) => {
     e.preventDefault();
@@ -719,7 +726,57 @@ export default function HomePage() {
     setChatTitle(query);
 
     if (isFirst) {
-      setHasSentMessage(true);
+      // 1. Run the transition timeline
+      const tl = gsap.timeline({
+        onComplete: () => {
+          setHasSentMessage(true);
+        }
+      });
+
+      // Fade out hero badge, title, suggestions
+      tl.to([heroBadgeRef.current, heroTitleRef.current, heroSuggestionsRef.current].filter(Boolean), {
+        opacity: 0,
+        y: -15,
+        duration: 0.25,
+        stagger: 0.05,
+        ease: 'power2.in'
+      });
+
+      // Animate input bar to bottom and reduce size
+      tl.to(heroInputWrapRef.current, {
+        y: 0,
+        duration: 0.55,
+        ease: 'power3.inOut'
+      }, 0.1);
+
+      // Animate form border radius, background, shadow
+      tl.to(inputFormRef.current, {
+        borderRadius: '9999px',
+        backgroundColor: 'transparent',
+        boxShadow: '0 8px 32px 0 rgba(66,46,168,0.18), 0 1.5px 8px 0 rgba(138,43,226,0.10)',
+        duration: 0.55,
+        ease: 'power3.inOut'
+      }, 0.1);
+
+      // Fade out and shrink shield icon
+      tl.to(shieldIconRef.current, {
+        width: 0,
+        opacity: 0,
+        marginRight: 0,
+        paddingLeft: 0,
+        paddingRight: 0,
+        duration: 0.4,
+        ease: 'power3.inOut'
+      }, 0.1);
+
+      // Fade in warning text
+      tl.to(warningTextRef.current, {
+        height: 'auto',
+        opacity: 1,
+        marginTop: 10,
+        duration: 0.4,
+        ease: 'power3.out'
+      }, 0.35);
     }
 
     triggerOrbAnimation();
@@ -926,7 +983,18 @@ export default function HomePage() {
           </div>
         )}
 
-        <div id="smooth-wrapper" className="flex-1 w-full h-full overflow-y-auto no-scrollbar relative z-10">
+        <div 
+          id="smooth-wrapper" 
+          className="flex-1 w-full h-full overflow-y-auto no-scrollbar relative z-10 bg-white dark:bg-[#212121] transition-colors duration-300"
+          style={{
+            position: 'fixed',
+            top: 0,
+            height: '100%',
+            left: isExpanded ? '330px' : '0px',
+            width: isExpanded ? 'calc(100% - 330px)' : '100%',
+            transition: 'left 0.5s cubic-bezier(0.25, 1, 0.5, 1), width 0.5s cubic-bezier(0.25, 1, 0.5, 1)',
+          }}
+        >
           <div id="smooth-content" className="w-full flex flex-col min-h-full">
 
             <header className="h-16 flex items-center justify-center px-6 shrink-0" style={{ position: 'relative', zIndex: 10 }}>
@@ -1057,62 +1125,12 @@ export default function HomePage() {
                 <AnimatedCyclingWord word={CYCLING_WORDS[currentWordIdx]} isThinking={isThinking} />
               </h1>
 
-              {/* <p
-                ref={heroSubtitleRef}
-                className="text-sm md:text-base text-gray-550 dark:text-gray-405 max-w-xl leading-relaxed font-medium"
-              >
-                Real-time URL scanning, email snippet analysis, and threat intelligence models to protect your credentials, domains, and inboxes.
-              </p> */}
-
               <div className="mt-8 w-full max-w-2xl">
                 <div
-                  ref={(el) => {
-                    heroInputWrapRef.current = el;
-                  }}
-                  className="relative z-20 w-full"
-                >
-                  <div
-                    className="absolute -inset-1 pointer-events-none rounded-[32px] opacity-60 blur-xl"
-                    style={{
-                      background: 'linear-gradient(90deg, rgba(66,46,168,0.35), rgba(138,43,226,0.28), rgba(99,102,241,0.35))',
-                    }}
-                    aria-hidden="true"
-                  />
-
-                  <div className="relative mx-auto w-full" style={{ zIndex: 1 }}>
-                    <form
-                      onSubmit={handleSend}
-                      className="hero-input-form relative flex items-center shadow-lg overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500/80 dark:focus-within:ring-indigo-400/80 transition-all rounded-[28px] bg-white/75 dark:bg-[#2a2a2a]/85 backdrop-blur-2xl border border-white/50 dark:border-gray-600/50"
-                      style={{
-                        boxShadow: '0 12px 40px 0 rgba(66,46,168,0.16), 0 2px 12px 0 rgba(138,43,226,0.12)',
-                      }}
-                    >
-                      <div className="pl-4 pr-1 flex items-center text-indigo-500 dark:text-indigo-400 shrink-0">
-                        <ShieldAlert size={18} strokeWidth={2.25} />
-                      </div>
-                      <div className="relative flex-1">
-                        <input
-                          type="text"
-                          value={input}
-                          onChange={(e) => setInput(e.target.value)}
-                          placeholder=""
-                          disabled={isLoading}
-                          className="w-full bg-transparent py-4 pl-2 pr-14 outline-none text-[15px] text-gray-700 dark:text-gray-200 placeholder-transparent"
-                        />
-                        {!input && (
-                          <PlaceholderCycler leftPaddingClass="left-2" />
-                        )}
-                      </div>
-                      <button
-                        type="submit"
-                        disabled={!input.trim() || isLoading}
-                        className={"absolute right-2.5 p-2.5 rounded-2xl flex items-center justify-center transition-all cursor-pointer hover:scale-105 duration-300 " + (input.trim() && !isLoading ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-500/30 dark:bg-white dark:text-black dark:hover:bg-gray-200 dark:shadow-white/10" : "bg-gray-200/80 text-gray-400 dark:bg-[#3d3d3d] dark:text-gray-500")}
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-arrow-up"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
-                      </button>
-                    </form>
-                  </div>
-                </div>
+                  ref={inputPlaceholderRef}
+                  className="w-full h-14 mx-auto max-w-2xl opacity-0 pointer-events-none"
+                />
+              </div>
 
                 <div
                   ref={heroSuggestionsRef}
@@ -1153,7 +1171,6 @@ export default function HomePage() {
                     );
                   })}
                 </div>
-              </div>
             </div>
           </div>
         )}
@@ -1161,62 +1178,77 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Input bar wrapper (shown after scan starts) */}
-        {hasSentMessage && (
-          <div
-            ref={bottomInputBarRef}
-            className="fixed bottom-0 left-0 w-full pt-16 pb-6 bg-gradient-to-t from-white dark:from-[#212121] via-white/80 dark:via-[#212121]/80 to-transparent"
-            style={{ 
-              zIndex: 20,
-              paddingLeft: '48px',
-              paddingRight: '48px',
+      {/* Unified Input Bar (always mounted, animates from center to bottom) */}
+      <div
+        ref={heroInputWrapRef}
+        className="fixed pt-6 pb-6 pointer-events-none"
+        style={{ 
+          zIndex: 20,
+          paddingLeft: '16px',
+          paddingRight: '16px',
+          left: isExpanded ? '330px' : '0px',
+          width: isExpanded ? 'calc(100% - 330px)' : '100%',
+          transition: 'left 0.5s cubic-bezier(0.25, 1, 0.5, 1), width 0.5s cubic-bezier(0.25, 1, 0.5, 1)',
+          bottom: 0,
+        }}
+      >
+        <div className="max-w-2xl w-full mx-auto relative pointer-events-auto" style={{ zIndex: 1 }}>
+          <form
+            ref={inputFormRef}
+            onSubmit={handleSend}
+            className="relative flex items-center shadow-lg overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500/80 dark:focus-within:ring-indigo-400/80 transition-all border border-slate-200 dark:border-zinc-800/80 backdrop-blur-xl"
+            style={hasSentMessage ? {
+              borderRadius: '9999px',
+              backgroundColor: 'transparent',
+              boxShadow: '0 8px 32px 0 rgba(66,46,168,0.18), 0 1.5px 8px 0 rgba(138,43,226,0.10)',
+            } : {
+              borderRadius: '28px',
+              backgroundColor: 'transparent',
+              boxShadow: '0 12px 40px 0 rgba(66,46,168,0.16), 0 2px 12px 0 rgba(138,43,226,0.12)',
             }}
           >
-            <div
-              className="absolute inset-0 pointer-events-none"
-              style={{
-                backdropFilter: 'blur(18px)',
-                WebkitBackdropFilter: 'blur(18px)',
-                maskImage: 'linear-gradient(to top, black 50%, transparent 100%)',
-                WebkitMaskImage: 'linear-gradient(to top, black 50%, transparent 100%)',
-              }}
-            />
-
-            <div className="max-w-2xl w-full mx-auto relative" style={{ zIndex: 1 }}>
-              <form
-                onSubmit={handleSend}
-                className="relative flex items-center shadow-lg overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500 dark:focus-within:ring-indigo-400 transition-all rounded-full bg-white/60 dark:bg-[#2f2f2f]/70 backdrop-blur-2xl border border-white/40 dark:border-gray-600/60"
-                style={{
-                  boxShadow: '0 8px 32px 0 rgba(66,46,168,0.18), 0 1.5px 8px 0 rgba(138,43,226,0.10)',
-                }}
-              >
-                <div className="relative flex-1">
-                  <input
-                    type="text"
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder=""
-                    disabled={isLoading}
-                    className="w-full bg-transparent py-4 pl-5 pr-14 outline-none text-[15px] text-gray-700 dark:text-gray-200 placeholder-transparent"
-                  />
-                  {!input && (
-                    <PlaceholderCycler leftPaddingClass="left-5" />
-                  )}
-                </div>
-                <button
-                  type="submit"
-                  disabled={!input.trim() || isLoading}
-                  className={"absolute right-3 p-2 rounded-xl flex items-center justify-center transition-all cursor-pointer hover:scale-105 duration-500 " + (input.trim() && !isLoading ? "bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-white dark:text-black dark:hover:bg-gray-200" : "bg-gray-300 text-gray-500 dark:bg-[#424242] dark:text-gray-500")}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" className="lucide lucide-arrow-up-icon lucide-arrow-up"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
-                </button>
-              </form>
-              <p className="text-xs text-center text-gray-500 dark:text-gray-400 mt-2.5">
-                PhishLens can make mistakes. Verify important security warnings.
-              </p>
+            {/* Shield Alert Icon (fades out and shrinks on send) */}
+            <div 
+              ref={shieldIconRef}
+              className="pl-4 pr-1 flex items-center text-indigo-500 dark:text-indigo-400 shrink-0"
+              style={hasSentMessage ? { width: 0, opacity: 0, paddingLeft: 0, paddingRight: 0, marginRight: 0 } : {}}
+            >
+              <ShieldAlert size={18} strokeWidth={2.25} />
             </div>
+            
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder=""
+                disabled={isLoading}
+                className={"w-full bg-transparent py-4 pr-14 outline-none text-[15px] text-gray-700 dark:text-gray-200 placeholder-transparent " + (hasSentMessage ? "pl-5" : "pl-2")}
+              />
+              {!input && (
+                <PlaceholderCycler leftPaddingClass={hasSentMessage ? "left-5" : "left-2"} />
+              )}
+            </div>
+            
+            <button
+              type="submit"
+              disabled={!input.trim() || isLoading}
+              className={"absolute right-2.5 p-2.5 rounded-2xl flex items-center justify-center transition-all cursor-pointer hover:scale-105 duration-300 " + (input.trim() && !isLoading ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-500/30 dark:bg-white dark:text-black dark:hover:bg-gray-200 dark:shadow-white/10" : "bg-gray-200/80 text-gray-400 dark:bg-[#3d3d3d] dark:text-gray-500")}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-arrow-up"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
+            </button>
+          </form>
+          
+          {/* Subtext warning (only visible/fades in after first send) */}
+          <div
+            ref={warningTextRef}
+            className="text-xs text-center text-gray-500 dark:text-gray-400 mt-2.5"
+            style={hasSentMessage ? { height: 'auto', opacity: 1, marginTop: 10 } : { height: 0, opacity: 0, overflow: 'hidden' }}
+          >
+            PhishLens can make mistakes. Verify important security warnings.
           </div>
-        )}
+        </div>
+      </div>
       </main>
 
       {/* Global Modals */}
