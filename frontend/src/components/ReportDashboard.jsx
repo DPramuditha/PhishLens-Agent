@@ -19,29 +19,49 @@ import {
 import gsap from 'gsap';
 import { AnimatedCircularProgressBar } from './ui/animated-circular-progress-bar';
 
-// Helper component to type out text character by character
-function TypingText({ text, speed = 8 }) {
+// Helper component to type out text word by word sequentially
+function WordTypingText({ text, speed = 30, onComplete, trigger = false }) {
   const [displayText, setDisplayText] = useState('');
+  const onCompleteRef = useRef(onComplete);
+
+  // Keep ref up to date
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   useEffect(() => {
-    let index = 0;
+    if (!trigger || !text) {
+      setDisplayText('');
+      return;
+    }
+
+    const words = text.split(' ');
+    let currentIndex = 0;
     setDisplayText('');
-    if (!text) return;
-    
+
     const interval = setInterval(() => {
-      setDisplayText(() => {
-        if (index < text.length) {
-          index++;
-          return text.substring(0, index);
-        } else {
+      currentIndex++;
+      if (currentIndex <= words.length) {
+        setDisplayText(words.slice(0, currentIndex).join(' '));
+        if (currentIndex === words.length) {
           clearInterval(interval);
-          return text;
+          if (onCompleteRef.current) {
+            setTimeout(() => {
+              if (onCompleteRef.current) {
+                onCompleteRef.current();
+              }
+            }, 180);
+          }
         }
-      });
+      } else {
+        clearInterval(interval);
+      }
     }, speed);
 
     return () => clearInterval(interval);
-  }, [text, speed]);
+  }, [text, speed, trigger]);
+
+  if (!trigger) return null;
 
   return <span>{displayText}</span>;
 }
@@ -131,6 +151,11 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const containerRef = useRef(null);
   const lightboxRef = useRef(null);
+  const [activeStep, setActiveStep] = useState(0);
+
+  useEffect(() => {
+    setActiveStep(0);
+  }, [report]);
 
   // Helper to extract clean URL from summary text
   const getUrlFromSummary = (summaryText) => {
@@ -175,6 +200,11 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
   const score = report.risk_score ?? 0;
   const analyzedUrl = getUrlFromSummary(report.summary);
 
+  const hasBrand = report.brand_impersonation && report.brand_impersonation.detected;
+  const findingsCount = report.findings ? report.findings.length : 0;
+  const findingsStartStep = hasBrand ? 2 : 1;
+  const safetyStartStep = findingsStartStep + findingsCount;
+
   return (
     <div
       ref={containerRef}
@@ -218,60 +248,79 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
         {/* Verdict & Circular Progress Bar Row */}
         <div className="flex items-center justify-between gap-6 border-b border-gray-200/50 dark:border-gray-850/40 pb-5">
           <div className="flex flex-col gap-1.5">
-            <h4 className="text-[11px] uppercase tracking-widest font-black text-indigo-500 dark:text-indigo-400">
+            <h4 className="text-[12px] uppercase tracking-widest font-black text-indigo-500 dark:text-indigo-400">
               Analysis Verdict
             </h4>
-            <h2 className="text-2xl md:text-3xl font-black tracking-tight mt-1 text-gray-900 dark:text-white">
+            <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight mt-1 text-gray-900 dark:text-white">
               VERDICT: {report.risk_level.toUpperCase()}
             </h2>
-            <p className="text-[14.5px] md:text-[15.5px] font-bold text-gray-500 dark:text-gray-400">
+            <p className="text-[16px] md:text-[17.5px] font-bold text-gray-500 dark:text-gray-400">
               Risk Score: {score}% | Duration: {duration}s
             </p>
           </div>
           
-          {/* Animated Circular Progress Bar */}
-          <div className="shrink-0">
-            <AnimatedCircularProgressBar value={score} max={100} min={0} className="scale-95" />
+          {/* Animated Circular Progress Bar & (Risk Score: 38%) Label */}
+          <div className="shrink-0 flex flex-col items-center gap-1.5">
+            <AnimatedCircularProgressBar value={score} max={100} min={0} className="scale-100" />
+            <span className="text-[13px] md:text-[14px] font-black text-gray-700 dark:text-gray-300 tracking-tight whitespace-nowrap">
+              (Risk Score: {score}%)
+            </span>
           </div>
         </div>
 
         {/* Executive Summary */}
         <div className="flex flex-col gap-2 mt-2">
-          <h3 className="text-[16px] md:text-[17.5px] font-black tracking-tight text-gray-900 dark:text-white uppercase">
+          <h3 className="text-[18px] md:text-[20px] font-black tracking-tight text-gray-900 dark:text-white uppercase">
             Executive Summary
           </h3>
-          <p className="text-[15px] md:text-[16.5px] leading-relaxed text-gray-650 dark:text-gray-300 font-medium">
-            <TypingText text={report.summary} speed={6} />
+          <p className="text-[16.5px] md:text-[18px] leading-relaxed text-gray-700 dark:text-gray-200 font-medium">
+            <WordTypingText 
+              text={report.summary} 
+              speed={35} 
+              trigger={activeStep >= 0}
+              onComplete={() => setActiveStep(hasBrand ? 1 : findingsStartStep)}
+            />
           </p>
         </div>
 
         {/* Brand Impersonation (if detected) */}
-        {report.brand_impersonation && report.brand_impersonation.detected && (
+        {hasBrand && activeStep >= 1 && (
           <div className="flex flex-col gap-1.5 mt-2 border-l-4 border-l-rose-500 pl-4 py-1">
-            <h3 className="text-[14.5px] md:text-[15.5px] font-black tracking-tight text-rose-500 uppercase">
+            <h3 className="text-[16.5px] md:text-[17.5px] font-black tracking-tight text-rose-500 uppercase">
               [!] Brand Impersonation Warning
             </h3>
-            <p className="text-[15px] md:text-[16.5px] leading-relaxed text-gray-700 dark:text-gray-200 font-bold">
-              <TypingText text={`Target Mimics: ${report.brand_impersonation.brand} (Confidence: ${Math.round(report.brand_impersonation.confidence * 100)}%)`} speed={6} />
+            <p className="text-[16.5px] md:text-[18px] leading-relaxed text-gray-700 dark:text-gray-200 font-bold">
+              <WordTypingText 
+                text={`Target Mimics: ${report.brand_impersonation.brand} (Confidence: ${Math.round(report.brand_impersonation.confidence * 100)}%)`} 
+                speed={35}
+                trigger={activeStep >= 1}
+                onComplete={() => setActiveStep(findingsStartStep)}
+              />
             </p>
           </div>
         )}
 
         {/* Key Findings */}
-        {report.findings && report.findings.length > 0 && (
-          <div className="flex flex-col gap-3.5 mt-2">
-            <h3 className="text-[16px] md:text-[17.5px] font-black tracking-tight text-gray-900 dark:text-white uppercase">
+        {report.findings && report.findings.length > 0 && activeStep >= findingsStartStep && (
+          <div className="flex flex-col gap-3.5 mt-2 transition-opacity duration-500">
+            <h3 className="text-[18px] md:text-[20px] font-black tracking-tight text-gray-900 dark:text-white uppercase">
               Key Findings
             </h3>
             <div className="flex flex-col gap-3">
               {report.findings.map((f, idx) => {
                 const severity = f.severity ? ` [Severity: ${f.severity.toUpperCase()}]` : '';
+                const stepTrigger = activeStep >= (findingsStartStep + idx);
                 return (
-                  <div key={idx} className="flex gap-2">
+                  <div key={idx} className={`flex gap-2 transition-all duration-300 ${stepTrigger ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'}`}>
                     <span className="font-bold text-indigo-500 shrink-0 select-none">•</span>
-                    <p className="text-[15px] md:text-[16.5px] leading-relaxed text-gray-650 dark:text-gray-300 font-medium">
+                    <p className="text-[16.5px] md:text-[18px] leading-relaxed text-gray-700 dark:text-gray-200 font-medium">
                       <span className="font-black text-gray-900 dark:text-white">{f.category}{severity}: </span>
-                      <TypingText text={f.detail} speed={6} />
+                      <WordTypingText 
+                        text={f.detail} 
+                        speed={35}
+                        trigger={stepTrigger}
+                        onComplete={() => setActiveStep(findingsStartStep + idx + 1)}
+                      />
                     </p>
                   </div>
                 );
@@ -281,13 +330,17 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
         )}
 
         {/* Safety Advice */}
-        {report.safety_advice && (
-          <div className="flex flex-col gap-2 mt-2">
-            <h3 className="text-[16px] md:text-[17.5px] font-black tracking-tight text-gray-900 dark:text-white uppercase">
+        {report.safety_advice && activeStep >= safetyStartStep && (
+          <div className="flex flex-col gap-2 mt-2 transition-opacity duration-500">
+            <h3 className="text-[18px] md:text-[20px] font-black tracking-tight text-gray-900 dark:text-white uppercase">
               Safety Advice & Recommendations
             </h3>
-            <p className="text-[15px] md:text-[16.5px] leading-relaxed text-gray-650 dark:text-gray-300 font-medium">
-              <TypingText text={report.safety_advice} speed={6} />
+            <p className="text-[16.5px] md:text-[18px] leading-relaxed text-gray-700 dark:text-gray-200 font-medium">
+              <WordTypingText 
+                text={report.safety_advice} 
+                speed={35}
+                trigger={activeStep >= safetyStartStep}
+              />
             </p>
           </div>
         )}
