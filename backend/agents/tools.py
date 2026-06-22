@@ -17,6 +17,9 @@ from urllib.parse import urlparse
 from langchain_core.tools import tool
 from playwright.async_api import async_playwright
 
+# Disable Playwright waiting for font load to prevent screenshot hangs/timeouts
+os.environ["PW_TEST_SCREENSHOT_NO_FONTS_READY"] = "1"
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -63,7 +66,7 @@ def capture_screenshot(url: str) -> str:
 
     async def _capture():
         async with async_playwright() as p:
-            # Optimize startup time with lean arguments
+            # Optimize startup time with lean arguments and bot-bypass flags
             browser = await p.chromium.launch(
                 headless=True,
                 args=[
@@ -71,6 +74,8 @@ def capture_screenshot(url: str) -> str:
                     "--disable-dev-shm-usage",
                     "--no-sandbox",
                     "--disable-setuid-sandbox",
+                    "--disable-web-security",  # Disable CORS/web security to load all fonts/assets
+                    "--disable-blink-features=AutomationControlled",
                     "--blink-settings=imagesEnabled=true" # Ensure images render for visual check
                 ]
             )
@@ -80,9 +85,14 @@ def capture_screenshot(url: str) -> str:
                 user_agent=(
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/115.0.0.0 Safari/537.36"
+                    "Chrome/122.0.0.0 Safari/537.36"
                 ),
             )
+            # Add headers to match a real browser
+            await context.set_extra_http_headers({
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+            })
             page = await context.new_page()
 
             # Latency Optimization: Block analytical/ad resources that delay load times
@@ -112,15 +122,18 @@ def capture_screenshot(url: str) -> str:
             err_msg = None
 
             try:
-                # Latency Optimization: Use "load" instead of "networkidle" (which waits for 500ms quiet)
+                # Latency Optimization: Use "domcontentloaded" to avoid waiting for heavy ads/trackers
                 # and bound the load time to 20 seconds max.
-                await page.goto(url, wait_until="load", timeout=20000)
+                await page.goto(url, wait_until="domcontentloaded", timeout=20000)
+                # Let dynamic JS/SPA frameworks and images finish rendering
+                await page.wait_for_timeout(2000)
                 title = await page.title()
                 final_url = page.url
             except Exception as nav_ex:
-                # Fallback: If page load times out, proceed to screenshot whatever has loaded anyway
+                # Fallback: If page load times out, wait a moment and proceed anyway
                 err_msg = f"Navigation completed with warning/timeout: {str(nav_ex)}"
                 try:
+                    await page.wait_for_timeout(1500)
                     title = await page.title() or "Loaded partially"
                     final_url = page.url
                 except Exception:
@@ -128,15 +141,21 @@ def capture_screenshot(url: str) -> str:
 
             # Capture screenshot
             screenshot_bytes = None
+            
+            # Step 1: Capture viewport screenshot first (fast, reliable, almost never crashes)
             try:
-                screenshot_bytes = await page.screenshot(full_page=True, type="png", timeout=15000)
-            except Exception as ss_ex:
-                # If full_page screenshot fails or times out, capture viewport screenshot immediately
+                screenshot_bytes = await page.screenshot(full_page=False, type="png", timeout=15000)
+            except Exception as ss_viewport_ex:
+                err_msg = f"Viewport screenshot failed: {str(ss_viewport_ex)}"
+
+            # Step 2: Try capturing full-page screenshot (if it crashes, we already have viewport bytes)
+            if screenshot_bytes:
                 try:
-                    screenshot_bytes = await page.screenshot(full_page=False, type="png", timeout=10000)
-                    err_msg = f"Full-page capture timed out, viewport captured instead: {str(ss_ex)}"
-                except Exception as ss_viewport_ex:
-                    err_msg = f"Screenshot capture failed entirely: {str(ss_viewport_ex)}"
+                    full_page_bytes = await page.screenshot(full_page=True, type="png", timeout=25000)
+                    screenshot_bytes = full_page_bytes
+                except Exception as ss_full_ex:
+                    # Keep viewport bytes, log warning
+                    err_msg = f"Full-page capture failed/timed out, viewport returned: {str(ss_full_ex)}"
 
             # Save screenshot to disk
             timestamp = int(time.time())

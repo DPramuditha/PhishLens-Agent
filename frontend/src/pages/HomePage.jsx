@@ -798,7 +798,12 @@ export default function HomePage() {
 
       // Attempt to extract screenshot URL from Django media serving
       let resolvedScreenshotUrl = null;
-      if (data.tool_trace) {
+      if (data.screenshot_path) {
+        const parts = data.screenshot_path.split(/[/\\]/);
+        const filename = parts[parts.length - 1];
+        resolvedScreenshotUrl = `http://localhost:8000/media/screenshots/${filename}`;
+      } else if (data.tool_trace) {
+        // Fallback to legacy parsing if not present as top-level key
         const screenshotStep = data.tool_trace.find(
           (step) => step.step === 'tool_result' && step.tool === 'capture_screenshot'
         );

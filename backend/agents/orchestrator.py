@@ -107,6 +107,17 @@ class OrchestratorAgent:
             # Log tool call trace
             tool_trace = extract_tool_trace(messages)
 
+            # Extract raw, untruncated screenshot_path from capture_screenshot ToolMessage
+            import json
+            screenshot_path = None
+            for msg in messages:
+                if type(msg).__name__ == "ToolMessage" and getattr(msg, "name", "") == "capture_screenshot":
+                    try:
+                        content_json = json.loads(msg.content)
+                        screenshot_path = content_json.get("screenshot_path")
+                    except Exception:
+                        pass
+
             duration = time.time() - start_time
 
             return {
@@ -114,6 +125,7 @@ class OrchestratorAgent:
                 "overall_status": "COMPLETED",
                 "total_duration_sec": round(duration, 2),
                 "report": report,
+                "screenshot_path": screenshot_path,
                 "tool_trace": tool_trace,
                 "raw_llm_response": raw_content,
             }
