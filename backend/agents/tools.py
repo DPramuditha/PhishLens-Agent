@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 
 from langchain_core.tools import tool
 from playwright.async_api import async_playwright
+from .visual_model import predict_screenshot
 
 # Disable Playwright waiting for font load to prevent screenshot hangs/timeouts
 os.environ["PW_TEST_SCREENSHOT_NO_FONTS_READY"] = "1"
@@ -210,32 +211,20 @@ def capture_screenshot(url: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Tool 2 — Visual ML Model (Placeholder)
+# Tool 2 — Visual ML Model
 # ---------------------------------------------------------------------------
 
 @tool
 def run_visual_ml_model(screenshot_path: str) -> str:
     """
-    Run the custom CNN/Siamese visual similarity model on a website screenshot
-    to detect brand impersonation.
+    Run the custom PyTorch visual classification model on a website screenshot
+    to detect if it is phishing or legitimate.
 
-    This model compares the visual appearance of the captured screenshot against
-    a database of known brand login pages (Google, Facebook, PayPal, etc.)
-    to identify if the website is visually mimicking a legitimate brand.
-
-    NOTE: This model is not yet integrated. It will return a placeholder result.
-    Still call this tool so the pipeline is complete — the result will indicate
-    the model was skipped.
+    This model performs binary classification of the screenshot to determine if the
+    overall visual design represents a phishing attempt (probability >= 0.60).
 
     Args:
         screenshot_path: Absolute file path to the screenshot PNG captured by capture_screenshot
     """
-    return json.dumps({
-        "status": "skipped",
-        "screenshot_path": screenshot_path,
-        "message": "Custom CNN/Siamese visual ML model is not yet integrated. "
-                   "Brand impersonation detection via visual similarity is pending. "
-                   "Please rely on HTML and URL analysis for now.",
-        "brand_detected": None,
-        "confidence": None,
-    }, indent=2)
+    result = predict_screenshot(screenshot_path)
+    return json.dumps(result, indent=2)
