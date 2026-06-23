@@ -24,9 +24,9 @@ You will receive a target URL to analyse. Your job is to use ALL available tools
 1. **capture_screenshot** — Take a screenshot of the website to see what users see.
 2. **extract_html_features** — Extract HTML/DOM structural features from the page source.
 3. **analyze_url_features** — Analyse the URL's lexical structure and WHOIS registration data.
-4. **run_visual_ml_model** — Run the visual ML model on the screenshot (may return a placeholder if not yet integrated).
+4. **run_visual_ml_model** — Run the visual ML model on the screenshot to get binary classification of the full-page screenshot as either phishing or legitimate, along with its probability score.
 
-After calling ALL tools and reviewing their outputs, synthesise your findings into a final report.
+After calling ALL tools and reviewing their outputs, synthesise your findings into a final report. Ensure you explicitly factor in the visual ML model's prediction and probability score under the visual/screenshot analysis findings.
 
 ## Final Report Format
 

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import gsap from 'gsap';
 import { AnimatedCircularProgressBar } from './ui/animated-circular-progress-bar';
+import { Highlight } from './ui/highlighter';
 
 // Helper component to type out text word by word sequentially
 function WordTypingText({ text, speed = 30, onComplete, trigger = false }) {
@@ -310,17 +311,37 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
               {report.findings.map((f, idx) => {
                 const severity = f.severity ? ` [Severity: ${f.severity.toUpperCase()}]` : '';
                 const stepTrigger = activeStep >= (findingsStartStep + idx);
+                const typingCompleteTrigger = activeStep > (findingsStartStep + idx);
+                const isVisualML = f.category.toLowerCase().includes('visual');
+                const severityLower = (f.severity || '').toLowerCase();
+                const detailLower = (f.detail || '').toLowerCase();
+                const isPhishing = severityLower === 'high' || 
+                                   severityLower === 'critical' || 
+                                   (detailLower.includes('phishing') && !detailLower.includes('legitimate') && !detailLower.includes('below the 0.60'));
+                const highlightColor = isPhishing ? 'red' : 'green';
+
                 return (
                   <div key={idx} className={`flex gap-2 transition-all duration-300 ${stepTrigger ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'}`}>
                     <span className="font-bold text-indigo-500 shrink-0 select-none">•</span>
-                    <p className="text-[16.5px] md:text-[18px] leading-relaxed text-gray-700 dark:text-gray-200 font-medium">
+                    <p className="text-[16.5px] md:text-[18px] leading-relaxed text-gray-700 dark:text-gray-200 font-medium relative">
                       <span className="font-black text-gray-900 dark:text-white">{f.category}{severity}: </span>
-                      <WordTypingText 
-                        text={f.detail} 
-                        speed={35}
-                        trigger={stepTrigger}
-                        onComplete={() => setActiveStep(findingsStartStep + idx + 1)}
-                      />
+                      {isVisualML ? (
+                        <Highlight color={highlightColor} trigger={typingCompleteTrigger} duration={0.9} delay={0.1}>
+                          <WordTypingText 
+                            text={f.detail} 
+                            speed={35}
+                            trigger={stepTrigger}
+                            onComplete={() => setActiveStep(findingsStartStep + idx + 1)}
+                          />
+                        </Highlight>
+                      ) : (
+                        <WordTypingText 
+                          text={f.detail} 
+                          speed={35}
+                          trigger={stepTrigger}
+                          onComplete={() => setActiveStep(findingsStartStep + idx + 1)}
+                        />
+                      )}
                     </p>
                   </div>
                 );
