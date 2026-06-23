@@ -944,7 +944,7 @@ export default function HomePage() {
       {/* Main Content Area */}
       <main 
         ref={mainRef}
-        className="flex-1 flex flex-col h-full bg-white dark:bg-[#212121] text-slate-700 dark:text-slate-400 relative transition-colors duration-300 overflow-hidden"
+        className="flex-1 flex flex-col h-full bg-white dark:bg-[#1a1a1a] text-slate-700 dark:text-slate-400 relative transition-colors duration-300 overflow-hidden"
       >
 
         {/* ── Persistent floating background orbs ── */}
@@ -985,7 +985,7 @@ export default function HomePage() {
 
         <div 
           id="smooth-wrapper" 
-          className="flex-1 w-full h-full overflow-y-auto no-scrollbar relative z-10 bg-white dark:bg-[#212121] transition-colors duration-300"
+          className="flex-1 w-full h-full overflow-y-auto no-scrollbar relative z-10 bg-white dark:bg-[#1a1a1a] transition-colors duration-300"
           style={{
             position: 'fixed',
             top: 0,

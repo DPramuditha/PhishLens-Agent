@@ -219,7 +219,7 @@ function ChatHistoryPanel({ isExpanded, isDarkMode, onSelectChat }) {
       className="flex-1 flex flex-col pl-4 border-l overflow-hidden"
       style={{
         borderColor: isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-        width: 235,
+        width: 228,
       }}
     >
       {/* Header */}
@@ -311,6 +311,7 @@ export default function SidebarDock({
   }, [items, bottomItems]);
 
   const maxBase = useMemo(() => Math.max(...itemBases, ITEM_BASE), [itemBases]);
+  const restH = useMemo(() => totalHeight(itemBases, hasDivider), [itemBases, hasDivider]);
 
   // ── Register item refs ──────────────────────────────────────────────────────
   const setItemRef = useCallback((el, idx) => {
@@ -419,14 +420,19 @@ export default function SidebarDock({
 
     // Entrance: slide in from left
     gsap.set(pill, { opacity: 0, x: -28 });
-    gsap.to(pill, { opacity: 1, x: 0, duration: 0.6, ease: 'power3.out', delay: 0.1 });
+    const pillTween = gsap.to(pill, { opacity: 1, x: 0, duration: 0.6, ease: 'power3.out', delay: 0.1 });
 
     // Items stagger pop-in
-    gsap.fromTo(
+    const itemsTween = gsap.fromTo(
       valid,
       { opacity: 0, scale: 0.55 },
       { opacity: 1, scale: 1, duration: 0.45, ease: 'back.out(2.2)', stagger: 0.06, delay: 0.22 }
     );
+
+    return () => {
+      pillTween.kill();
+      itemsTween.kill();
+    };
   }, []);
 
   // ── Handle expansion state changes with GSAP ────────────────────────────────
@@ -438,60 +444,21 @@ export default function SidebarDock({
 
     if (!pillRef.current) return;
 
-    if (isExpanded) {
-      // 1. Animate items to their resting base sizes
-      itemRefs.current.forEach((el, i) => {
-        if (!el) return;
-        const base = itemBases[i] || ITEM_BASE;
-        gsap.to(el, {
-          width: base,
-          height: base,
-          duration: 0.3,
-          ease: 'power3.out',
-          overwrite: 'auto'
-        });
-      });
-
-      // 2. Expand pill: height top/bottom stretch, width panel reveal
-      gsap.to(pillRef.current, {
-        width: 320,
-        height: 'calc(100vh - 24px)',
-        padding: '24px 16px',
-        borderRadius: 24,
-        opacity: 1,
-        x: 0,
-        duration: 0.5,
-        ease: 'power3.inOut',
+    // Kill any active height tweens running on the pill container
+    gsap.killTweensOf(pillRef.current, 'height');
+    
+    // Animate items to their resting base sizes
+    itemRefs.current.forEach((el, i) => {
+      if (!el) return;
+      const base = itemBases[i] || ITEM_BASE;
+      gsap.to(el, {
+        width: base,
+        height: base,
+        duration: 0.3,
+        ease: 'power3.out',
         overwrite: 'auto'
       });
-    } else {
-      // 1. Animate items back to resting base sizes
-      itemRefs.current.forEach((el, i) => {
-        if (!el) return;
-        const base = itemBases[i] || ITEM_BASE;
-        gsap.to(el, {
-          width: base,
-          height: base,
-          duration: 0.3,
-          ease: 'power3.out',
-          overwrite: 'auto'
-        });
-      });
-
-      // 2. Contract pill back to floating MacOS Dock sizing
-      const restH = totalHeight(itemBases, hasDivider);
-      gsap.to(pillRef.current, {
-        width: maxBase + 14,
-        height: restH,
-        padding: `${DOCK_PX}px 7px`,
-        borderRadius: 22,
-        opacity: 1,
-        x: 0,
-        duration: 0.5,
-        ease: 'power3.inOut',
-        overwrite: 'auto'
-      });
-    }
+    });
   }, [isExpanded, itemBases, maxBase, hasDivider]);
 
   return (
@@ -507,10 +474,11 @@ export default function SidebarDock({
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
         style={{
-          width: maxBase + 14,
-          padding: `${DOCK_PX}px 7px`,
+          width: isExpanded ? 320 : (maxBase + 14),
+          height: isExpanded ? 'calc(100vh - 24px)' : restH,
+          padding: isExpanded ? '24px 16px' : `${DOCK_PX}px 7px`,
           gap: ITEM_GAP,
-          borderRadius: 22,
+          borderRadius: isExpanded ? 24 : 22,
           boxSizing: 'border-box',
           /* Glass background */
           background:  isDarkMode
@@ -524,7 +492,8 @@ export default function SidebarDock({
           boxShadow: isDarkMode
             ? '0 20px 60px rgba(0,0,0,0.60), inset 0 1px 0 rgba(255,255,255,0.07), inset 0 -1px 0 rgba(0,0,0,0.25)'
             : '0 20px 60px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.95)',
-          willChange: 'width, height, padding',
+          transition: 'width 0.5s cubic-bezier(0.25, 1, 0.5, 1), height 0.5s cubic-bezier(0.25, 1, 0.5, 1), padding 0.5s cubic-bezier(0.25, 1, 0.5, 1), border-radius 0.5s cubic-bezier(0.25, 1, 0.5, 1)',
+          willChange: 'width, height, padding, border-radius',
         }}
       >
         {/* Inner specular shine */}
