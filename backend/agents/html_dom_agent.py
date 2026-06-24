@@ -57,6 +57,14 @@ def extract_html_features(url: str) -> str:
     Args:
         url: The full URL to analyse (e.g. "https://example.com")
     """
+    import re
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+    # Normalize URL scheme
+    if not re.match(r"^https?://", url, re.IGNORECASE):
+        url = "http://" + url
+
     try:
         parsed_url = urlparse(url)
         base_domain = parsed_url.hostname or ""
@@ -68,7 +76,7 @@ def extract_html_features(url: str) -> str:
                 "Chrome/115.0.0.0 Safari/537.36"
             )
         }
-        response = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
+        response = requests.get(url, headers=headers, timeout=15, allow_redirects=True, verify=False)
         response.raise_for_status()
 
         soup = BeautifulSoup(response.text, "html.parser")
