@@ -840,6 +840,7 @@ export default function HomePage() {
                 report: data.report,
                 screenshotUrl: resolvedScreenshotUrl,
                 toolTrace: data.tool_trace,
+                urlAnalysisData: data.url_analysis_data,
                 overallStatus: data.overall_status,
                 duration: data.total_duration_sec,
                 error: data.error,
@@ -1073,6 +1074,7 @@ export default function HomePage() {
                           duration={msg.duration}
                           screenshotUrl={msg.screenshotUrl}
                           toolTrace={msg.toolTrace}
+                          urlAnalysisData={msg.urlAnalysisData}
                         />
                       )}
                     </div>

@@ -110,13 +110,28 @@ class OrchestratorAgent:
             # Extract raw, untruncated screenshot_path from capture_screenshot ToolMessage
             import json
             screenshot_path = None
+            url_analysis_data = None
             for msg in messages:
-                if type(msg).__name__ == "ToolMessage" and getattr(msg, "name", "") == "capture_screenshot":
-                    try:
-                        content_json = json.loads(msg.content)
-                        screenshot_path = content_json.get("screenshot_path")
-                    except Exception:
-                        pass
+                msg_name = getattr(msg, "name", "")
+                if type(msg).__name__ == "ToolMessage":
+                    if msg_name == "capture_screenshot":
+                        try:
+                            content_json = json.loads(msg.content)
+                            screenshot_path = content_json.get("screenshot_path")
+                        except Exception:
+                            pass
+                    elif msg_name == "analyze_url_features":
+                        try:
+                            content_json = json.loads(msg.content)
+                            if content_json.get("status") == "success":
+                                url_analysis_data = {
+                                    "whois": content_json.get("whois", {}),
+                                    "ssl_certificate": content_json.get("ssl_certificate", {}),
+                                    "server_location": content_json.get("server_location", {}),
+                                    "global_ranking": content_json.get("global_ranking", {}),
+                                }
+                        except Exception:
+                            pass
 
             duration = time.time() - start_time
 
@@ -126,6 +141,7 @@ class OrchestratorAgent:
                 "total_duration_sec": round(duration, 2),
                 "report": report,
                 "screenshot_path": screenshot_path,
+                "url_analysis_data": url_analysis_data,
                 "tool_trace": tool_trace,
                 "raw_llm_response": raw_content,
             }
