@@ -39,7 +39,7 @@
 .dark {
   --text: #9ca3af;
   --text-h: #f3f4f6;
-  --bg: #212121;
+  --bg: #1a1a1a;
   --border: #2e303a;
   --code-bg: #1f2028;
   --accent: #c084fc;
@@ -51,7 +51,7 @@
 }
 
 html.dark, body.dark {
-  background-color: #212121;
+  background-color: #1a1a1a;
 }
 
 @media (prefers-color-scheme: dark) {
