@@ -1,129 +1,266 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
-import { ShieldCheck, Mail, Lock, ArrowRight, UserPlus } from 'lucide-react';
+import { ShieldCheck, ChevronDown, Check, Mail } from 'lucide-react';
+
+/* ───────── Progress items for right panel ───────── */
+const PROGRESS_ITEMS = [
+  'Scan inbox for phishing emails',
+  'Analyze suspicious URLs & links',
+  'Detect social-engineering patterns',
+  'Generate threat-intel report',
+];
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const containerRef = useRef(null);
-  const cardRef = useRef(null);
-  const elementsRef = useRef([]);
 
+  /* refs */
+  const pageRef = useRef(null);
+  const leftRef = useRef(null);
+  const rightRef = useRef(null);
+  const headingRef = useRef(null);
+  const formRef = useRef(null);
+  const cardRef = useRef(null);
+  const itemsRef = useRef([]);
+
+  /* state */
+  const [email, setEmail] = useState('');
+  const [progressOpen, setProgressOpen] = useState(true);
+
+  /* ── GSAP entrance animations ── */
   useEffect(() => {
     const ctx = gsap.context(() => {
-      // Background animation
-      gsap.fromTo(containerRef.current, 
-        { opacity: 0 }, 
-        { opacity: 1, duration: 1, ease: 'power2.inOut' }
+      gsap.fromTo(
+        leftRef.current,
+        { opacity: 0 },
+        { opacity: 1, duration: 0.8, ease: 'power2.out' },
       );
 
-      // Card animation
-      gsap.fromTo(cardRef.current,
-        { y: 50, opacity: 0, scale: 0.95 },
-        { y: 0, opacity: 1, scale: 1, duration: 0.8, ease: 'back.out(1.7)', delay: 0.2 }
+      gsap.fromTo(
+        headingRef.current,
+        { y: 40, opacity: 0 },
+        { y: 0, opacity: 1, duration: 1, ease: 'power3.out', delay: 0.25 },
       );
 
-      // Input and button animations
-      gsap.fromTo(elementsRef.current,
-        { x: -20, opacity: 0 },
-        { 
-          x: 0, 
-          opacity: 1, 
-          duration: 0.6, 
-          stagger: 0.1, 
+      gsap.fromTo(
+        formRef.current,
+        { y: 30, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.8, ease: 'power2.out', delay: 0.5 },
+      );
+
+      gsap.fromTo(
+        rightRef.current,
+        { opacity: 0, x: 60 },
+        { opacity: 1, x: 0, duration: 0.9, ease: 'power3.out', delay: 0.4 },
+      );
+
+      gsap.fromTo(
+        cardRef.current,
+        { y: 30, opacity: 0, scale: 0.96 },
+        { y: 0, opacity: 1, scale: 1, duration: 0.7, ease: 'back.out(1.4)', delay: 0.8 },
+      );
+
+      gsap.fromTo(
+        itemsRef.current,
+        { x: -16, opacity: 0 },
+        {
+          x: 0,
+          opacity: 1,
+          duration: 0.5,
+          stagger: 0.12,
           ease: 'power2.out',
-          delay: 0.5
-        }
+          delay: 1.1,
+        },
       );
-    }, containerRef);
+    }, pageRef);
 
     return () => ctx.revert();
   }, []);
 
-  const addToRefs = (el) => {
-    if (el && !elementsRef.current.includes(el)) {
-      elementsRef.current.push(el);
-    }
-  };
-
-  const handleLogin = (e) => {
-    e.preventDefault();
-    gsap.to(cardRef.current, {
-      scale: 0.95,
+  /* ── handlers ── */
+  const handleGoogleLogin = () => {
+    gsap.to(formRef.current, {
+      scale: 0.96,
       opacity: 0,
-      duration: 0.3,
-      onComplete: () => navigate('/')
+      duration: 0.35,
+      onComplete: () => navigate('/'),
     });
   };
 
+  const handleEmailLogin = (e) => {
+    e.preventDefault();
+    gsap.to(formRef.current, {
+      scale: 0.96,
+      opacity: 0,
+      duration: 0.35,
+      onComplete: () => navigate('/'),
+    });
+  };
+
+  const addItemRef = (el) => {
+    if (el && !itemsRef.current.includes(el)) itemsRef.current.push(el);
+  };
+
+  /* ──────────────────── JSX ──────────────────── */
   return (
-    <div 
-      ref={containerRef}
-      className="min-h-screen flex items-center justify-center p-4"
-    >
-      <div 
-        ref={cardRef}
-        className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-8 relative overflow-hidden"
+    <div ref={pageRef} className="flex min-h-svh w-full font-[Cabin,system-ui,sans-serif] overflow-hidden">
+
+      {/* ====== LEFT PANEL ====== */}
+      <div
+        ref={leftRef}
+        className="flex-1 relative flex items-center justify-center bg-[#1a1a1a] px-8 py-10 overflow-hidden"
       >
-        {/* Decorative background shapes */}
-        <div className="absolute top-[-50px] right-[-50px] w-32 h-32 bg-purple-200 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
-        <div className="absolute bottom-[-50px] left-[-50px] w-32 h-32 bg-pink-200 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
-        
-        <div className="text-center mb-8 relative z-10">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-100 rounded-2xl mb-4 text-indigo-600 shadow-inner">
-            <ShieldCheck size={36} strokeWidth={2.5} />
-          </div>
-          <h1 className="text-3xl font-extrabold text-gray-800 tracking-tight">PhishLens</h1>
-          <p className="text-gray-500 mt-2">Secure access to your dashboard</p>
-        </div>
+        {/* floating gradient orbs */}
+        <div
+          className="absolute w-[420px] h-[420px] rounded-full bg-[#7c3aed] opacity-[0.22] blur-[100px] pointer-events-none -top-[120px] -left-[80px]"
+          style={{ animation: 'login-float 8s ease-in-out infinite' }}
+        />
+        <div
+          className="absolute w-[340px] h-[340px] rounded-full bg-[#a855f7] opacity-[0.22] blur-[100px] pointer-events-none -bottom-[100px] -right-[60px]"
+          style={{ animation: 'login-float-reverse 10s ease-in-out infinite' }}
+        />
 
-        <form onSubmit={handleLogin} className="space-y-6 relative z-10">
-          <div ref={addToRefs} className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center mb-1 pointer-events-none text-gray-400">
-              <Mail size={20} />
-            </div>
-            <input 
-              type="email" 
-              className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-gray-700" 
-              placeholder="Email Address" 
-              required
-            />
+        <div className="relative z-[2] w-full max-w-[420px]">
+          {/* heading */}
+          <div ref={headingRef} className="mb-12">
+            <h1 className="font-[Habibi,Georgia,'Times_New_Roman',serif] font-normal text-[clamp(36px,5vw,52px)] leading-[1.15] text-stone-100 m-0 mb-4 tracking-tight">
+              Detect fast,<br />
+              protect faster
+            </h1>
+            <p className="text-base text-stone-400 m-0 tracking-wide">
+              AI-powered phishing detection with{' '}
+              <span className="text-purple-400 font-semibold">PhishLens</span>
+            </p>
           </div>
 
-          <div ref={addToRefs} className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center mb-1 pointer-events-none text-gray-400">
-              <Lock size={20} />
-            </div>
-            <input 
-              type="password" 
-              className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-gray-700" 
-              placeholder="Password" 
-              required
-            />
-            <div className="absolute right-0 top-full mt-1">
-              <a href="#" className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">Forgot password?</a>
-            </div>
-          </div>
-
-          <div ref={addToRefs} className="pt-4">
-            <button 
-              type="submit" 
-              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold py-3 px-4 rounded-xl hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all transform hover:scale-[1.02] shadow-lg"
+          {/* form card */}
+          <div
+            ref={formRef}
+            className="bg-white/[0.04] border border-white/[0.08] rounded-[20px] px-7 pt-8 pb-6 backdrop-blur-[12px]"
+          >
+            {/* Google button */}
+            <button
+              type="button"
+              onClick={handleGoogleLogin}
+              className="w-full flex items-center justify-center gap-2.5 bg-white/[0.06] text-stone-200 border border-white/[0.12] rounded-xl font-[inherit] text-[15px] font-semibold cursor-pointer transition-all duration-250 py-2.5 px-4 hover:bg-white/10 hover:border-white/20 hover:-translate-y-px"
             >
-              Sign In
-              <ArrowRight size={20} />
+              <svg className="shrink-0" viewBox="0 0 24 24" width="20" height="20">
+                <path
+                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1Z"
+                  fill="#4285F4"
+                />
+                <path
+                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A10.997 10.997 0 0 0 12 23Z"
+                  fill="#34A853"
+                />
+                <path
+                  d="M5.84 14.09A6.6 6.6 0 0 1 5.5 12c0-.72.12-1.42.35-2.09V7.07H2.18A10.998 10.998 0 0 0 1 12c0 1.78.43 3.46 1.18 4.93l3.66-2.84Z"
+                  fill="#FBBC05"
+                />
+                <path
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15A10.94 10.94 0 0 0 12 1 10.998 10.998 0 0 0 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53Z"
+                  fill="#EA4335"
+                />
+              </svg>
+              Continue with Google
             </button>
-          </div>
-        </form>
 
-        <div ref={addToRefs} className="mt-8 text-center relative z-10">
-          <p className="text-gray-600">
-            Don't have an account?{' '}
-            <a href="#" className="flex items-center justify-center gap-1 mt-2 text-indigo-600 font-bold hover:text-indigo-800 transition-colors">
-              <UserPlus size={18} />
-              Create an account
-            </a>
-          </p>
+            {/* divider */}
+            <div className="flex items-center my-5 gap-3.5">
+              <div className="flex-1 h-px bg-white/10" />
+              <span className="text-xs font-semibold text-stone-500 tracking-widest">OR</span>
+              <div className="flex-1 h-px bg-white/10" />
+            </div>
+
+            {/* email form */}
+            <form onSubmit={handleEmailLogin}>
+              <div className="relative mb-4">
+                <Mail
+                  size={17}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-500 pointer-events-none"
+                />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full py-2.5 px-4 pl-[42px] bg-white/5 border border-white/10 rounded-xl text-stone-200 font-[inherit] text-[16px] outline-none transition-all duration-250 placeholder:text-stone-500 focus:border-purple-400 focus:bg-white/[0.07] focus:shadow-[0_0_0_3px_rgba(192,132,252,0.12)] box-border"
+                  placeholder="Enter your email"
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full flex items-center justify-center gap-2.5 bg-stone-100 text-[#1a1a1a] border border-transparent rounded-xl font-[inherit] text-[17px] font-semibold cursor-pointer transition-all py-2 px-4 mb-2 hover:bg-white hover:scale-102 duration-300"
+              >
+                Continue with email
+              </button>
+            </form>
+
+            <p className="mt-5 text-center text-xs text-stone-500 leading-relaxed">
+              By continuing, you acknowledge PhishLens's{' '}
+              <a
+                href="#"
+                className="text-purple-400 underline underline-offset-2 hover:text-purple-300"
+              >
+                Privacy Policy
+              </a>
+              .
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* ====== RIGHT PANEL ====== */}
+      <div
+        ref={rightRef}
+        className="flex-1 flex items-center justify-center bg-stone-100 relative px-8 py-10 overflow-hidden max-md:px-6 max-md:py-12"
+      >
+        {/* subtle radial gradient overlays */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(192,132,252,0.06)_0%,transparent_50%),radial-gradient(circle_at_70%_80%,rgba(168,85,247,0.04)_0%,transparent_50%)] pointer-events-none" />
+
+        <div className="relative z-[2] w-full max-w-[400px]">
+
+          {/* progress card */}
+          <div
+            ref={cardRef}
+            className="bg-white rounded-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.06),0_8px_32px_rgba(0,0,0,0.06)] overflow-hidden"
+          >
+            <button
+              type="button"
+              className="flex items-center justify-between w-full py-6 px-7 bg-transparent border-none cursor-pointer font-[inherit] border-b border-b-stone-100"
+              onClick={() => setProgressOpen((o) => !o)}
+            >
+              <span className="text-lg font-semibold text-stone-900 -tracking-wide">
+                Progress
+              </span>
+              <ChevronDown
+                size={20}
+                className={`text-stone-400 transition-transform duration-300 ${
+                  progressOpen ? '' : '-rotate-90'
+                }`}
+              />
+            </button>
+
+            {progressOpen && (
+              <ul className="list-none m-0 px-7 pt-3 pb-6 flex flex-col gap-1">
+                {PROGRESS_ITEMS.map((text, i) => (
+                  <li
+                    key={i}
+                    ref={addItemRef}
+                    className="flex items-center gap-3.5 py-3 border-b border-stone-50 last:border-b-0"
+                  >
+                    <span className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white shrink-0 shadow-[0_2px_8px_rgba(59,130,246,0.3)]">
+                      <Check size={16} strokeWidth={3} />
+                    </span>
+                    <span className="text-[15px] text-stone-500 line-through decoration-stone-300">
+                      {text}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       </div>
     </div>

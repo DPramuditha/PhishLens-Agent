@@ -37,6 +37,7 @@ import ReportDashboard from '../components/ReportDashboard';
 import { DotmHex2 } from '../components/ui/dotm-hex-2';
 import OrchestratorProgress from '../components/OrchestratorProgress';
 import { useToast } from '../components/ToastContext';
+import MessageActionBar from '../components/MessageActionBar';
 
 const PLACEHOLDERS = [
   'Paste URL to scan for phishing...',
@@ -135,9 +136,9 @@ const HERO_SUGGESTIONS = [
     pingBg: 'bg-indigo-400'
   },
   {
-    title: 'Analyze Email',
-    description: 'Scan email headers or body snippets for warning flags.',
-    value: 'Analyze email snippet',
+    title: 'Verify Bank Update',
+    description: 'Check credentials risk and phishing flags.',
+    value: 'http://secure-login-update-bank.com',
     icon: FileText,
     color: 'text-violet-500 dark:text-violet-400',
     bg: 'bg-gradient-to-br from-violet-50/90 to-violet-50/30 dark:from-violet-950/20 dark:to-violet-950/5',
@@ -147,9 +148,9 @@ const HERO_SUGGESTIONS = [
     pingBg: 'bg-violet-400'
   },
   {
-    title: 'Phishing Trends',
-    description: 'Check live threat intelligence statistics and vectors.',
-    value: 'Check phishing trends',
+    title: 'Verify Google Safety',
+    description: 'Scan Google domain for SSL and geo indicators.',
+    value: 'https://google.com',
     icon: BarChart3,
     color: 'text-emerald-550 dark:text-emerald-405',
     bg: 'bg-gradient-to-br from-emerald-50/90 to-emerald-50/30 dark:from-emerald-950/20 dark:to-emerald-950/5',
@@ -159,6 +160,17 @@ const HERO_SUGGESTIONS = [
     pingBg: 'bg-emerald-400'
   }
 ];
+
+const isValidUrl = (str) => {
+  const trimmed = str.trim();
+  if (!trimmed) return false;
+  // Regex supporting:
+  // 1. Optional protocol (http:// or https://)
+  // 2. Domain name, localhost, or IP address
+  // 3. Optional port, path, query params, hash
+  const pattern = /^(https?:\/\/)?((([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,})|localhost|(\d{1,3}\.){3}\d{1,3})(:\d+)?(\/.*)?$/;
+  return pattern.test(trimmed);
+};
 
 /* ── Orb background that persists & floats in idle state ── */
 function BackgroundOrbs({ hasSentMessage }) {
@@ -706,6 +718,15 @@ export default function HomePage() {
     if (!input.trim() || isLoading) return;
 
     const query = input.trim();
+    if (!isValidUrl(query)) {
+      addToast({
+        type: 'error',
+        title: 'Invalid URL Format',
+        message: 'Please enter a valid website URL or domain name (e.g. google.com).'
+      });
+      return;
+    }
+
     // Prepend protocol if user enters bare domain like 'google.com'
     const processedUrl = query.startsWith('http://') || query.startsWith('https://') 
       ? query 
@@ -852,6 +873,124 @@ export default function HomePage() {
       );
 
       // Fire toast notification
+      if (isFailed) {
+        addToast({ type: 'error', title: 'Scan Failed', message: data.error || 'Unknown error occurred during analysis.' });
+      } else {
+        const riskLevel = data.report?.risk_level || 'Unknown';
+        const riskScore = data.report?.risk_score ?? 0;
+        const toastType = riskScore >= 61 ? 'warning' : riskScore >= 41 ? 'warning' : 'success';
+        addToast({
+          type: toastType,
+          title: `Analysis Complete — ${riskLevel}`,
+          message: `Risk score: ${riskScore}% • Duration: ${data.total_duration_sec}s`,
+        });
+      }
+    } catch (err) {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === botMsgId
+            ? {
+                ...msg,
+                text: `Scan failed: ${err.message}. Make sure Django server is running on http://localhost:8000`,
+                status: 'failed',
+              }
+            : msg
+        )
+      );
+      addToast({ type: 'error', title: 'Connection Error', message: `${err.message}. Make sure the Django server is running.` });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRescanMessage = async (botMsgId, urlToScan) => {
+    if (isLoading) return;
+    
+    // Set status to loading for this specific bot message
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === botMsgId
+          ? {
+              ...msg,
+              status: 'loading',
+              text: `Scanning URL: ${urlToScan}... Processing DOM structure, lexical attributes, WHOIS details, and visual similarity features. Please wait.`,
+              report: null,
+              screenshotUrl: null,
+              urlAnalysisData: null,
+              toolTrace: null,
+              overallStatus: null,
+              duration: null,
+              error: null,
+            }
+          : msg
+      )
+    );
+    setIsLoading(true);
+
+    try {
+      const response = await fetch('http://localhost:8000/api/scan/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ url: urlToScan }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      let resolvedScreenshotUrl = null;
+      if (data.screenshot_path) {
+        const parts = data.screenshot_path.split(/[/\\]/);
+        const filename = parts[parts.length - 1];
+        resolvedScreenshotUrl = `http://localhost:8000/media/screenshots/${filename}`;
+      } else if (data.tool_trace) {
+        const screenshotStep = data.tool_trace.find(
+          (step) => step.step === 'tool_result' && step.tool === 'capture_screenshot'
+        );
+        if (screenshotStep && screenshotStep.content_preview) {
+          try {
+            const cleanedPreview = screenshotStep.content_preview.replace(/\.\.\.$/, '');
+            const parsedPreview = JSON.parse(cleanedPreview + (cleanedPreview.endsWith('}') ? '' : '}'));
+            if (parsedPreview.screenshot_path) {
+              const parts = parsedPreview.screenshot_path.split(/[/\\]/);
+              const filename = parts[parts.length - 1];
+              resolvedScreenshotUrl = `http://localhost:8000/media/screenshots/${filename}`;
+            }
+          } catch (e) {
+            const match = screenshotStep.content_preview.match(/["']screenshot_path["']:\s*["']([^"']+)["']/);
+            if (match && match[1]) {
+              const parts = match[1].split(/[/\\]/);
+              const filename = parts[parts.length - 1];
+              resolvedScreenshotUrl = `http://localhost:8000/media/screenshots/${filename}`;
+            }
+          }
+        }
+      }
+
+      const isFailed = data.overall_status === 'FAILED';
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === botMsgId
+            ? {
+                ...msg,
+                text: isFailed ? `Scan failed: ${data.error || 'Unknown error occurred.'}` : null,
+                status: isFailed ? 'failed' : 'completed',
+                report: data.report,
+                screenshotUrl: resolvedScreenshotUrl,
+                urlAnalysisData: data.url_analysis_data,
+                toolTrace: data.tool_trace,
+                overallStatus: data.overall_status,
+                duration: data.total_duration_sec,
+                error: data.error,
+              }
+            : msg
+        )
+      );
+
       if (isFailed) {
         addToast({ type: 'error', title: 'Scan Failed', message: data.error || 'Unknown error occurred during analysis.' });
       } else {
@@ -1064,13 +1203,14 @@ export default function HomePage() {
             style={{ position: 'relative', zIndex: 10 }}
           >
             {messages.map((msg) => (
-              <div key={msg.id} className={"flex w-full " + (msg.isUser ? "justify-end" : "justify-start")}>
+              <div key={msg.id} className={"flex w-full mb-6 " + (msg.isUser ? "justify-end" : "justify-start")}>
                 {msg.isUser ? (
-                  <div className="max-w-[85%] sm:max-w-[70%] px-5 py-3.5 text-[15px] leading-relaxed bg-gray-200 dark:bg-[#2f2f2f] text-gray-800 dark:text-gray-100 rounded-3xl rounded-tr-sm shadow-sm font-semibold tracking-wide border border-gray-300/20">
+                  <div className="group relative max-w-[85%] sm:max-w-[70%] px-5 py-3.5 text-[15px] leading-relaxed bg-gray-200 dark:bg-[#2f2f2f] text-gray-800 dark:text-gray-100 rounded-3xl rounded-tr-sm shadow-sm font-semibold tracking-wide border border-gray-300/20">
                     {msg.text}
+                    <MessageActionBar msg={msg} onRescan={handleRescanMessage} isLoadingGlobal={isLoading} />
                   </div>
                 ) : (
-                  <div className="w-full">
+                  <div className="group relative w-full">
                     <div className="flex-1 min-w-0 bg-transparent py-1.5 flex flex-col gap-4">
                       {(msg.status === 'loading' || msg.status === 'completed') && (
                         <OrchestratorProgress 
@@ -1095,6 +1235,7 @@ export default function HomePage() {
                         />
                       )}
                     </div>
+                    <MessageActionBar msg={msg} onRescan={handleRescanMessage} isLoadingGlobal={isLoading} />
                   </div>
                 )}
               </div>
