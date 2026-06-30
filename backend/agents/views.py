@@ -49,7 +49,7 @@ def scan_url_view(request):
         )
 
     # Import here to avoid circular imports and ensure env is loaded
-    from .orchestrator import OrchestratorAgent
+    from backend.agents.orchestrator import OrchestratorAgent
 
     try:
         orchestrator = OrchestratorAgent()

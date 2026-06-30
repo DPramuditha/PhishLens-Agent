@@ -1,0 +1,10 @@
+{
+  "dependencies": [
+    "."
+  ],
+  "graphs": {
+    "phishlens_agent": "./backend/agents/orchestrator.py:graph"
+  },
+  "env": "./backend/.env",
+  "python_version": "3.13"
+}
