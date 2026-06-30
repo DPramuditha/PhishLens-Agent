@@ -1,6 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Habibi&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Cabin:ital,wght@0,400..700;1,400..700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Habibi&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap');
 
 @import "tailwindcss";
 @custom-variant dark (&:is(.dark *));
@@ -18,10 +19,10 @@
   --shadow:
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
 
-  --sans: 'Habibi', serif, system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: 'Habibi', serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+  --sans: 'Outfit', sans-serif, system-ui;
+  --heading: 'Habibi', serif, system-ui;
   --mono: ui-monospace, Consolas, monospace;
-  --heading-font: 'Habibi', serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+  --heading-font: 'Habibi', serif, system-ui;
 
   font: 18px/145% var(--sans);
   letter-spacing: 0.18px;
@@ -121,7 +122,11 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
-span{
+h1, h2, .font-habibi {
+  font-family: var(--heading) !important;
+}
+
+body, p, div, button, input, select, textarea, a, li, .font-outfit {
   font-family: var(--sans);
 }
 

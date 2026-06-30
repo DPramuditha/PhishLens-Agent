@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import gsap from 'gsap';
 import { DotmSquare12 } from './ui/dotm-square-12';
+import FlickerSpinner from './ui/FlickerSpinner';
 
 const AGENT_STEPS = [
   {
@@ -299,7 +300,10 @@ export default function OrchestratorProgress({ targetUrl, status = 'loading', du
         <div className="flex flex-col gap-3 mt-2 pl-4 border-l-2 border-indigo-500/30 dark:border-indigo-500/20 bg-transparent py-1">
           <div className={`transition-opacity duration-300 ${isFadingOut ? 'opacity-0' : 'opacity-100'}`}>
             {stepText && (
-              <div className="text-xs font-mono text-gray-600 dark:text-zinc-400 leading-relaxed">
+              <div className="flex items-center gap-2 text-xs font-mono text-gray-600 dark:text-zinc-400 leading-relaxed">
+                {status === 'loading' && displayedStep === currentStep && (
+                  <FlickerSpinner size={16} />
+                )}
                 <TypewriterText text={stepText} key={displayedStep} />
               </div>
             )}
