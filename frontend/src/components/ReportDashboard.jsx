@@ -15,6 +15,13 @@ import {
   RefreshCw,
   X,
   Maximize2,
+  Globe,
+  BarChart3,
+  FileText,
+  CheckCircle,
+  XCircle,
+  MapPin,
+  Calendar,
 } from 'lucide-react';
 import gsap from 'gsap';
 import { AnimatedCircularProgressBar } from './ui/animated-circular-progress-bar';
@@ -147,8 +154,41 @@ function TraceStepList({ steps }) {
   );
 }
 
+// InfoCard subcomponent for structured data display
+function InfoCard({ icon: Icon, title, children, iconColor = 'text-indigo-400' }) {
+  return (
+    <div className="rounded-2xl border border-gray-200/50 dark:border-gray-800/40 bg-white/60 dark:bg-[#1a1a1a]/60 backdrop-blur-md p-5 shadow-sm">
+      <div className="flex items-center gap-2.5 mb-4">
+        <div className={`p-2 rounded-xl bg-gray-100/80 dark:bg-white/5 ${iconColor}`}>
+          <Icon size={16} />
+        </div>
+        <h4 className="text-[11px] uppercase tracking-[0.12em] font-black text-gray-500 dark:text-gray-400">
+          {title}
+        </h4>
+      </div>
+      <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// InfoRow subcomponent for label-value pairs inside InfoCards
+function InfoRow({ label, value, fullWidth = false, valueColor }) {
+  return (
+    <div className={fullWidth ? 'col-span-2' : ''}>
+      <dt className="text-[10.5px] uppercase tracking-widest font-bold text-gray-400 dark:text-gray-500 mb-0.5">
+        {label}
+      </dt>
+      <dd className={`text-[14px] font-semibold text-gray-800 dark:text-gray-200 break-all leading-snug ${valueColor || ''}`}>
+        {value || <span className="text-gray-400 dark:text-gray-600 italic text-[13px]">—</span>}
+      </dd>
+    </div>
+  );
+}
+
 // Subcomponent for rendering the beautiful, complete scan report dashboard
-export default function ReportDashboard({ report, duration, screenshotUrl, toolTrace }) {
+export default function ReportDashboard({ report, duration, screenshotUrl, toolTrace, urlAnalysisData }) {
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const containerRef = useRef(null);
   const lightboxRef = useRef(null);
@@ -283,6 +323,114 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
             />
           </p>
         </div>
+
+        {/* ─── STRUCTURED DATA INFO CARDS ─── */}
+        {urlAnalysisData && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+
+            {/* Domain Whois Card */}
+            {urlAnalysisData.whois && urlAnalysisData.whois.status === 'success' && (
+              <InfoCard icon={FileText} title="Domain Whois" iconColor="text-violet-400">
+                <InfoRow
+                  label="Registered Domain"
+                  value={urlAnalysisData.whois.registered_domain}
+                  fullWidth
+                />
+                <InfoRow
+                  label="Creation Date"
+                  value={urlAnalysisData.whois.creation_date}
+                />
+                <InfoRow
+                  label="Updated Date"
+                  value={urlAnalysisData.whois.updated_date}
+                />
+              </InfoCard>
+            )}
+
+            {/* SSL Certificate Card */}
+            {urlAnalysisData.ssl_certificate && urlAnalysisData.ssl_certificate.status !== 'error' && (
+              <InfoCard icon={Lock} title="SSL Certificate" iconColor="text-emerald-400">
+                <InfoRow
+                  label="Subject"
+                  value={urlAnalysisData.ssl_certificate.subject}
+                  fullWidth
+                />
+                <InfoRow
+                  label="Issuer"
+                  value={urlAnalysisData.ssl_certificate.issuer}
+                  fullWidth
+                />
+                <InfoRow
+                  label="Trusted"
+                  value={
+                    urlAnalysisData.ssl_certificate.is_trusted ? (
+                      <span className="inline-flex items-center gap-1.5 text-emerald-500 font-black">
+                        <CheckCircle size={14} /> Yes
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 text-rose-500 font-black">
+                        <XCircle size={14} /> No
+                      </span>
+                    )
+                  }
+                />
+                <InfoRow
+                  label="Expires"
+                  value={urlAnalysisData.ssl_certificate.not_after}
+                />
+                <InfoRow
+                  label="Renewed"
+                  value={urlAnalysisData.ssl_certificate.not_before}
+                />
+              </InfoCard>
+            )}
+
+            {/* Server Location Card */}
+            {urlAnalysisData.server_location && urlAnalysisData.server_location.status === 'success' && (
+              <InfoCard icon={MapPin} title="Server Location" iconColor="text-sky-400">
+                <InfoRow
+                  label="City"
+                  value={urlAnalysisData.server_location.city}
+                />
+                <InfoRow
+                  label="Country"
+                  value={urlAnalysisData.server_location.country}
+                />
+                <InfoRow
+                  label="Timezone"
+                  value={urlAnalysisData.server_location.timezone}
+                />
+                <InfoRow
+                  label="IP Address"
+                  value={urlAnalysisData.server_location.ip_address}
+                />
+              </InfoCard>
+            )}
+
+            {/* Global Ranking Card */}
+            {urlAnalysisData.global_ranking && (
+              <InfoCard icon={BarChart3} title="Global Ranking" iconColor="text-amber-400">
+                <InfoRow
+                  label="Rank"
+                  value={
+                    urlAnalysisData.global_ranking.rank ? (
+                      <span className="text-[20px] font-black text-indigo-500 dark:text-indigo-400 tabular-nums">
+                        #{urlAnalysisData.global_ranking.rank.toLocaleString()}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400 dark:text-gray-500 font-semibold italic">Unranked</span>
+                    )
+                  }
+                />
+                <InfoRow
+                  label="Source"
+                  value={urlAnalysisData.global_ranking.source || 'Tranco'}
+                />
+              </InfoCard>
+            )}
+
+          </div>
+        )}
 
         {/* Brand Impersonation (if detected) */}
         {hasBrand && activeStep >= 1 && (

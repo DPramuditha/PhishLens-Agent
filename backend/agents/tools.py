@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 
 from langchain_core.tools import tool
 from playwright.async_api import async_playwright
-from .visual_model import predict_screenshot
+from backend.agents.visual_model import predict_screenshot
 
 # Disable Playwright waiting for font load to prevent screenshot hangs/timeouts
 os.environ["PW_TEST_SCREENSHOT_NO_FONTS_READY"] = "1"

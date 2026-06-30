@@ -4,7 +4,7 @@ import time
 from typing import Dict, Any
 
 from playwright.async_api import async_playwright
-from .base_agent import BaseAgent, AgentResult, AgentStatus
+from backend.agents.base_agent import BaseAgent, AgentResult, AgentStatus
 
 class WebScrapingAgent(BaseAgent):
     def __init__(self):
