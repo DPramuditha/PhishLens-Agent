@@ -36,6 +36,7 @@ import SidebarDock from '../components/SidebarDock';
 import ReportDashboard from '../components/ReportDashboard';
 import { DotmHex2 } from '../components/ui/dotm-hex-2';
 import OrchestratorProgress from '../components/OrchestratorProgress';
+import { useToast } from '../components/ToastContext';
 
 const PLACEHOLDERS = [
   'Paste URL to scan for phishing...',
@@ -367,6 +368,7 @@ function AnimatedCyclingWord({ word, isThinking }) {
 
 export default function HomePage() {
   const navigate = useNavigate();
+  const { addToast } = useToast();
   const [isExpanded, setIsExpanded] = useState(false);
   const [chatTitle, setChatTitle] = useState('New Scan');
   const [messages, setMessages] = useState([]);
@@ -839,7 +841,9 @@ export default function HomePage() {
                 status: isFailed ? 'failed' : 'completed',
                 report: data.report,
                 screenshotUrl: resolvedScreenshotUrl,
+                urlAnalysisData: data.url_analysis_data,
                 toolTrace: data.tool_trace,
+                urlAnalysisData: data.url_analysis_data,
                 overallStatus: data.overall_status,
                 duration: data.total_duration_sec,
                 error: data.error,
@@ -847,6 +851,20 @@ export default function HomePage() {
             : msg
         )
       );
+
+      // Fire toast notification
+      if (isFailed) {
+        addToast({ type: 'error', title: 'Scan Failed', message: data.error || 'Unknown error occurred during analysis.' });
+      } else {
+        const riskLevel = data.report?.risk_level || 'Unknown';
+        const riskScore = data.report?.risk_score ?? 0;
+        const toastType = riskScore >= 61 ? 'warning' : riskScore >= 41 ? 'warning' : 'success';
+        addToast({
+          type: toastType,
+          title: `Analysis Complete — ${riskLevel}`,
+          message: `Risk score: ${riskScore}% • Duration: ${data.total_duration_sec}s`,
+        });
+      }
     } catch (err) {
       setMessages((prev) =>
         prev.map((msg) =>
@@ -859,6 +877,7 @@ export default function HomePage() {
             : msg
         )
       );
+      addToast({ type: 'error', title: 'Connection Error', message: `${err.message}. Make sure the Django server is running.` });
     } finally {
       setIsLoading(false);
     }
@@ -949,7 +968,7 @@ export default function HomePage() {
       {/* Main Content Area */}
       <main 
         ref={mainRef}
-        className="flex-1 flex flex-col h-full bg-white dark:bg-[#212121] text-slate-700 dark:text-slate-400 relative transition-colors duration-300 overflow-hidden"
+        className="flex-1 flex flex-col h-full bg-white dark:bg-[#1a1a1a] text-slate-700 dark:text-slate-400 relative transition-colors duration-300 overflow-hidden"
       >
 
         {/* ── Persistent floating background orbs ── */}
@@ -990,7 +1009,7 @@ export default function HomePage() {
 
         <div 
           id="smooth-wrapper" 
-          className="flex-1 w-full h-full overflow-y-auto no-scrollbar relative z-10 bg-white dark:bg-[#212121] transition-colors duration-300"
+          className="flex-1 w-full h-full overflow-y-auto no-scrollbar relative z-10 bg-white dark:bg-[#1a1a1a] transition-colors duration-300"
           style={{
             position: 'fixed',
             top: 0,
@@ -1073,6 +1092,7 @@ export default function HomePage() {
                           duration={msg.duration}
                           screenshotUrl={msg.screenshotUrl}
                           toolTrace={msg.toolTrace}
+                          urlAnalysisData={msg.urlAnalysisData}
                         />
                       )}
                     </div>

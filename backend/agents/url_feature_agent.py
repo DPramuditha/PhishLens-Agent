@@ -147,15 +147,29 @@ def analyze_url_features(url: str) -> str:
             expiration_date = w.expiration_date
             if isinstance(expiration_date, list):
                 expiration_date = expiration_date[0]
+            updated_date = getattr(w, 'updated_date', None)
+            if isinstance(updated_date, list):
+                updated_date = updated_date[0]
 
             from datetime import datetime
             domain_age_days = None
             if creation_date:
                 domain_age_days = (datetime.now() - creation_date).days
 
+            # Extract the registered domain name from WHOIS
+            registered_domain = None
+            if hasattr(w, 'domain_name'):
+                dn = w.domain_name
+                if isinstance(dn, list):
+                    registered_domain = dn[0]
+                elif isinstance(dn, str):
+                    registered_domain = dn
+
             whois_data = {
                 "registrar": w.registrar,
+                "registered_domain": registered_domain,
                 "creation_date": str(creation_date) if creation_date else None,
+                "updated_date": str(updated_date) if updated_date else None,
                 "expiration_date": str(expiration_date) if expiration_date else None,
                 "domain_age_days": domain_age_days,
                 "name_servers": w.name_servers[:3] if w.name_servers else None,
@@ -166,6 +180,111 @@ def analyze_url_features(url: str) -> str:
             whois_data = {
                 "status": "error",
                 "error": str(whois_err),
+            }
+
+        # --- SSL Certificate ---
+        ssl_certificate = {}
+        try:
+            import ssl
+            import socket
+            port = 443
+            context = ssl.create_default_context()
+            with socket.create_connection((hostname, port), timeout=10) as sock:
+                with context.wrap_socket(sock, server_hostname=hostname) as ssock:
+                    cert = ssock.getpeercert()
+                    # Extract subject Common Name
+                    subject_parts = dict(x[0] for x in cert.get("subject", ()))
+                    issuer_parts = dict(x[0] for x in cert.get("issuer", ()))
+                    ssl_certificate = {
+                        "subject": subject_parts.get("commonName", None),
+                        "issuer": issuer_parts.get("organizationName", None) or issuer_parts.get("commonName", None),
+                        "is_trusted": True,
+                        "not_before": cert.get("notBefore", None),
+                        "not_after": cert.get("notAfter", None),
+                        "serial_number": cert.get("serialNumber", None),
+                        "status": "success",
+                    }
+        except ssl.SSLCertVerificationError as ssl_verify_err:
+            # Certificate exists but is not trusted (self-signed, expired, etc.)
+            ssl_certificate = {
+                "subject": None,
+                "issuer": None,
+                "is_trusted": False,
+                "not_before": None,
+                "not_after": None,
+                "error": str(ssl_verify_err),
+                "status": "untrusted",
+            }
+        except Exception as ssl_err:
+            ssl_certificate = {
+                "status": "error",
+                "error": str(ssl_err),
+            }
+
+        # --- Server Location (IP Geolocation) ---
+        server_location = {}
+        try:
+            import socket as _socket
+            ip_address = _socket.gethostbyname(hostname)
+            # Use free ip-api.com for geolocation
+            import urllib.request
+            geo_url = f"http://ip-api.com/json/{ip_address}?fields=status,country,city,timezone,isp,org"
+            geo_req = urllib.request.Request(geo_url, headers={"User-Agent": "PhishLens/1.0"})
+            with urllib.request.urlopen(geo_req, timeout=8) as geo_resp:
+                geo_data = json.loads(geo_resp.read().decode())
+                if geo_data.get("status") == "success":
+                    server_location = {
+                        "ip_address": ip_address,
+                        "city": geo_data.get("city", None),
+                        "country": geo_data.get("country", None),
+                        "timezone": geo_data.get("timezone", None),
+                        "isp": geo_data.get("isp", None),
+                        "organization": geo_data.get("org", None),
+                        "status": "success",
+                    }
+                else:
+                    server_location = {
+                        "ip_address": ip_address,
+                        "status": "error",
+                        "error": "Geolocation lookup failed",
+                    }
+        except Exception as geo_err:
+            server_location = {
+                "status": "error",
+                "error": str(geo_err),
+            }
+
+        # --- Global Ranking (Tranco List) ---
+        global_ranking = {}
+        try:
+            import urllib.request
+            # Use Tranco list API for domain ranking
+            rank_domain = hostname.lstrip("www.")
+            rank_url = f"https://tranco-list.eu/api/ranks/domain/{rank_domain}"
+            rank_req = urllib.request.Request(rank_url, headers={"User-Agent": "PhishLens/1.0"})
+            with urllib.request.urlopen(rank_req, timeout=8) as rank_resp:
+                rank_data = json.loads(rank_resp.read().decode())
+                ranks = rank_data.get("ranks", [])
+                if ranks and len(ranks) > 0:
+                    # Get the most recent ranking
+                    latest = ranks[0]
+                    global_ranking = {
+                        "rank": latest.get("rank", None),
+                        "source": "Tranco",
+                        "status": "success",
+                    }
+                else:
+                    global_ranking = {
+                        "rank": None,
+                        "source": "Tranco",
+                        "status": "unranked",
+                    }
+        except Exception as rank_err:
+            global_ranking = {
+                "rank": None,
+                "source": "Tranco",
+                "status": "error",
+                "error": str(rank_err),
             }
 
         # --- Risk indicators ---
@@ -214,6 +333,9 @@ def analyze_url_features(url: str) -> str:
             "suspicious_keywords_in_url": url_suspicious_keywords,
             "typosquatting_analysis": typosquatting_matches,
             "whois": whois_data,
+            "ssl_certificate": ssl_certificate,
+            "server_location": server_location,
+            "global_ranking": global_ranking,
             "risk_indicators": risk_indicators,
         }
 

@@ -19,7 +19,7 @@ nest_asyncio.apply()
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
-from .orchestrator import OrchestratorAgent
+from backend.agents.orchestrator import OrchestratorAgent
 
 
 def main():
