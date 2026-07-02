@@ -154,3 +154,19 @@ body, p, div, button, input, select, textarea, a, li, .font-outfit {
   0%, 100% { box-shadow: 0 8px 24px rgba(124, 58, 237, 0.3); }
   50% { box-shadow: 0 8px 32px rgba(124, 58, 237, 0.5); }
 }
+
+/* ── Torch icon float animation ── */
+@keyframes torch-float {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+    filter: drop-shadow(0 0 12px rgba(193, 91, 43, 0.45));
+  }
+  50% {
+    transform: translateY(-6px) rotate(3deg);
+    filter: drop-shadow(0 0 20px rgba(193, 91, 43, 0.65));
+  }
+}
+
+.torch-icon-float {
+  animation: torch-float 3s ease-in-out infinite;
+}
