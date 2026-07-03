@@ -42,20 +42,40 @@ function DockItem({
   hasDot,
   onPlayLottie,
   onStopLottie,
+  isExpanded,
 }) {
   const [showTooltip, setShowTooltip] = useState(false);
   const tooltipRef   = useRef(null);
+  const iconContentRef = useRef(null);
   const isLogo = id === 'logo';
 
   const handleEnter = useCallback(() => {
     setShowTooltip(true);
     onPlayLottie?.();
-  }, [onPlayLottie]);
+    // Scale-up animation when sidebar is expanded
+    if (isExpanded && iconContentRef.current) {
+      gsap.to(iconContentRef.current, {
+        scale: 1.18,
+        duration: 0.3,
+        ease: 'back.out(2.5)',
+        overwrite: 'auto',
+      });
+    }
+  }, [onPlayLottie, isExpanded]);
 
   const handleLeave = useCallback(() => {
     setShowTooltip(false);
     onStopLottie?.();
-  }, [onStopLottie]);
+    // Scale-down animation when sidebar is expanded
+    if (isExpanded && iconContentRef.current) {
+      gsap.to(iconContentRef.current, {
+        scale: 1,
+        duration: 0.35,
+        ease: 'elastic.out(1, 0.5)',
+        overwrite: 'auto',
+      });
+    }
+  }, [onStopLottie, isExpanded]);
 
   // Tooltip animation
   useEffect(() => {
@@ -107,7 +127,7 @@ function DockItem({
       />
 
       {/* Icon content – scales with parent via % sizing */}
-      <div className="relative z-10 flex items-center justify-center" style={{ width: isLogo ? '92%' : '58%', height: isLogo ? '92%' : '58%', transform: isLogo ? 'scale(1.25)' : 'none' }}>
+      <div ref={iconContentRef} className="relative z-10 flex items-center justify-center" style={{ width: isLogo ? '92%' : '58%', height: isLogo ? '92%' : '58%', transform: isLogo ? 'scale(1.25)' : 'none', willChange: isExpanded ? 'transform' : 'auto' }}>
         {lottieData ? (
           <Lottie
             lottieRef={lottieRef}
@@ -508,35 +528,49 @@ export default function SidebarDock({
         />
 
         {/* LEFT COLUMN: Dock Icons */}
-        <div className="flex flex-col items-center shrink-0" style={{ width: maxBase, gap: ITEM_GAP }}>
-          {/* Top items */}
-          {items.map((item, i) => (
-            <DockItem
-              key={item.id}
-              {...item}
-              isDarkMode={isDarkMode}
-              isActive={item.id === activeItemId}
-              dockItemRef={(el) => setItemRef(el, i)}
-              onPlayLottie={() => item.lottieRef?.current?.play()}
-              onStopLottie={() => item.lottieRef?.current?.stop()}
-            />
-          ))}
+        <div
+          className="flex flex-col items-center shrink-0"
+          style={{
+            width: maxBase,
+            gap: ITEM_GAP,
+            height: isExpanded ? '100%' : 'auto',
+          }}
+        >
+          {/* Top group: main items */}
+          <div className="flex flex-col items-center" style={{ gap: ITEM_GAP }}>
+            {items.map((item, i) => (
+              <DockItem
+                key={item.id}
+                {...item}
+                isDarkMode={isDarkMode}
+                isActive={item.id === activeItemId}
+                isExpanded={isExpanded}
+                dockItemRef={(el) => setItemRef(el, i)}
+                onPlayLottie={() => item.lottieRef?.current?.play()}
+                onStopLottie={() => item.lottieRef?.current?.stop()}
+              />
+            ))}
+          </div>
 
-          {/* Divider */}
-          {bottomItems.length > 0 && <DockDivider isDarkMode={isDarkMode} />}
+          {/* Spacer to push bottom items down when expanded */}
+          {isExpanded && <div className="flex-1" />}
 
-          {/* Bottom items */}
-          {bottomItems.map((item, i) => (
-            <DockItem
-              key={item.id}
-              {...item}
-              isDarkMode={isDarkMode}
-              isActive={item.id === activeItemId}
-              dockItemRef={(el) => setItemRef(el, items.length + i)}
-              onPlayLottie={() => item.lottieRef?.current?.play()}
-              onStopLottie={() => item.lottieRef?.current?.stop()}
-            />
-          ))}
+          {/* Bottom group: divider + bottom items */}
+          <div className="flex flex-col items-center" style={{ gap: ITEM_GAP }}>
+            {bottomItems.length > 0 && <DockDivider isDarkMode={isDarkMode} />}
+            {bottomItems.map((item, i) => (
+              <DockItem
+                key={item.id}
+                {...item}
+                isDarkMode={isDarkMode}
+                isActive={item.id === activeItemId}
+                isExpanded={isExpanded}
+                dockItemRef={(el) => setItemRef(el, items.length + i)}
+                onPlayLottie={() => item.lottieRef?.current?.play()}
+                onStopLottie={() => item.lottieRef?.current?.stop()}
+              />
+            ))}
+          </div>
         </div>
 
         {/* RIGHT COLUMN: Chat History Panel */}
