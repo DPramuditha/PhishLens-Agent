@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Terminal,
   ChevronUp,
@@ -191,7 +192,6 @@ function InfoRow({ label, value, fullWidth = false, valueColor }) {
 export default function ReportDashboard({ report, duration, screenshotUrl, toolTrace, urlAnalysisData }) {
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const containerRef = useRef(null);
-  const lightboxRef = useRef(null);
   const [activeStep, setActiveStep] = useState(0);
 
   useEffect(() => {
@@ -223,18 +223,50 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
     return () => ctx.revert();
   }, [report]);
 
-  // Lightbox animation
+  // Lightbox slide panel animation
   useEffect(() => {
-    if (!lightboxRef.current) return;
-    if (isLightboxOpen) {
-      gsap.killTweensOf(lightboxRef.current);
-      gsap.fromTo(
-        lightboxRef.current,
-        { opacity: 0, scale: 0.95 },
-        { opacity: 1, scale: 1, duration: 0.35, ease: 'power3.out' }
-      );
-    }
+    if (!isLightboxOpen) return;
+    // Animate after portal renders
+    const timer = requestAnimationFrame(() => {
+      const backdrop = document.getElementById('screenshot-lightbox-backdrop');
+      const panel = document.getElementById('screenshot-lightbox-panel');
+      if (backdrop) {
+        gsap.fromTo(backdrop, { opacity: 0 }, { opacity: 1, duration: 0.35, ease: 'power2.out' });
+      }
+      if (panel) {
+        gsap.fromTo(
+          panel,
+          { x: '100%', opacity: 0.5 },
+          { x: '0%', opacity: 1, duration: 0.45, ease: 'power3.out' }
+        );
+      }
+    });
+    return () => cancelAnimationFrame(timer);
   }, [isLightboxOpen]);
+
+  const closeLightbox = useCallback(() => {
+    const backdrop = document.getElementById('screenshot-lightbox-backdrop');
+    const panel = document.getElementById('screenshot-lightbox-panel');
+    const tl = gsap.timeline({
+      onComplete: () => setIsLightboxOpen(false),
+    });
+    if (panel) {
+      tl.to(panel, { x: '100%', opacity: 0.5, duration: 0.35, ease: 'power3.in' }, 0);
+    }
+    if (backdrop) {
+      tl.to(backdrop, { opacity: 0, duration: 0.3, ease: 'power2.in' }, 0.05);
+    }
+  }, []);
+
+  // Close panel on Escape key
+  useEffect(() => {
+    if (!isLightboxOpen) return;
+    const handleKey = (e) => {
+      if (e.key === 'Escape') closeLightbox();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [isLightboxOpen, closeLightbox]);
 
   if (!report) return null;
 
@@ -520,37 +552,67 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
         </div>
       </div>
 
-      {/* ─── LIGHTBOX OVERLAY MODAL ─── */}
-      {isLightboxOpen && screenshotUrl && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md select-none">
+      {/* ─── RIGHT-SIDE SLIDE PANEL FOR SCREENSHOT ─── */}
+      {isLightboxOpen && screenshotUrl && createPortal(
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 99999 }}
+          className="select-none"
+        >
+          {/* Backdrop */}
           <div
-            ref={lightboxRef}
-            className="relative max-w-5xl w-full max-h-[90vh] overflow-y-auto no-scrollbar rounded-2xl border border-white/10 shadow-2xl flex flex-col items-center bg-[#0d0d0d]"
+            id="screenshot-lightbox-backdrop"
+            onClick={closeLightbox}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'rgba(0,0,0,0.6)',
+              backdropFilter: 'blur(6px)',
+              WebkitBackdropFilter: 'blur(6px)',
+            }}
+          />
+
+          {/* Slide Panel (right side) */}
+          <div
+            id="screenshot-lightbox-panel"
+            style={{
+              position: 'absolute',
+              top: 0,
+              right: 0,
+              width: '720px',
+              maxWidth: '95vw',
+              height: '100%',
+              transform: 'translateX(100%)',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+            className="bg-[#111113] border-l border-white/8 shadow-2xl"
           >
-            {/* Modal Header */}
-            <div className="w-full flex items-center justify-between px-6 py-4 border-b border-white/5 bg-black/60 sticky top-0 backdrop-blur-md z-10">
-              <div className="flex items-center gap-2.5">
-                <span className="w-3 h-3 rounded-full bg-red-500" />
-                <span className="text-sm font-semibold text-white font-mono">{analyzedUrl}</span>
+            {/* Panel Header */}
+            <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b border-white/6 bg-[#0e0e10]/90 backdrop-blur-lg">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0" />
+                <span className="text-[13px] font-semibold text-white/90 font-mono truncate">{analyzedUrl}</span>
               </div>
               <button
-                onClick={() => setIsLightboxOpen(false)}
-                className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                onClick={closeLightbox}
+                className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
               >
                 <X size={18} />
               </button>
             </div>
-            
+
             {/* Image Container */}
-            <div className="p-4 flex justify-center w-full bg-[#0d0d0d]">
+            <div className="flex-1 overflow-y-auto no-scrollbar p-5 flex flex-col items-center justify-start bg-[#111113]">
               <img
                 src={screenshotUrl}
                 alt="Webpage Full Screenshot"
-                className="w-full h-auto object-contain max-h-[80vh] rounded-lg"
+                className="w-full h-auto object-contain rounded-xl border border-white/5 shadow-lg"
               />
+              <p className="mt-3 text-[11px] font-medium text-gray-500 tracking-wide uppercase">Captured Webpage Screenshot</p>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

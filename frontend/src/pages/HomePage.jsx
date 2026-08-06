@@ -29,6 +29,7 @@ import darkHistoryAnimData from '../sidebar_images/dark-history.json';
 import chatbotAnimData from '../sidebar_images/claude.json';
 import expandAnimData from '../sidebar_images/expand.json';
 import lightExpandAnimData from '../sidebar_images/light-mode-expand.json';
+import torchImage from '../sidebar_images/Main_image.webp';
 
 import SearchChat from './SearchChat';
 import ProfileBottomSheet from '../components/ProfileBottomSheet';
@@ -37,6 +38,7 @@ import ReportDashboard from '../components/ReportDashboard';
 import { DotmHex2 } from '../components/ui/dotm-hex-2';
 import OrchestratorProgress from '../components/OrchestratorProgress';
 import { useToast } from '../components/ToastContext';
+import MessageActionBar from '../components/MessageActionBar';
 
 const PLACEHOLDERS = [
   'Paste URL to scan for phishing...',
@@ -45,6 +47,125 @@ const PLACEHOLDERS = [
   'Verify brand similarity warnings...',
   'Scan for credential harvesting risks...'
 ];
+
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+function WelcomeTitle({ name }) {
+  const containerRef = useRef(null);
+  const nameWrapRef = useRef(null);
+  const isHoverAnimating = useRef(false);
+  const greeting = getGreeting();
+  const fullText = `${greeting}, `;
+
+  // Initial entrance animation
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const chars = containerRef.current.querySelectorAll('.welcome-char');
+    if (chars.length === 0) return;
+
+    gsap.fromTo(chars,
+      {
+        opacity: 0,
+        rotationX: -90,
+        y: 30,
+        transformOrigin: '50% 100%',
+      },
+      {
+        opacity: 1,
+        rotationX: 0,
+        y: 0,
+        duration: 0.7,
+        stagger: 0.04,
+        ease: 'back.out(1.7)',
+      }
+    );
+  }, []);
+
+  // Hover handler: 3D flip each name letter with stagger
+  const handleNameHover = useCallback(() => {
+    if (isHoverAnimating.current || !nameWrapRef.current) return;
+    isHoverAnimating.current = true;
+    const nameChars = nameWrapRef.current.querySelectorAll('.name-char');
+    if (nameChars.length === 0) { isHoverAnimating.current = false; return; }
+
+    gsap.to(nameChars, {
+      rotationX: 360,
+      duration: 0.6,
+      stagger: 0.05,
+      ease: 'back.out(1.7)',
+      onComplete: () => {
+        gsap.set(nameChars, { rotationX: 0 });
+        isHoverAnimating.current = false;
+      },
+    });
+  }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      className="flex flex-wrap items-center justify-center gap-x-0 font-habibi"
+      style={{ perspective: '1000px', transformStyle: 'preserve-3d' }}
+    >
+      {/* Torch icon */}
+      <img
+        src={torchImage}
+        alt="PhishLens torch"
+        className="welcome-char torch-icon-float"
+        style={{
+          width: 52,
+          height: 52,
+          objectFit: 'contain',
+          marginRight: 12,
+          display: 'inline-block',
+          backfaceVisibility: 'hidden',
+          transformStyle: 'preserve-3d',
+          filter: 'drop-shadow(0 0 12px rgba(193, 91, 43, 0.45))',
+        }}
+      />
+      {/* Greeting text — plain black / white */}
+      {fullText.split('').map((char, idx) => (
+        <span
+          key={`g-${idx}`}
+          className="welcome-char inline-block origin-bottom transform-gpu text-gray-900 dark:text-white"
+          style={{
+            backfaceVisibility: 'hidden',
+            transformStyle: 'preserve-3d',
+            whiteSpace: char === ' ' ? 'pre' : 'normal',
+          }}
+        >
+          {char}
+        </span>
+      ))}
+      {/* Name with #C15B2B color + hover 3D flip */}
+      <span
+        ref={nameWrapRef}
+        className="inline-flex cursor-pointer"
+        style={{ perspective: '600px', transformStyle: 'preserve-3d' }}
+        onMouseEnter={handleNameHover}
+      >
+        {name.split('').map((char, idx) => (
+          <span
+            key={`n-${idx}`}
+            className="welcome-char name-char inline-block origin-bottom transform-gpu"
+            style={{
+              color: '#C15B2B',
+              backfaceVisibility: 'hidden',
+              transformStyle: 'preserve-3d',
+              whiteSpace: char === ' ' ? 'pre' : 'normal',
+            }}
+          >
+            {char}
+          </span>
+        ))}
+      </span>
+    </div>
+  );
+}
 
 function PlaceholderCycler({ leftPaddingClass }) {
   const [index, setIndex] = useState(0);
@@ -121,6 +242,7 @@ function PlaceholderCycler({ leftPaddingClass }) {
 
 const HERO_TITLE_PREFIX = 'How can I assist your';
 const CYCLING_WORDS = ['security', 'inboxes', 'domains', 'credentials', 'networks'];
+const USER_FIRST_NAME = 'dimuthu';
 const HERO_SUGGESTIONS = [
   {
     title: 'Scan URL',
@@ -135,9 +257,9 @@ const HERO_SUGGESTIONS = [
     pingBg: 'bg-indigo-400'
   },
   {
-    title: 'Analyze Email',
-    description: 'Scan email headers or body snippets for warning flags.',
-    value: 'Analyze email snippet',
+    title: 'Verify Bank Update',
+    description: 'Check credentials risk and phishing flags.',
+    value: 'http://secure-login-update-bank.com',
     icon: FileText,
     color: 'text-violet-500 dark:text-violet-400',
     bg: 'bg-gradient-to-br from-violet-50/90 to-violet-50/30 dark:from-violet-950/20 dark:to-violet-950/5',
@@ -147,9 +269,9 @@ const HERO_SUGGESTIONS = [
     pingBg: 'bg-violet-400'
   },
   {
-    title: 'Phishing Trends',
-    description: 'Check live threat intelligence statistics and vectors.',
-    value: 'Check phishing trends',
+    title: 'Verify Google Safety',
+    description: 'Scan Google domain for SSL and geo indicators.',
+    value: 'https://google.com',
     icon: BarChart3,
     color: 'text-emerald-550 dark:text-emerald-405',
     bg: 'bg-gradient-to-br from-emerald-50/90 to-emerald-50/30 dark:from-emerald-950/20 dark:to-emerald-950/5',
@@ -159,6 +281,25 @@ const HERO_SUGGESTIONS = [
     pingBg: 'bg-emerald-400'
   }
 ];
+
+const HERO_CHIPS = [
+  { label: 'Scan URL', icon: Shield, value: 'https://' },
+  { label: 'Verify Bank', icon: FileText, value: 'http://secure-login-update-bank.com' },
+  { label: 'Check Safety', icon: BarChart3, value: 'https://google.com' },
+  { label: 'Domain Lookup', icon: ShieldAlert, value: 'https://' },
+  { label: 'Quick Scan', icon: AlertCircle, value: 'https://' },
+];
+
+const isValidUrl = (str) => {
+  const trimmed = str.trim();
+  if (!trimmed) return false;
+  // Regex supporting:
+  // 1. Optional protocol (http:// or https://)
+  // 2. Domain name, localhost, or IP address
+  // 3. Optional port, path, query params, hash
+  const pattern = /^(https?:\/\/)?((([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,})|localhost|(\d{1,3}\.){3}\d{1,3})(:\d+)?(\/.*)?$/;
+  return pattern.test(trimmed);
+};
 
 /* ── Orb background that persists & floats in idle state ── */
 function BackgroundOrbs({ hasSentMessage }) {
@@ -578,17 +719,16 @@ export default function HomePage() {
     });
   }, [showOrbs]);
 
-  /* Hero entrance: bottom-to-top reveal + h1 Text 3D Flip */
+  /* Hero entrance: bottom-to-top reveal */
   useLayoutEffect(() => {
     if (hasSentMessage) return;
 
     const root = heroRef.current;
     const titleEl = heroTitleRef.current;
-    const subtitleEl = heroSubtitleRef.current;
     const inputWrap = heroInputWrapRef.current;
     const suggestionsEl = heroSuggestionsRef.current;
     const badgeEl = heroBadgeRef.current;
-    if (!root || !titleEl || !subtitleEl || !inputWrap || !inputPlaceholderRef.current) return;
+    if (!root || !titleEl || !inputWrap || !inputPlaceholderRef.current) return;
 
     const ctx = gsap.context(() => {
       // Calculate dy for inputWrap positioning
@@ -601,18 +741,14 @@ export default function HomePage() {
         opacity: 0,
         y: dy + 40,
       });
-      gsap.set([subtitleEl, badgeEl].filter(Boolean), {
+      gsap.set([badgeEl].filter(Boolean), {
         opacity: 0,
         y: 40,
       });
 
-      const chars = titleEl.querySelectorAll('.hero-title-char');
-      gsap.set(chars, {
-        opacity: 0,
-        rotationX: -95,
-        y: 40,
-        transformOrigin: '50% 100% -20px',
-      });
+      // WelcomeTitle handles its own entrance animation via welcome-char,
+      // so we just set the title wrapper initially visible
+      gsap.set(titleEl, { opacity: 0, y: 20 });
 
       if (suggestionsEl) {
         gsap.set(suggestionsEl, { opacity: 0, y: 20 });
@@ -623,18 +759,10 @@ export default function HomePage() {
         defaults: { ease: 'power3.out' },
       });
 
-      // Bottom → Top staggered animation
-      tl.to(inputWrap, { opacity: 1, y: dy, duration: 0.85 })
-        .to(subtitleEl, { opacity: 1, y: 0, duration: 0.65 }, '-=0.5')
-        .to(chars, {
-          opacity: 1,
-          rotationX: 0,
-          y: 0,
-          duration: 0.8,
-          stagger: 0.02,
-          ease: 'back.out(2.0)',
-        }, '-=0.45')
-        .to(badgeEl, { opacity: 1, y: 0, duration: 0.6 }, '-=0.6');
+      // Animate in order: badge → title → input → chips
+      tl.to(badgeEl, { opacity: 1, y: 0, duration: 0.6 })
+        .to(titleEl, { opacity: 1, y: 0, duration: 0.65 }, '-=0.35')
+        .to(inputWrap, { opacity: 1, y: dy, duration: 0.85 }, '-=0.3');
 
       if (suggestionsEl) {
         const pills = suggestionsEl.querySelectorAll('.hero-suggestion-card');
@@ -706,6 +834,15 @@ export default function HomePage() {
     if (!input.trim() || isLoading) return;
 
     const query = input.trim();
+    if (!isValidUrl(query)) {
+      addToast({
+        type: 'error',
+        title: 'Invalid URL Format',
+        message: 'Please enter a valid website URL or domain name (e.g. google.com).'
+      });
+      return;
+    }
+
     // Prepend protocol if user enters bare domain like 'google.com'
     const processedUrl = query.startsWith('http://') || query.startsWith('https://') 
       ? query 
@@ -853,6 +990,124 @@ export default function HomePage() {
       );
 
       // Fire toast notification
+      if (isFailed) {
+        addToast({ type: 'error', title: 'Scan Failed', message: data.error || 'Unknown error occurred during analysis.' });
+      } else {
+        const riskLevel = data.report?.risk_level || 'Unknown';
+        const riskScore = data.report?.risk_score ?? 0;
+        const toastType = riskScore >= 61 ? 'warning' : riskScore >= 41 ? 'warning' : 'success';
+        addToast({
+          type: toastType,
+          title: `Analysis Complete — ${riskLevel}`,
+          message: `Risk score: ${riskScore}% • Duration: ${data.total_duration_sec}s`,
+        });
+      }
+    } catch (err) {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === botMsgId
+            ? {
+                ...msg,
+                text: `Scan failed: ${err.message}. Make sure Django server is running on http://localhost:8000`,
+                status: 'failed',
+              }
+            : msg
+        )
+      );
+      addToast({ type: 'error', title: 'Connection Error', message: `${err.message}. Make sure the Django server is running.` });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRescanMessage = async (botMsgId, urlToScan) => {
+    if (isLoading) return;
+    
+    // Set status to loading for this specific bot message
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === botMsgId
+          ? {
+              ...msg,
+              status: 'loading',
+              text: `Scanning URL: ${urlToScan}... Processing DOM structure, lexical attributes, WHOIS details, and visual similarity features. Please wait.`,
+              report: null,
+              screenshotUrl: null,
+              urlAnalysisData: null,
+              toolTrace: null,
+              overallStatus: null,
+              duration: null,
+              error: null,
+            }
+          : msg
+      )
+    );
+    setIsLoading(true);
+
+    try {
+      const response = await fetch('http://localhost:8000/api/scan/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ url: urlToScan }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      let resolvedScreenshotUrl = null;
+      if (data.screenshot_path) {
+        const parts = data.screenshot_path.split(/[/\\]/);
+        const filename = parts[parts.length - 1];
+        resolvedScreenshotUrl = `http://localhost:8000/media/screenshots/${filename}`;
+      } else if (data.tool_trace) {
+        const screenshotStep = data.tool_trace.find(
+          (step) => step.step === 'tool_result' && step.tool === 'capture_screenshot'
+        );
+        if (screenshotStep && screenshotStep.content_preview) {
+          try {
+            const cleanedPreview = screenshotStep.content_preview.replace(/\.\.\.$/, '');
+            const parsedPreview = JSON.parse(cleanedPreview + (cleanedPreview.endsWith('}') ? '' : '}'));
+            if (parsedPreview.screenshot_path) {
+              const parts = parsedPreview.screenshot_path.split(/[/\\]/);
+              const filename = parts[parts.length - 1];
+              resolvedScreenshotUrl = `http://localhost:8000/media/screenshots/${filename}`;
+            }
+          } catch (e) {
+            const match = screenshotStep.content_preview.match(/["']screenshot_path["']:\s*["']([^"']+)["']/);
+            if (match && match[1]) {
+              const parts = match[1].split(/[/\\]/);
+              const filename = parts[parts.length - 1];
+              resolvedScreenshotUrl = `http://localhost:8000/media/screenshots/${filename}`;
+            }
+          }
+        }
+      }
+
+      const isFailed = data.overall_status === 'FAILED';
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === botMsgId
+            ? {
+                ...msg,
+                text: isFailed ? `Scan failed: ${data.error || 'Unknown error occurred.'}` : null,
+                status: isFailed ? 'failed' : 'completed',
+                report: data.report,
+                screenshotUrl: resolvedScreenshotUrl,
+                urlAnalysisData: data.url_analysis_data,
+                toolTrace: data.tool_trace,
+                overallStatus: data.overall_status,
+                duration: data.total_duration_sec,
+                error: data.error,
+              }
+            : msg
+        )
+      );
+
       if (isFailed) {
         addToast({ type: 'error', title: 'Scan Failed', message: data.error || 'Unknown error occurred during analysis.' });
       } else {
@@ -1065,13 +1320,14 @@ export default function HomePage() {
             style={{ position: 'relative', zIndex: 10 }}
           >
             {messages.map((msg) => (
-              <div key={msg.id} className={"flex w-full " + (msg.isUser ? "justify-end" : "justify-start")}>
+              <div key={msg.id} className={"flex w-full mb-6 " + (msg.isUser ? "justify-end" : "justify-start")}>
                 {msg.isUser ? (
-                  <div className="max-w-[85%] sm:max-w-[70%] px-5 py-3.5 text-[15px] leading-relaxed bg-gray-200 dark:bg-[#2f2f2f] text-gray-800 dark:text-gray-100 rounded-3xl rounded-tr-sm shadow-sm font-semibold tracking-wide border border-gray-300/20">
+                  <div className="group relative max-w-[85%] sm:max-w-[70%] px-5 py-3.5 text-[15px] leading-relaxed bg-gray-200 dark:bg-[#2f2f2f] text-gray-800 dark:text-gray-100 rounded-3xl rounded-tr-sm shadow-sm font-semibold tracking-wide border border-gray-300/20">
                     {msg.text}
+                    <MessageActionBar msg={msg} onRescan={handleRescanMessage} isLoadingGlobal={isLoading} />
                   </div>
                 ) : (
-                  <div className="w-full">
+                  <div className="group relative w-full">
                     <div className="flex-1 min-w-0 bg-transparent py-1.5 flex flex-col gap-4">
                       {(msg.status === 'loading' || msg.status === 'completed') && (
                         <OrchestratorProgress 
@@ -1096,6 +1352,7 @@ export default function HomePage() {
                         />
                       )}
                     </div>
+                    <MessageActionBar msg={msg} onRescan={handleRescanMessage} isLoadingGlobal={isLoading} />
                   </div>
                 )}
               </div>
@@ -1108,13 +1365,14 @@ export default function HomePage() {
         {!hasSentMessage && (
           <div
             ref={heroRef}
-            className="flex-1 flex items-center justify-center px-4 md:px-8"
-            style={{ position: 'relative', zIndex: 10 }}
+            className="flex-1 flex flex-col items-center justify-center px-4 md:px-8"
+            style={{ position: 'relative', zIndex: 10, minHeight: 0 }}
           >
-            <div className="w-full max-w-3xl flex flex-col items-center text-center text-slate-500 dark:text-slate-400 select-none">
+            <div className="w-full max-w-3xl flex flex-col items-center text-center select-none">
+              {/* Badge */}
               <div
                 ref={heroBadgeRef}
-                className="mb-5 inline-flex items-center gap-2 rounded-full border border-indigo-500/25 bg-indigo-500/8 px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-indigo-600 dark:border-indigo-400/30 dark:bg-indigo-500/12 dark:text-indigo-300"
+                className="mb-6 inline-flex items-center gap-2 rounded-full border border-indigo-500/25 bg-indigo-500/8 px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-indigo-600 dark:border-indigo-400/30 dark:bg-indigo-500/12 dark:text-indigo-300"
               >
                 <span className="relative flex h-2 w-2">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-60" />
@@ -1123,79 +1381,43 @@ export default function HomePage() {
                 PhishLens AI Agent Beta
               </div>
 
+              {/* Title */}
               <h1
                 ref={heroTitleRef}
-                className="text-3xl md:text-5xl font-black tracking-tight mb-4 flex flex-wrap justify-center items-center gap-x-2 min-h-[1.2em] w-full"
-                aria-label="How can I assist your security?"
-                style={{ perspective: '1000px', transformStyle: 'preserve-3d' }}
+                className="text-3xl md:text-5xl font-black tracking-tight mb-5 min-h-[1.2em] w-full font-habibi"
+                aria-label={`${getGreeting()}, ${USER_FIRST_NAME}`}
               >
-                {/* Static Prefix: "How can I assist your" */}
-                <span className="flex whitespace-nowrap gap-x-2 md:gap-x-2.5" style={{ transformStyle: 'preserve-3d' }}>
-                  {HERO_TITLE_PREFIX.split(' ').map((word, wIdx) => (
-                    <span key={wIdx} className="inline-flex whitespace-nowrap" style={{ transformStyle: 'preserve-3d' }}>
-                      {word.split('').map((char, cIdx) => (
-                        <span
-                          key={cIdx}
-                          className="hero-title-char inline-block bg-gradient-to-r from-gray-900 via-indigo-800 to-violet-700 bg-clip-text text-transparent dark:from-white dark:via-indigo-200 dark:to-violet-300 origin-bottom transform-gpu"
-                          style={{ backfaceVisibility: 'hidden', transformStyle: 'preserve-3d' }}
-                        >
-                          {char}
-                        </span>
-                      ))}
-                    </span>
-                  ))}
-                </span>
-
-                {/* Dynamic Cycling Word with smooth width animation */}
-                <AnimatedCyclingWord word={CYCLING_WORDS[currentWordIdx]} isThinking={isThinking} />
+                <WelcomeTitle name={USER_FIRST_NAME} />
               </h1>
 
-              <div className="mt-8 w-full max-w-2xl">
+              {/* Input placeholder (invisible spacer for floating input bar positioning) */}
+              <div className="w-full max-w-2xl">
                 <div
                   ref={inputPlaceholderRef}
-                  className="w-full h-14 mx-auto max-w-2xl opacity-0 pointer-events-none"
+                  className="w-full h-[70px] mx-auto max-w-2xl opacity-0 pointer-events-none"
                 />
               </div>
 
-                <div
-                  ref={heroSuggestionsRef}
-                  className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-2xl px-4 sm:px-0"
-                >
-                  {HERO_SUGGESTIONS.map((suggestion, sIdx) => {
-                    const Icon = suggestion.icon;
-                    return (
-                      <button
-                        key={sIdx}
-                        type="button"
-                        onClick={() => setInput(suggestion.value)}
-                        className={`hero-suggestion-card group relative overflow-hidden flex flex-col items-start text-left p-4.5 rounded-xl border transition-all duration-300 cursor-pointer shadow-sm hover:shadow-md hover:-translate-y-0.5 ${suggestion.bg} ${suggestion.border} ${suggestion.hoverBorder}`}
-                      >
-                        {/* Large watermark background icon */}
-                        <div className="absolute right-1 top-1 opacity-[0.09] group-hover:opacity-[0.19] transition-opacity duration-300 pointer-events-none select-none">
-                          <Icon size={50} strokeWidth={2} className={suggestion.color} />
-                        </div>
-
-                        {/* Pulsing dot status badge */}
-                        <div className="mb-3.5 flex items-center gap-2 relative z-10">
-                          <span className="relative flex h-2 w-2">
-                            <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${suggestion.pingBg}`} />
-                            <span className={`relative inline-flex h-2 w-2 rounded-full ${suggestion.dotBg}`} />
-                          </span>
-                        </div>
-
-                        {/* Text section aligned to the bottom */}
-                        <div className="space-y-1 relative z-10 mt-auto">
-                          <h3 className="font-bold text-[13.5px] text-gray-800 dark:text-gray-200 group-hover:text-indigo-655 dark:group-hover:text-indigo-400 transition-colors">
-                            {suggestion.title}
-                          </h3>
-                          <p className="text-[11.5px] text-gray-500 dark:text-gray-400 leading-normal font-medium">
-                            {suggestion.description}
-                          </p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+              {/* Bottom chips — horizontal pill row, sits below input */}
+              <div
+                ref={heroSuggestionsRef}
+                className="mt-10 flex flex-wrap items-center justify-center gap-2.5 w-full max-w-2xl px-4 sm:px-0"
+              >
+                {HERO_CHIPS.map((chip, cIdx) => {
+                  const ChipIcon = chip.icon;
+                  return (
+                    <button
+                      key={cIdx}
+                      type="button"
+                      onClick={() => setInput(chip.value)}
+                      className="hero-suggestion-card group inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200/80 dark:border-gray-700/60 bg-white/70 dark:bg-[#2a2a2a]/70 backdrop-blur-sm text-[13px] font-semibold text-gray-700 dark:text-gray-300 transition-all duration-300 cursor-pointer shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-indigo-300 dark:hover:border-indigo-500/40 hover:bg-indigo-50/50 dark:hover:bg-indigo-500/10"
+                    >
+                      <ChipIcon size={15} strokeWidth={2.2} className="text-gray-400 dark:text-gray-500 group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-colors" />
+                      {chip.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
@@ -1258,7 +1480,7 @@ export default function HomePage() {
             <button
               type="submit"
               disabled={!input.trim() || isLoading}
-              className={"absolute right-2.5 p-2.5 rounded-2xl flex items-center justify-center transition-all cursor-pointer hover:scale-105 duration-300 " + (input.trim() && !isLoading ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-500/30 dark:bg-white dark:text-black dark:hover:bg-gray-200 dark:shadow-white/10" : "bg-gray-200/80 text-gray-400 dark:bg-[#3d3d3d] dark:text-gray-500")}
+              className={"absolute right-2.5 p-2.5 rounded-2xl flex items-center justify-center transition-all cursor-pointer hover:scale-105 duration-300 " + (input.trim() && !isLoading ? "bg-[#C15B2B] text-white hover:bg-[#A84A1F] shadow-lg shadow-indigo-500/30 dark:bg-[#C15B2B] dark:text-white dark:hover:bg-[#A84A1F] dark:shadow-white/10" : "bg-gray-200/80 text-gray-400 dark:bg-[#3d3d3d] dark:text-gray-500")}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-arrow-up"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
             </button>

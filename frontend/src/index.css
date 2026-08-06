@@ -1,5 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Habibi&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Cabin:ital,wght@0,400..700;1,400..700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Habibi&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap');
 
 @import "tailwindcss";
 @custom-variant dark (&:is(.dark *));
@@ -17,9 +19,10 @@
   --shadow:
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
 
-  --sans: 'Cabin', serif, system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: 'Cabin', serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+  --sans: 'Outfit', sans-serif, system-ui;
+  --heading: 'Habibi', serif, system-ui;
   --mono: ui-monospace, Consolas, monospace;
+  --heading-font: 'Habibi', serif, system-ui;
 
   font: 18px/145% var(--sans);
   letter-spacing: 0.18px;
@@ -119,7 +122,11 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
-span{
+h1, h2, .font-habibi {
+  font-family: var(--heading) !important;
+}
+
+body, p, div, button, input, select, textarea, a, li, .font-outfit {
   font-family: var(--sans);
 }
 
@@ -132,4 +139,34 @@ span{
 .no-scrollbar {
   -ms-overflow-style: none;  /* IE and Edge */
   scrollbar-width: none;  /* Firefox */
+}
+
+/* ── Login page keyframe animations ── */
+@keyframes login-float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(30px, -20px) scale(1.08); }
+}
+@keyframes login-float-reverse {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-20px, 15px) scale(1.06); }
+}
+@keyframes login-badge-pulse {
+  0%, 100% { box-shadow: 0 8px 24px rgba(124, 58, 237, 0.3); }
+  50% { box-shadow: 0 8px 32px rgba(124, 58, 237, 0.5); }
+}
+
+/* ── Torch icon float animation ── */
+@keyframes torch-float {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+    filter: drop-shadow(0 0 12px rgba(193, 91, 43, 0.45));
+  }
+  50% {
+    transform: translateY(-6px) rotate(3deg);
+    filter: drop-shadow(0 0 20px rgba(193, 91, 43, 0.65));
+  }
+}
+
+.torch-icon-float {
+  animation: torch-float 3s ease-in-out infinite;
 }
