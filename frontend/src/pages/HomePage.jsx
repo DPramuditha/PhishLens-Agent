@@ -39,6 +39,7 @@ import { DotmHex2 } from '../components/ui/dotm-hex-2';
 import OrchestratorProgress from '../components/OrchestratorProgress';
 import { useToast } from '../components/ToastContext';
 import MessageActionBar from '../components/MessageActionBar';
+import WelcomeCharacterAnimation from '../components/WelcomeCharacterAnimation';
 
 const PLACEHOLDERS = [
   'Paste URL to scan for phishing...',
@@ -117,8 +118,8 @@ function WelcomeTitle({ name }) {
         alt="PhishLens torch"
         className="welcome-char torch-icon-float"
         style={{
-          width: 52,
-          height: 52,
+          width: 50,
+          height: 50,
           objectFit: 'contain',
           marginRight: 12,
           display: 'inline-block',
@@ -127,7 +128,7 @@ function WelcomeTitle({ name }) {
           filter: 'drop-shadow(0 0 12px rgba(193, 91, 43, 0.45))',
         }}
       />
-      {/* Greeting text — plain black / white */}
+      {/* Greeting text — solid white/dark typography */}
       {fullText.split('').map((char, idx) => (
         <span
           key={`g-${idx}`}
@@ -242,7 +243,7 @@ function PlaceholderCycler({ leftPaddingClass }) {
 
 const HERO_TITLE_PREFIX = 'How can I assist your';
 const CYCLING_WORDS = ['security', 'inboxes', 'domains', 'credentials', 'networks'];
-const USER_FIRST_NAME = 'dimuthu';
+const USER_FIRST_NAME = 'Dimuthu';
 const HERO_SUGGESTIONS = [
   {
     title: 'Scan URL',
@@ -381,21 +382,21 @@ function AnimatedTitle({ title }) {
     if (chars.length === 0) return;
 
     gsap.killTweensOf(chars);
-    gsap.fromTo(chars, 
+    gsap.fromTo(chars,
       { opacity: 0, y: 12, rotateX: -45 },
       { opacity: 1, y: 0, rotateX: 0, duration: 0.5, stagger: 0.03, ease: 'power2.out' }
     );
   }, [title]);
 
   return (
-    <div 
-      ref={containerRef} 
+    <div
+      ref={containerRef}
       className="font-semibold text-lg text-gray-700 dark:text-gray-300 flex flex-wrap"
       style={{ perspective: '1000px' }}
     >
       {title.split('').map((char, idx) => (
-        <span 
-          key={idx} 
+        <span
+          key={idx}
           className="title-char inline-block origin-bottom transform-gpu"
           style={{ whiteSpace: char === ' ' ? 'pre' : 'normal' }}
         >
@@ -448,7 +449,7 @@ function AnimatedCyclingWord({ word, isThinking }) {
   useLayoutEffect(() => {
     if (!placeholderRef.current || !containerRef.current) return;
     const newWidth = placeholderRef.current.offsetWidth;
-    
+
     gsap.to(containerRef.current, {
       width: newWidth,
       duration: 0.5,
@@ -494,7 +495,7 @@ function AnimatedCyclingWord({ word, isThinking }) {
         </span>
         <span ref={cursorRef} className="scramble-cursor inline-block text-indigo-600 dark:text-indigo-400 ml-0.5 font-bold">_</span>
       </span>
-      
+
       {/* Invisible placeholder to reserve vertical height and structure */}
       <span ref={placeholderRef} className="opacity-0 select-none pointer-events-none font-black flex items-center whitespace-nowrap">
         {isThinking && (
@@ -549,10 +550,15 @@ export default function HomePage() {
   const heroInputWrapRef = useRef(null);
   const heroSuggestionsRef = useRef(null);
   const heroBadgeRef = useRef(null);
+  const characterWrapRef = useRef(null);
   const inputPlaceholderRef = useRef(null);
   const inputFormRef = useRef(null);
   const shieldIconRef = useRef(null);
   const warningTextRef = useRef(null);
+
+  const [isInputFocused, setIsInputFocused] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const typingTimeoutRef = useRef(null);
 
   // ── Dock item configs ──────────────────────────────────────────────────────
   const dockTopItems = [
@@ -561,7 +567,7 @@ export default function HomePage() {
       label: 'PhishLens Agent',
       lottieData: chatbotAnimData,
       lottieRef: chatbotLottieRef,
-      onClick: () => {},
+      onClick: () => { },
       hasDot: false,
     },
     {
@@ -592,7 +598,7 @@ export default function HomePage() {
       label: 'AI Chat Assistant',
       lottieData: isDarkMode ? chatAnimData : darkChatAnimData,
       lottieRef: chatLottieRef,
-      onClick: () => {},
+      onClick: () => { },
       hasDot: false,
     },
     {
@@ -600,7 +606,7 @@ export default function HomePage() {
       label: 'Scan Logs',
       lottieData: isDarkMode ? historyAnimData : darkHistoryAnimData,
       lottieRef: historyLottieRef,
-      onClick: () => {},
+      onClick: () => { },
       hasDot: false,
     },
     {
@@ -728,13 +734,16 @@ export default function HomePage() {
     const inputWrap = heroInputWrapRef.current;
     const suggestionsEl = heroSuggestionsRef.current;
     const badgeEl = heroBadgeRef.current;
+    const characterEl = characterWrapRef.current;
     if (!root || !titleEl || !inputWrap || !inputPlaceholderRef.current) return;
 
     const ctx = gsap.context(() => {
-      // Calculate dy for inputWrap positioning
+      // Calculate dy for inputWrap positioning precisely based on inputForm
       const rectPlaceholder = inputPlaceholderRef.current.getBoundingClientRect();
-      const rectInputBar = inputWrap.getBoundingClientRect();
-      const dy = rectPlaceholder.top - rectInputBar.top;
+      const currentY = gsap.getProperty(inputWrap, "y") || 0;
+      const rectForm = inputFormRef.current ? inputFormRef.current.getBoundingClientRect() : inputWrap.getBoundingClientRect();
+      const untranslatedFormTop = rectForm.top - currentY;
+      const dy = rectPlaceholder.top - untranslatedFormTop;
 
       // 1. Set initial states for elements
       gsap.set(inputWrap, {
@@ -743,30 +752,38 @@ export default function HomePage() {
       });
       gsap.set([badgeEl].filter(Boolean), {
         opacity: 0,
-        y: 40,
+        y: 20,
       });
 
-      // WelcomeTitle handles its own entrance animation via welcome-char,
-      // so we just set the title wrapper initially visible
-      gsap.set(titleEl, { opacity: 0, y: 20 });
+      if (characterEl) {
+        gsap.set(characterEl, {
+          opacity: 0,
+          y: 20,
+          scale: 0.96,
+        });
+      }
+
+      // WelcomeTitle chars handle their entrance at t=0
+      gsap.set(titleEl, { opacity: 1, y: 0 });
 
       if (suggestionsEl) {
         gsap.set(suggestionsEl, { opacity: 0, y: 20 });
       }
 
-      // 2. Timeline
+      // 2. Timeline: Greeting first -> Character emerges -> Input bar -> Chips -> Badge
       const tl = gsap.timeline({
         defaults: { ease: 'power3.out' },
       });
 
-      // Animate in order: badge → title → input → chips
-      tl.to(badgeEl, { opacity: 1, y: 0, duration: 0.6 })
-        .to(titleEl, { opacity: 1, y: 0, duration: 0.65 }, '-=0.35')
-        .to(inputWrap, { opacity: 1, y: dy, duration: 0.85 }, '-=0.3');
+      // Background character materializes right after greeting
+      if (characterEl) {
+        tl.to(characterEl, { opacity: 1, y: 0, scale: 1, duration: 0.85 }, 0.35);
+      }
+      tl.to(inputWrap, { opacity: 1, y: dy, duration: 0.8 }, 0.55);
 
       if (suggestionsEl) {
         const pills = suggestionsEl.querySelectorAll('.hero-suggestion-card');
-        tl.to(suggestionsEl, { opacity: 1, y: 0, duration: 0.55 }, '-=0.5');
+        tl.to(suggestionsEl, { opacity: 1, y: 0, duration: 0.5 }, 0.65);
         if (pills.length > 0) {
           gsap.set(pills, { opacity: 0, scale: 0.92 });
           tl.to(pills, {
@@ -775,9 +792,11 @@ export default function HomePage() {
             duration: 0.5,
             stagger: 0.06,
             ease: 'back.out(1.8)',
-          }, '-=0.4');
+          }, 0.7);
         }
       }
+
+      tl.to(badgeEl, { opacity: 1, y: 0, duration: 0.6 }, 0.75);
     }, root);
 
     return () => ctx.revert();
@@ -785,12 +804,12 @@ export default function HomePage() {
 
   // ── Reset/Update Unified Input Bar position relative to its hero placeholder ──
   const resetInputPosition = useCallback(() => {
-    if (hasSentMessage || !inputPlaceholderRef.current || !heroInputWrapRef.current) return;
+    if (hasSentMessage || !inputPlaceholderRef.current || !inputFormRef.current || !heroInputWrapRef.current) return;
     const rectPlaceholder = inputPlaceholderRef.current.getBoundingClientRect();
     const currentY = gsap.getProperty(heroInputWrapRef.current, "y") || 0;
-    const rectInputBar = heroInputWrapRef.current.getBoundingClientRect();
-    const untranslatedTop = rectInputBar.top - currentY;
-    const dy = rectPlaceholder.top - untranslatedTop;
+    const rectForm = inputFormRef.current.getBoundingClientRect();
+    const untranslatedFormTop = rectForm.top - currentY;
+    const dy = rectPlaceholder.top - untranslatedFormTop;
     gsap.set(heroInputWrapRef.current, { y: dy });
   }, [hasSentMessage]);
 
@@ -844,8 +863,8 @@ export default function HomePage() {
     }
 
     // Prepend protocol if user enters bare domain like 'google.com'
-    const processedUrl = query.startsWith('http://') || query.startsWith('https://') 
-      ? query 
+    const processedUrl = query.startsWith('http://') || query.startsWith('https://')
+      ? query
       : `https://${query}`;
 
     const isFirst = !hasSentMessage;
@@ -872,12 +891,13 @@ export default function HomePage() {
         }
       });
 
-      // Fade out hero badge, title, suggestions
-      tl.to([heroBadgeRef.current, heroTitleRef.current, heroSuggestionsRef.current].filter(Boolean), {
+      // Fade out hero character, badge, title, suggestions
+      tl.to([characterWrapRef.current, heroBadgeRef.current, heroTitleRef.current, heroSuggestionsRef.current].filter(Boolean), {
         opacity: 0,
-        y: -15,
-        duration: 0.25,
-        stagger: 0.05,
+        y: -18,
+        scale: 0.97,
+        duration: 0.28,
+        stagger: 0.04,
         ease: 'power2.in'
       });
 
@@ -973,17 +993,17 @@ export default function HomePage() {
         prev.map((msg) =>
           msg.id === botMsgId
             ? {
-                ...msg,
-                text: isFailed ? `Scan failed: ${data.error || 'Unknown error occurred.'}` : null,
-                status: isFailed ? 'failed' : 'completed',
-                report: data.report,
-                screenshotUrl: resolvedScreenshotUrl,
-                urlAnalysisData: data.url_analysis_data,
-                toolTrace: data.tool_trace,
-                overallStatus: data.overall_status,
-                duration: data.total_duration_sec,
-                error: data.error,
-              }
+              ...msg,
+              text: isFailed ? `Scan failed: ${data.error || 'Unknown error occurred.'}` : null,
+              status: isFailed ? 'failed' : 'completed',
+              report: data.report,
+              screenshotUrl: resolvedScreenshotUrl,
+              urlAnalysisData: data.url_analysis_data,
+              toolTrace: data.tool_trace,
+              overallStatus: data.overall_status,
+              duration: data.total_duration_sec,
+              error: data.error,
+            }
             : msg
         )
       );
@@ -1006,10 +1026,10 @@ export default function HomePage() {
         prev.map((msg) =>
           msg.id === botMsgId
             ? {
-                ...msg,
-                text: `Scan failed: ${err.message}. Make sure Django server is running on http://localhost:8000`,
-                status: 'failed',
-              }
+              ...msg,
+              text: `Scan failed: ${err.message}. Make sure Django server is running on http://localhost:8000`,
+              status: 'failed',
+            }
             : msg
         )
       );
@@ -1021,23 +1041,23 @@ export default function HomePage() {
 
   const handleRescanMessage = async (botMsgId, urlToScan) => {
     if (isLoading) return;
-    
+
     // Set status to loading for this specific bot message
     setMessages((prev) =>
       prev.map((msg) =>
         msg.id === botMsgId
           ? {
-              ...msg,
-              status: 'loading',
-              text: `Scanning URL: ${urlToScan}... Processing DOM structure, lexical attributes, WHOIS details, and visual similarity features. Please wait.`,
-              report: null,
-              screenshotUrl: null,
-              urlAnalysisData: null,
-              toolTrace: null,
-              overallStatus: null,
-              duration: null,
-              error: null,
-            }
+            ...msg,
+            status: 'loading',
+            text: `Scanning URL: ${urlToScan}... Processing DOM structure, lexical attributes, WHOIS details, and visual similarity features. Please wait.`,
+            report: null,
+            screenshotUrl: null,
+            urlAnalysisData: null,
+            toolTrace: null,
+            overallStatus: null,
+            duration: null,
+            error: null,
+          }
           : msg
       )
     );
@@ -1092,17 +1112,17 @@ export default function HomePage() {
         prev.map((msg) =>
           msg.id === botMsgId
             ? {
-                ...msg,
-                text: isFailed ? `Scan failed: ${data.error || 'Unknown error occurred.'}` : null,
-                status: isFailed ? 'failed' : 'completed',
-                report: data.report,
-                screenshotUrl: resolvedScreenshotUrl,
-                urlAnalysisData: data.url_analysis_data,
-                toolTrace: data.tool_trace,
-                overallStatus: data.overall_status,
-                duration: data.total_duration_sec,
-                error: data.error,
-              }
+              ...msg,
+              text: isFailed ? `Scan failed: ${data.error || 'Unknown error occurred.'}` : null,
+              status: isFailed ? 'failed' : 'completed',
+              report: data.report,
+              screenshotUrl: resolvedScreenshotUrl,
+              urlAnalysisData: data.url_analysis_data,
+              toolTrace: data.tool_trace,
+              overallStatus: data.overall_status,
+              duration: data.total_duration_sec,
+              error: data.error,
+            }
             : msg
         )
       );
@@ -1124,10 +1144,10 @@ export default function HomePage() {
         prev.map((msg) =>
           msg.id === botMsgId
             ? {
-                ...msg,
-                text: `Scan failed: ${err.message}. Make sure Django server is running on http://localhost:8000`,
-                status: 'failed',
-              }
+              ...msg,
+              text: `Scan failed: ${err.message}. Make sure Django server is running on http://localhost:8000`,
+              status: 'failed',
+            }
             : msg
         )
       );
@@ -1220,7 +1240,7 @@ export default function HomePage() {
       />
 
       {/* Main Content Area */}
-      <main 
+      <main
         ref={mainRef}
         className="flex-1 flex flex-col h-full bg-white dark:bg-[#1a1a1a] text-slate-700 dark:text-slate-400 relative transition-colors duration-300 overflow-hidden"
       >
@@ -1261,8 +1281,8 @@ export default function HomePage() {
           </div>
         )}
 
-        <div 
-          id="smooth-wrapper" 
+        <div
+          id="smooth-wrapper"
           className="flex-1 w-full h-full overflow-y-auto no-scrollbar relative z-10 bg-white dark:bg-[#1a1a1a] transition-colors duration-300"
           style={{
             position: 'fixed',
@@ -1275,233 +1295,259 @@ export default function HomePage() {
         >
           <div id="smooth-content" className="w-full flex flex-col min-h-full">
 
-            <header className="h-16 flex items-center justify-center px-6 shrink-0" style={{ position: 'relative', zIndex: 10 }}>
-          {hasSentMessage && (
-            <div className="relative flex items-center gap-3">
-              <AnimatedTitle title={chatTitle} />
-              <button
-                type="button"
-                onClick={() => setIsTitleMenuOpen((prev) => !prev)}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-indigo-50 hover:text-indigo-600 dark:border-gray-700 dark:bg-[#2a2a2a]/80 dark:text-gray-200 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-200 cursor-pointer"
-                aria-label="Open scan dashboard actions"
-              >
-                {isTitleMenuOpen ? <ChevronUp size={20} strokeWidth={3} /> : <ChevronDown size={20} strokeWidth={3} />}
-              </button>
+            <header className={"flex items-center justify-center px-6 shrink-0 " + (hasSentMessage ? "h-16" : "h-6 md:h-8")} style={{ position: 'relative', zIndex: 10 }}>
+              {hasSentMessage && (
+                <div className="relative flex items-center gap-3">
+                  <AnimatedTitle title={chatTitle} />
+                  <button
+                    type="button"
+                    onClick={() => setIsTitleMenuOpen((prev) => !prev)}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-indigo-50 hover:text-indigo-600 dark:border-gray-700 dark:bg-[#2a2a2a]/80 dark:text-gray-200 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-200 cursor-pointer"
+                    aria-label="Open scan dashboard actions"
+                  >
+                    {isTitleMenuOpen ? <ChevronUp size={20} strokeWidth={3} /> : <ChevronDown size={20} strokeWidth={3} />}
+                  </button>
 
-              <div
-                ref={titleMenuRef}
-                className="absolute left-0 top-12 w-44 rounded-2xl border border-gray-200/80 bg-white/95 p-1.5 shadow-xl backdrop-blur-xl dark:border-gray-700 dark:bg-[#1f1f1f]/95"
-                style={{ opacity: 0, transformOrigin: 'top left', pointerEvents: 'none' }}
-              >
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-gray-700 transition hover:bg-indigo-50 hover:text-indigo-700 dark:text-gray-200 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-100"
-                >
-                  <Pencil size={14} />
-                  Rename
-                </button>
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-rose-600 transition hover:bg-rose-500/10 dark:text-rose-300 dark:hover:bg-rose-500/10"
-                >
-                  <Trash2 size={14} />
-                  Delete
-                </button>
-              </div>
-            </div>
-          )}
-        </header>
-
-        {/* Messages area — only visible after first message */}
-        {hasSentMessage && (
-          <section
-            className="w-full max-w-4xl mx-auto flex flex-col gap-6 pt-4 px-4 pb-44 md:px-12"
-            style={{ position: 'relative', zIndex: 10 }}
-          >
-            {messages.map((msg) => (
-              <div key={msg.id} className={"flex w-full mb-6 " + (msg.isUser ? "justify-end" : "justify-start")}>
-                {msg.isUser ? (
-                  <div className="group relative max-w-[85%] sm:max-w-[70%] px-5 py-3.5 text-[15px] leading-relaxed bg-gray-200 dark:bg-[#2f2f2f] text-gray-800 dark:text-gray-100 rounded-3xl rounded-tr-sm shadow-sm font-semibold tracking-wide border border-gray-300/20">
-                    {msg.text}
-                    <MessageActionBar msg={msg} onRescan={handleRescanMessage} isLoadingGlobal={isLoading} />
+                  <div
+                    ref={titleMenuRef}
+                    className="absolute left-0 top-12 w-44 rounded-2xl border border-gray-200/80 bg-white/95 p-1.5 shadow-xl backdrop-blur-xl dark:border-gray-700 dark:bg-[#1f1f1f]/95"
+                    style={{ opacity: 0, transformOrigin: 'top left', pointerEvents: 'none' }}
+                  >
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-gray-700 transition hover:bg-indigo-50 hover:text-indigo-700 dark:text-gray-200 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-100"
+                    >
+                      <Pencil size={14} />
+                      Rename
+                    </button>
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-rose-600 transition hover:bg-rose-500/10 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                    >
+                      <Trash2 size={14} />
+                      Delete
+                    </button>
                   </div>
-                ) : (
-                  <div className="group relative w-full">
-                    <div className="flex-1 min-w-0 bg-transparent py-1.5 flex flex-col gap-4">
-                      {(msg.status === 'loading' || msg.status === 'completed') && (
-                        <OrchestratorProgress 
-                          targetUrl={msg.url || 'Target URL'} 
-                          status={msg.status}
-                          duration={msg.duration}
-                        />
-                      )}
-                      {msg.status === 'failed' && (
-                        <div className="p-4 rounded-2xl bg-rose-500/10 dark:bg-rose-500/15 border border-rose-500/30 text-rose-600 dark:text-rose-400 flex items-center gap-3 text-sm max-w-[85%] shadow-sm">
-                          <AlertCircle size={20} className="shrink-0" />
-                          <p>{msg.text}</p>
+                </div>
+              )}
+            </header>
+
+            {/* Messages area — only visible after first message */}
+            {hasSentMessage && (
+              <section
+                className="w-full max-w-4xl mx-auto flex flex-col gap-6 pt-4 px-4 pb-44 md:px-12"
+                style={{ position: 'relative', zIndex: 10 }}
+              >
+                {messages.map((msg) => (
+                  <div key={msg.id} className={"flex w-full mb-6 " + (msg.isUser ? "justify-end" : "justify-start")}>
+                    {msg.isUser ? (
+                      <div className="group relative max-w-[85%] sm:max-w-[70%] px-5 py-3.5 text-[15px] leading-relaxed bg-gray-200 dark:bg-[#2f2f2f] text-gray-800 dark:text-gray-100 rounded-3xl rounded-tr-sm shadow-sm font-semibold tracking-wide border border-gray-300/20">
+                        {msg.text}
+                        <MessageActionBar msg={msg} onRescan={handleRescanMessage} isLoadingGlobal={isLoading} />
+                      </div>
+                    ) : (
+                      <div className="group relative w-full">
+                        <div className="flex-1 min-w-0 bg-transparent py-1.5 flex flex-col gap-4">
+                          {(msg.status === 'loading' || msg.status === 'completed') && (
+                            <OrchestratorProgress
+                              targetUrl={msg.url || 'Target URL'}
+                              status={msg.status}
+                              duration={msg.duration}
+                            />
+                          )}
+                          {msg.status === 'failed' && (
+                            <div className="p-4 rounded-2xl bg-rose-500/10 dark:bg-rose-500/15 border border-rose-500/30 text-rose-600 dark:text-rose-400 flex items-center gap-3 text-sm max-w-[85%] shadow-sm">
+                              <AlertCircle size={20} className="shrink-0" />
+                              <p>{msg.text}</p>
+                            </div>
+                          )}
+                          {msg.status === 'completed' && (
+                            <ReportDashboard
+                              report={msg.report}
+                              duration={msg.duration}
+                              screenshotUrl={msg.screenshotUrl}
+                              toolTrace={msg.toolTrace}
+                              urlAnalysisData={msg.urlAnalysisData}
+                            />
+                          )}
                         </div>
-                      )}
-                      {msg.status === 'completed' && (
-                        <ReportDashboard 
-                          report={msg.report}
-                          duration={msg.duration}
-                          screenshotUrl={msg.screenshotUrl}
-                          toolTrace={msg.toolTrace}
-                          urlAnalysisData={msg.urlAnalysisData}
-                        />
-                      )}
-                    </div>
-                    <MessageActionBar msg={msg} onRescan={handleRescanMessage} isLoadingGlobal={isLoading} />
+                        <MessageActionBar msg={msg} onRescan={handleRescanMessage} isLoadingGlobal={isLoading} />
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
-            <div ref={messagesEndRef} />
-          </section>
-        )}
+                ))}
+                <div ref={messagesEndRef} />
+              </section>
+            )}
 
-        {/* Centered hero + input — only visible before first message */}
-        {!hasSentMessage && (
-          <div
-            ref={heroRef}
-            className="flex-1 flex flex-col items-center justify-center px-4 md:px-8"
-            style={{ position: 'relative', zIndex: 10, minHeight: 0 }}
-          >
-            <div className="w-full max-w-3xl flex flex-col items-center text-center select-none">
-              {/* Badge */}
+            {/* Centered hero + input — only visible before first message */}
+            {!hasSentMessage && (
               <div
-                ref={heroBadgeRef}
-                className="mb-6 inline-flex items-center gap-2 rounded-full border border-indigo-500/25 bg-indigo-500/8 px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-indigo-600 dark:border-indigo-400/30 dark:bg-indigo-500/12 dark:text-indigo-300"
+                ref={heroRef}
+                className="flex-1 flex flex-col items-center justify-center px-4 md:px-8 py-2 min-h-0 relative"
+                style={{ position: 'relative', zIndex: 10 }}
               >
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-60" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-indigo-500 dark:bg-indigo-400" />
-                </span>
-                PhishLens AI Agent Beta
+                {/* ── Apple-style Floating Status Badge (Bottom-Right) ── */}
+                <div
+                  ref={heroBadgeRef}
+                  className="absolute right-6 bottom-6 md:right-8 md:bottom-8 z-30 inline-flex items-center gap-2 rounded-full border border-gray-200/80 dark:border-white/10 bg-white/80 dark:bg-white/[0.06] backdrop-blur-xl px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-700 dark:text-gray-300 shadow-sm hover:shadow-md hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-200 cursor-default select-none"
+                >
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                  </span>
+                  PhishLens AI Agent
+                </div>
+
+            <div className="w-full max-w-3xl flex flex-col items-center text-center select-none relative mt-auto mb-6 sm:mb-8 pb-2">
+
+              {/* ── Background Animated Character (from background_image.svg) ── */}
+              <div
+                ref={characterWrapRef}
+                className="absolute left-1/2 -translate-x-1/2 pointer-events-none z-0 w-full max-w-[500px] sm:max-w-[580px] md:max-w-[650px]"
+                style={{
+                  bottom: '215px', // Places full-size character cleanly above bottom greeting title
+                }}
+              >
+                <WelcomeCharacterAnimation
+                  isInputFocused={isInputFocused}
+                  isTyping={isTyping}
+                  isDarkMode={isDarkMode}
+                />
               </div>
 
-              {/* Title */}
+              {/* ── Greeting Title (Renders First with 3D Char Flip & Floating Torch) ── */}
               <h1
                 ref={heroTitleRef}
-                className="text-3xl md:text-5xl font-black tracking-tight mb-5 min-h-[1.2em] w-full font-habibi"
+                className="relative z-10 text-3xl md:text-5xl font-black tracking-tight mb-6 min-h-[1.2em] w-full font-habibi"
                 aria-label={`${getGreeting()}, ${USER_FIRST_NAME}`}
               >
                 <WelcomeTitle name={USER_FIRST_NAME} />
               </h1>
 
-              {/* Input placeholder (invisible spacer for floating input bar positioning) */}
-              <div className="w-full max-w-2xl">
+              {/* ── Input Placeholder (for floating input bar alignment) ── */}
+              <div className="w-full max-w-2xl relative z-10">
                 <div
                   ref={inputPlaceholderRef}
-                  className="w-full h-[70px] mx-auto max-w-2xl opacity-0 pointer-events-none"
+                  className="w-full h-[58px] mx-auto max-w-2xl opacity-0 pointer-events-none"
                 />
               </div>
 
-              {/* Bottom chips — horizontal pill row, sits below input */}
+              {/* ── Suggestion Chips ── */}
               <div
                 ref={heroSuggestionsRef}
-                className="mt-10 flex flex-wrap items-center justify-center gap-2.5 w-full max-w-2xl px-4 sm:px-0"
+                className="relative z-10 mt-6 sm:mt-7 flex flex-wrap items-center justify-center gap-2.5 w-full max-w-2xl px-4 sm:px-0"
               >
-                {HERO_CHIPS.map((chip, cIdx) => {
-                  const ChipIcon = chip.icon;
-                  return (
-                    <button
-                      key={cIdx}
-                      type="button"
-                      onClick={() => setInput(chip.value)}
-                      className="hero-suggestion-card group inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200/80 dark:border-gray-700/60 bg-white/70 dark:bg-[#2a2a2a]/70 backdrop-blur-sm text-[13px] font-semibold text-gray-700 dark:text-gray-300 transition-all duration-300 cursor-pointer shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-indigo-300 dark:hover:border-indigo-500/40 hover:bg-indigo-50/50 dark:hover:bg-indigo-500/10"
-                    >
-                      <ChipIcon size={15} strokeWidth={2.2} className="text-gray-400 dark:text-gray-500 group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-colors" />
-                      {chip.label}
-                    </button>
-                  );
-                })}
+                    {HERO_CHIPS.map((chip, cIdx) => {
+                      const ChipIcon = chip.icon;
+                      return (
+                        <button
+                          key={cIdx}
+                          type="button"
+                          onClick={() => setInput(chip.value)}
+                          className="hero-suggestion-card group inline-flex items-center gap-2 px-4 py-2 rounded-full border border-gray-200/80 dark:border-zinc-800/90 bg-white/80 dark:bg-zinc-900/60 backdrop-blur-md text-[13px] font-medium text-gray-700 dark:text-gray-300 transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md hover:-translate-y-0.5 active:scale-[0.97] hover:border-gray-300 dark:hover:border-zinc-700 hover:bg-white dark:hover:bg-zinc-800/80"
+                        >
+                          <ChipIcon size={14} strokeWidth={2.2} className="text-gray-400 dark:text-zinc-400 group-hover:text-[#C15B2B] dark:group-hover:text-[#C15B2B] transition-colors" />
+                          {chip.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        )}
+            )}
 
           </div>
         </div>
 
-      {/* Unified Input Bar (always mounted, animates from center to bottom) */}
-      <div
-        ref={heroInputWrapRef}
-        className="fixed pt-6 pb-6 pointer-events-none"
-        style={{ 
-          zIndex: 20,
-          paddingLeft: '16px',
-          paddingRight: '16px',
-          left: isExpanded ? '330px' : '0px',
-          width: isExpanded ? 'calc(100% - 330px)' : '100%',
-          transition: 'left 0.5s cubic-bezier(0.25, 1, 0.5, 1), width 0.5s cubic-bezier(0.25, 1, 0.5, 1)',
-          bottom: 0,
-        }}
-      >
-        <div className="max-w-2xl w-full mx-auto relative pointer-events-auto" style={{ zIndex: 1 }}>
-          <form
-            ref={inputFormRef}
-            onSubmit={handleSend}
-            className="relative flex items-center shadow-lg overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500/80 dark:focus-within:ring-indigo-400/80 transition-all border border-slate-200 dark:border-zinc-800/80 backdrop-blur-xl"
-            style={hasSentMessage ? {
-              borderRadius: '9999px',
-              backgroundColor: 'transparent',
-              boxShadow: '0 8px 32px 0 rgba(66,46,168,0.18), 0 1.5px 8px 0 rgba(138,43,226,0.10)',
-            } : {
-              borderRadius: '28px',
-              backgroundColor: 'transparent',
-              boxShadow: '0 12px 40px 0 rgba(66,46,168,0.16), 0 2px 12px 0 rgba(138,43,226,0.12)',
-            }}
-          >
-            {/* Shield Alert Icon (fades out and shrinks on send) */}
-            <div 
-              ref={shieldIconRef}
-              className="pl-4 pr-1 flex items-center text-indigo-500 dark:text-indigo-400 shrink-0"
-              style={hasSentMessage ? { width: 0, opacity: 0, paddingLeft: 0, paddingRight: 0, marginRight: 0 } : {}}
+        {/* Unified Input Bar (always mounted, animates from center to bottom) */}
+        <div
+          ref={heroInputWrapRef}
+          className="fixed pt-6 pb-6 pointer-events-none"
+          style={{
+            zIndex: 20,
+            paddingLeft: '16px',
+            paddingRight: '16px',
+            left: isExpanded ? '330px' : '0px',
+            width: isExpanded ? 'calc(100% - 330px)' : '100%',
+            transition: 'left 0.5s cubic-bezier(0.25, 1, 0.5, 1), width 0.5s cubic-bezier(0.25, 1, 0.5, 1)',
+            bottom: 0,
+          }}
+        >
+          <div className="max-w-2xl w-full mx-auto relative pointer-events-auto" style={{ zIndex: 1 }}>
+            <form
+              ref={inputFormRef}
+              onSubmit={handleSend}
+              className="relative flex items-center shadow-lg overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500/80 dark:focus-within:ring-indigo-400/80 transition-all border border-slate-200 dark:border-zinc-800/80 backdrop-blur-xl"
+              style={hasSentMessage ? {
+                borderRadius: '9999px',
+                backgroundColor: 'transparent',
+                boxShadow: '0 8px 32px 0 rgba(66,46,168,0.18), 0 1.5px 8px 0 rgba(138,43,226,0.10)',
+              } : {
+                borderRadius: '28px',
+                backgroundColor: 'transparent',
+                boxShadow: '0 12px 40px 0 rgba(66,46,168,0.16), 0 2px 12px 0 rgba(138,43,226,0.12)',
+              }}
             >
-              <ShieldAlert size={18} strokeWidth={2.25} />
-            </div>
-            
-            <div className="relative flex-1">
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder=""
-                disabled={isLoading}
-                className={"w-full bg-transparent py-4 pr-14 outline-none text-[15px] text-gray-700 dark:text-gray-200 placeholder-transparent " + (hasSentMessage ? "pl-5" : "pl-2")}
-              />
-              {!input && (
-                <PlaceholderCycler leftPaddingClass={hasSentMessage ? "left-5" : "left-2"} />
-              )}
-            </div>
-            
-            <button
-              type="submit"
-              disabled={!input.trim() || isLoading}
-              className={"absolute right-2.5 p-2.5 rounded-2xl flex items-center justify-center transition-all cursor-pointer hover:scale-105 duration-300 " + (input.trim() && !isLoading ? "bg-[#C15B2B] text-white hover:bg-[#A84A1F] shadow-lg shadow-indigo-500/30 dark:bg-[#C15B2B] dark:text-white dark:hover:bg-[#A84A1F] dark:shadow-white/10" : "bg-gray-200/80 text-gray-400 dark:bg-[#3d3d3d] dark:text-gray-500")}
+              {/* Shield Alert Icon (fades out and shrinks on send) */}
+              <div
+                ref={shieldIconRef}
+                className="pl-4 pr-1 flex items-center text-indigo-500 dark:text-indigo-400 shrink-0"
+                style={hasSentMessage ? { width: 0, opacity: 0, paddingLeft: 0, paddingRight: 0, marginRight: 0 } : {}}
+              >
+                <ShieldAlert size={18} strokeWidth={2.25} />
+              </div>
+
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => {
+                    setInput(e.target.value);
+                    setIsTyping(true);
+                    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+                    typingTimeoutRef.current = setTimeout(() => setIsTyping(false), 600);
+                  }}
+                  onFocus={() => setIsInputFocused(true)}
+                  onBlur={() => {
+                    setIsInputFocused(false);
+                    setIsTyping(false);
+                  }}
+                  placeholder=""
+                  disabled={isLoading}
+                  className={"w-full bg-transparent py-4 pr-14 outline-none text-[15px] text-gray-700 dark:text-gray-200 placeholder-transparent " + (hasSentMessage ? "pl-5" : "pl-2")}
+                />
+                {!input && (
+                  <PlaceholderCycler leftPaddingClass={hasSentMessage ? "left-5" : "left-2"} />
+                )}
+              </div>
+
+              <button
+                type="submit"
+                disabled={!input.trim() || isLoading}
+                className={"absolute right-2.5 p-2.5 rounded-2xl flex items-center justify-center transition-all cursor-pointer hover:scale-105 duration-300 " + (input.trim() && !isLoading ? "bg-[#C15B2B] text-white hover:bg-[#A84A1F] shadow-lg shadow-indigo-500/30 dark:bg-[#C15B2B] dark:text-white dark:hover:bg-[#A84A1F] dark:shadow-white/10" : "bg-gray-200/80 text-gray-400 dark:bg-[#3d3d3d] dark:text-gray-500")}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-arrow-up"><path d="m5 12 7-7 7 7" /><path d="M12 19V5" /></svg>
+              </button>
+            </form>
+
+            {/* Subtext warning (only visible/fades in after first send) */}
+            <div
+              ref={warningTextRef}
+              className="text-xs text-center text-gray-500 dark:text-gray-400 mt-2.5"
+              style={hasSentMessage ? { height: 'auto', opacity: 1, marginTop: 10 } : { height: 0, opacity: 0, overflow: 'hidden' }}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-arrow-up"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
-            </button>
-          </form>
-          
-          {/* Subtext warning (only visible/fades in after first send) */}
-          <div
-            ref={warningTextRef}
-            className="text-xs text-center text-gray-500 dark:text-gray-400 mt-2.5"
-            style={hasSentMessage ? { height: 'auto', opacity: 1, marginTop: 10 } : { height: 0, opacity: 0, overflow: 'hidden' }}
-          >
-            PhishLens can make mistakes. Verify important security warnings.
+              PhishLens can make mistakes. Verify important security warnings.
+            </div>
           </div>
         </div>
-      </div>
       </main>
 
       {/* Global Modals */}
-      <SearchChat 
-        isOpen={isSearchOpen} 
-        onClose={() => setIsSearchOpen(false)} 
-        isDarkMode={isDarkMode} 
+      <SearchChat
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+        isDarkMode={isDarkMode}
       />
     </div>
   );
