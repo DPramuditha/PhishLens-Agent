@@ -40,6 +40,7 @@ import OrchestratorProgress from '../components/OrchestratorProgress';
 import { useToast } from '../components/ToastContext';
 import MessageActionBar from '../components/MessageActionBar';
 import WelcomeCharacterAnimation from '../components/WelcomeCharacterAnimation';
+import AppleTopControls from '../components/AppleTopControls';
 
 const PLACEHOLDERS = [
   'Paste URL to scan for phishing...',
@@ -1280,6 +1281,14 @@ export default function HomePage() {
             />
           </div>
         )}
+
+        {/* ── Top-Right Apple Design Controls (Light/Dark Toggle + Notifications) ── */}
+        <div className="fixed top-4 right-4 sm:top-5 sm:right-6 z-50 pointer-events-auto">
+          <AppleTopControls
+            isDarkMode={isDarkMode}
+            onToggleDarkMode={() => setIsDarkMode((prev) => !prev)}
+          />
+        </div>
 
         <div
           id="smooth-wrapper"

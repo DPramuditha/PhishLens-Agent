@@ -62,14 +62,14 @@ export default function ToastContainer() {
     <div
       style={{
         position: 'fixed',
-        top: 20,
+        top: 64,
         right: 20,
         zIndex: 99999,
         display: 'flex',
         flexDirection: 'column',
-        gap: 12,
+        gap: 10,
         pointerEvents: 'none',
-        maxHeight: 'calc(100vh - 40px)',
+        maxHeight: 'calc(100vh - 80px)',
         overflow: 'visible',
       }}
     >
