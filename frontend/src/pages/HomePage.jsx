@@ -994,17 +994,18 @@ export default function HomePage() {
         prev.map((msg) =>
           msg.id === botMsgId
             ? {
-              ...msg,
-              text: isFailed ? `Scan failed: ${data.error || 'Unknown error occurred.'}` : null,
-              status: isFailed ? 'failed' : 'completed',
-              report: data.report,
-              screenshotUrl: resolvedScreenshotUrl,
-              urlAnalysisData: data.url_analysis_data,
-              toolTrace: data.tool_trace,
-              overallStatus: data.overall_status,
-              duration: data.total_duration_sec,
-              error: data.error,
-            }
+                ...msg,
+                text: isFailed ? `Scan failed: ${data.error || 'Unknown error occurred.'}` : null,
+                status: isFailed ? 'failed' : 'completed',
+                report: data.report,
+                screenshotUrl: resolvedScreenshotUrl,
+                urlAnalysisData: data.url_analysis_data,
+                toolTrace: data.tool_trace,
+                urlAnalysisData: data.url_analysis_data,
+                overallStatus: data.overall_status,
+                duration: data.total_duration_sec,
+                error: data.error,
+              }
             : msg
         )
       );
