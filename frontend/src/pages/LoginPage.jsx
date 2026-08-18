@@ -93,7 +93,7 @@ export default function LoginPage() {
       scale: 0.96,
       opacity: 0,
       duration: 0.35,
-      onComplete: () => navigate('/'),
+      onComplete: () => navigate('/chat'),
     });
   };
 

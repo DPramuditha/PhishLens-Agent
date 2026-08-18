@@ -1001,7 +1001,6 @@ export default function HomePage() {
                 screenshotUrl: resolvedScreenshotUrl,
                 urlAnalysisData: data.url_analysis_data,
                 toolTrace: data.tool_trace,
-                urlAnalysisData: data.url_analysis_data,
                 overallStatus: data.overall_status,
                 duration: data.total_duration_sec,
                 error: data.error,
