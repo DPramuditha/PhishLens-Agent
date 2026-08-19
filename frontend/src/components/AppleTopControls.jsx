@@ -421,14 +421,14 @@ export default function AppleTopControls({
 
         {/* Apple Red Notification Badge Dot */}
         {unreadCount > 0 && (
-          <span className="absolute top-1.5 right-1.5 flex h-2 w-2 items-center justify-center">
-            {/* Animated subtle ping ring */}
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-500 opacity-60" />
-            {/* Solid vibrant Apple red dot */}
+          <span
+            className="absolute top-[4.5px] right-[4.5px] pointer-events-none flex h-[6.5px] w-[6.5px] items-center justify-center"
+            title={`${unreadCount} unread notifications`}
+          >
             <span
-              className="relative inline-flex h-2 w-2 rounded-full bg-[#ff3b30] shadow-sm"
+              className="h-[6.5px] w-[6.5px] rounded-full bg-[#ff3b30] ring-[1.5px] ring-white dark:ring-[#24242a]"
               style={{
-                boxShadow: '0 0 5px rgba(255, 59, 48, 0.7), inset 0 0.5px 0.5px rgba(255, 255, 255, 0.6)',
+                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.12)',
               }}
             />
           </span>

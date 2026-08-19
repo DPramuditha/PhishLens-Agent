@@ -1,12 +1,5 @@
-<svg width="701" height="434" viewBox="0 0 701 434" fill="none" xmlns="http://www.w3.org/2000/svg">
-<g clip-path="url(#clip0_1_5)">
-<path opacity="0.7" d="M359.821 66.2488L368.249 66.0845C511.732 63.2873 630.316 177.336 633.114 320.82C635.911 464.303 521.863 582.888 378.379 585.686L369.95 585.85C226.466 588.647 107.882 474.598 105.084 331.114C102.287 187.63 216.337 69.0462 359.821 66.2488Z" stroke="#4A4A4A" stroke-width="2"/>
-<rect opacity="0.7" x="297.542" y="222.161" width="53" height="117.345" rx="26.5" transform="rotate(-5 297.542 222.161)" stroke="#4A4A4A"/>
-<rect opacity="0.7" x="449.542" y="213.161" width="53" height="117.345" rx="26.5" transform="rotate(-5 449.542 213.161)" stroke="#4A4A4A"/>
-</g>
-<defs>
-<clipPath id="clip0_1_5">
-<rect width="701" height="434" fill="white"/>
-</clipPath>
-</defs>
+<svg width="580" height="580" viewBox="80 40 580 580" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path opacity="0.85" d="M359.821 66.2488L368.249 66.0845C511.732 63.2873 630.316 177.336 633.114 320.82C635.911 464.303 521.863 582.888 378.379 585.686L369.95 585.85C226.466 588.647 107.882 474.598 105.084 331.114C102.287 187.63 216.337 69.0462 359.821 66.2488Z" stroke="#4A4A4A" stroke-width="2"/>
+  <rect opacity="0.85" x="288" y="203" width="72" height="156" rx="36" transform="rotate(-5 288 203)" stroke="#4A4A4A"/>
+  <rect opacity="0.85" x="440" y="194" width="72" height="156" rx="36" transform="rotate(-5 440 194)" stroke="#4A4A4A"/>
 </svg>

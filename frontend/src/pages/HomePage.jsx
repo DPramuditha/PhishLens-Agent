@@ -29,7 +29,6 @@ import darkHistoryAnimData from '../sidebar_images/dark-history.json';
 import chatbotAnimData from '../sidebar_images/claude.json';
 import expandAnimData from '../sidebar_images/expand.json';
 import lightExpandAnimData from '../sidebar_images/light-mode-expand.json';
-import torchImage from '../sidebar_images/Main_image.webp';
 
 import SearchChat from './SearchChat';
 import ProfileBottomSheet from '../components/ProfileBottomSheet';
@@ -50,19 +49,19 @@ const PLACEHOLDERS = [
   'Scan for credential harvesting risks...'
 ];
 
-function getGreeting() {
+function getGreetingParts() {
   const hour = new Date().getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 17) return 'Good afternoon';
-  return 'Good evening';
+  if (hour < 12) return { prefix: 'Good', timeOfDay: 'morning' };
+  if (hour < 17) return { prefix: 'Good', timeOfDay: 'afternoon' };
+  return { prefix: 'Good', timeOfDay: 'evening' };
 }
 
-function WelcomeTitle({ name }) {
+function WelcomeTitle({ name, isInputFocused, isTyping, isDarkMode }) {
   const containerRef = useRef(null);
   const nameWrapRef = useRef(null);
   const isHoverAnimating = useRef(false);
-  const greeting = getGreeting();
-  const fullText = `${greeting}, `;
+  const { prefix, timeOfDay } = getGreetingParts();
+  const timeOfDayWithComma = `${timeOfDay}, `;
 
   // Initial entrance animation
   useEffect(() => {
@@ -82,7 +81,7 @@ function WelcomeTitle({ name }) {
         rotationX: 0,
         y: 0,
         duration: 0.7,
-        stagger: 0.04,
+        stagger: 0.035,
         ease: 'back.out(1.7)',
       }
     );
@@ -110,40 +109,61 @@ function WelcomeTitle({ name }) {
   return (
     <div
       ref={containerRef}
-      className="flex flex-wrap items-center justify-center gap-x-0 font-habibi"
+      className="flex flex-wrap items-center justify-center gap-y-2 font-habibi"
       style={{ perspective: '1000px', transformStyle: 'preserve-3d' }}
     >
-      {/* Torch icon */}
-      <img
-        src={torchImage}
-        alt="PhishLens torch"
-        className="welcome-char torch-icon-float"
+      {/* 1. First word "Good" */}
+      <span className="inline-flex items-center">
+        {prefix.split('').map((char, idx) => (
+          <span
+            key={`p-${idx}`}
+            className="welcome-char inline-block origin-bottom transform-gpu text-gray-900 dark:text-white"
+            style={{
+              backfaceVisibility: 'hidden',
+              transformStyle: 'preserve-3d',
+              whiteSpace: char === ' ' ? 'pre' : 'normal',
+            }}
+          >
+            {char}
+          </span>
+        ))}
+      </span>
+
+      {/* 2. Inline Animated Character (from background_image.svg) */}
+      <span
+        className="welcome-char inline-flex items-center justify-center mx-2.5 sm:mx-3.5 align-middle select-none origin-bottom transform-gpu"
         style={{
-          width: 50,
-          height: 50,
-          objectFit: 'contain',
-          marginRight: 12,
-          display: 'inline-block',
           backfaceVisibility: 'hidden',
           transformStyle: 'preserve-3d',
-          filter: 'drop-shadow(0 0 12px rgba(193, 91, 43, 0.45))',
+          verticalAlign: 'middle',
         }}
-      />
-      {/* Greeting text — solid white/dark typography */}
-      {fullText.split('').map((char, idx) => (
-        <span
-          key={`g-${idx}`}
-          className="welcome-char inline-block origin-bottom transform-gpu text-gray-900 dark:text-white"
-          style={{
-            backfaceVisibility: 'hidden',
-            transformStyle: 'preserve-3d',
-            whiteSpace: char === ' ' ? 'pre' : 'normal',
-          }}
-        >
-          {char}
-        </span>
-      ))}
-      {/* Name with #C15B2B color + hover 3D flip */}
+      >
+        <WelcomeCharacterAnimation
+          size="inline"
+          isInputFocused={isInputFocused}
+          isTyping={isTyping}
+          isDarkMode={isDarkMode}
+        />
+      </span>
+
+      {/* 3. Time of day ("evening, " or "morning, " / "afternoon, ") */}
+      <span className="inline-flex items-center">
+        {timeOfDayWithComma.split('').map((char, idx) => (
+          <span
+            key={`t-${idx}`}
+            className="welcome-char inline-block origin-bottom transform-gpu text-gray-900 dark:text-white"
+            style={{
+              backfaceVisibility: 'hidden',
+              transformStyle: 'preserve-3d',
+              whiteSpace: char === ' ' ? 'pre' : 'normal',
+            }}
+          >
+            {char}
+          </span>
+        ))}
+      </span>
+
+      {/* 4. User Name with #C15B2B color + hover 3D flip */}
       <span
         ref={nameWrapRef}
         className="inline-flex cursor-pointer"
@@ -551,7 +571,6 @@ export default function HomePage() {
   const heroInputWrapRef = useRef(null);
   const heroSuggestionsRef = useRef(null);
   const heroBadgeRef = useRef(null);
-  const characterWrapRef = useRef(null);
   const inputPlaceholderRef = useRef(null);
   const inputFormRef = useRef(null);
   const shieldIconRef = useRef(null);
@@ -735,7 +754,6 @@ export default function HomePage() {
     const inputWrap = heroInputWrapRef.current;
     const suggestionsEl = heroSuggestionsRef.current;
     const badgeEl = heroBadgeRef.current;
-    const characterEl = characterWrapRef.current;
     if (!root || !titleEl || !inputWrap || !inputPlaceholderRef.current) return;
 
     const ctx = gsap.context(() => {
@@ -756,14 +774,6 @@ export default function HomePage() {
         y: 20,
       });
 
-      if (characterEl) {
-        gsap.set(characterEl, {
-          opacity: 0,
-          y: 20,
-          scale: 0.96,
-        });
-      }
-
       // WelcomeTitle chars handle their entrance at t=0
       gsap.set(titleEl, { opacity: 1, y: 0 });
 
@@ -771,20 +781,16 @@ export default function HomePage() {
         gsap.set(suggestionsEl, { opacity: 0, y: 20 });
       }
 
-      // 2. Timeline: Greeting first -> Character emerges -> Input bar -> Chips -> Badge
+      // 2. Timeline: Greeting first -> Input bar -> Chips -> Badge
       const tl = gsap.timeline({
         defaults: { ease: 'power3.out' },
       });
 
-      // Background character materializes right after greeting
-      if (characterEl) {
-        tl.to(characterEl, { opacity: 1, y: 0, scale: 1, duration: 0.85 }, 0.35);
-      }
-      tl.to(inputWrap, { opacity: 1, y: dy, duration: 0.8 }, 0.55);
+      tl.to(inputWrap, { opacity: 1, y: dy, duration: 0.8 }, 0.45);
 
       if (suggestionsEl) {
         const pills = suggestionsEl.querySelectorAll('.hero-suggestion-card');
-        tl.to(suggestionsEl, { opacity: 1, y: 0, duration: 0.5 }, 0.65);
+        tl.to(suggestionsEl, { opacity: 1, y: 0, duration: 0.5 }, 0.55);
         if (pills.length > 0) {
           gsap.set(pills, { opacity: 0, scale: 0.92 });
           tl.to(pills, {
@@ -793,11 +799,11 @@ export default function HomePage() {
             duration: 0.5,
             stagger: 0.06,
             ease: 'back.out(1.8)',
-          }, 0.7);
+          }, 0.6);
         }
       }
 
-      tl.to(badgeEl, { opacity: 1, y: 0, duration: 0.6 }, 0.75);
+      tl.to(badgeEl, { opacity: 1, y: 0, duration: 0.6 }, 0.65);
     }, root);
 
     return () => ctx.revert();
@@ -892,8 +898,8 @@ export default function HomePage() {
         }
       });
 
-      // Fade out hero character, badge, title, suggestions
-      tl.to([characterWrapRef.current, heroBadgeRef.current, heroTitleRef.current, heroSuggestionsRef.current].filter(Boolean), {
+      // Fade out badge, title, suggestions
+      tl.to([heroBadgeRef.current, heroTitleRef.current, heroSuggestionsRef.current].filter(Boolean), {
         opacity: 0,
         y: -18,
         scale: 0.97,
@@ -1001,7 +1007,6 @@ export default function HomePage() {
                 screenshotUrl: resolvedScreenshotUrl,
                 urlAnalysisData: data.url_analysis_data,
                 toolTrace: data.tool_trace,
-                urlAnalysisData: data.url_analysis_data,
                 overallStatus: data.overall_status,
                 duration: data.total_duration_sec,
                 error: data.error,
@@ -1394,7 +1399,7 @@ export default function HomePage() {
             {!hasSentMessage && (
               <div
                 ref={heroRef}
-                className="flex-1 flex flex-col items-center justify-center px-4 md:px-8 py-2 min-h-0 relative"
+                className="flex-1 flex flex-col items-center justify-center px-4 md:px-8 py-8 min-h-[calc(100vh-2.5rem)] relative my-auto"
                 style={{ position: 'relative', zIndex: 10 }}
               >
                 {/* ── Apple-style Floating Status Badge (Bottom-Right) ── */}
@@ -1409,30 +1414,20 @@ export default function HomePage() {
                   PhishLens AI Agent
                 </div>
 
-            <div className="w-full max-w-3xl flex flex-col items-center text-center select-none relative mt-auto mb-6 sm:mb-8 pb-2">
+            <div className="w-full max-w-3xl flex flex-col items-center justify-center text-center select-none relative my-auto py-4">
 
-              {/* ── Background Animated Character (from background_image.svg) ── */}
-              <div
-                ref={characterWrapRef}
-                className="absolute left-1/2 -translate-x-1/2 pointer-events-none z-0 w-full max-w-[500px] sm:max-w-[580px] md:max-w-[650px]"
-                style={{
-                  bottom: '215px', // Places full-size character cleanly above bottom greeting title
-                }}
+              {/* ── Greeting Title (Renders First with 3D Char Flip & Inline Character Animation) ── */}
+              <h1
+                ref={heroTitleRef}
+                className="relative z-10 text-3xl md:text-5xl font-black tracking-tight mb-6 min-h-[1.2em] w-full font-habibi"
+                aria-label={`Good evening, ${USER_FIRST_NAME}`}
               >
-                <WelcomeCharacterAnimation
+                <WelcomeTitle
+                  name={USER_FIRST_NAME}
                   isInputFocused={isInputFocused}
                   isTyping={isTyping}
                   isDarkMode={isDarkMode}
                 />
-              </div>
-
-              {/* ── Greeting Title (Renders First with 3D Char Flip & Floating Torch) ── */}
-              <h1
-                ref={heroTitleRef}
-                className="relative z-10 text-3xl md:text-5xl font-black tracking-tight mb-6 min-h-[1.2em] w-full font-habibi"
-                aria-label={`${getGreeting()}, ${USER_FIRST_NAME}`}
-              >
-                <WelcomeTitle name={USER_FIRST_NAME} />
               </h1>
 
               {/* ── Input Placeholder (for floating input bar alignment) ── */}
