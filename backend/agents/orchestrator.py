@@ -19,7 +19,7 @@ import operator
 
 import nest_asyncio
 from dotenv import load_dotenv
-from langchain_openai import AzureChatOpenAI
+from langchain_openai import ChatOpenAI, AzureChatOpenAI
 from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, START, END
 
@@ -69,13 +69,32 @@ class OrchestratorAgent:
     """
 
     def __init__(self):
-        # LLM
-        self.llm = AzureChatOpenAI(
-            azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-5.4-mini"),
-            api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview"),
-            temperature=0,
-            max_retries=10,
-        )
+        # LLM Initialization
+        llm_provider = os.getenv("LLM_PROVIDER", "openrouter").strip().lower()
+        openrouter_api_key = os.getenv("OPENROUTER_API_KEY", "")
+        openrouter_model = os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free")
+        openrouter_base_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+
+        if llm_provider == "azure":
+            self.llm = AzureChatOpenAI(
+                azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-5.4-mini"),
+                api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview"),
+                temperature=0,
+                max_retries=10,
+            )
+        else:
+            # Default to OpenRouter (e.g. nvidia/nemotron-3-ultra-550b-a55b:free)
+            self.llm = ChatOpenAI(
+                model=openrouter_model,
+                api_key=openrouter_api_key or "dummy_key",
+                base_url=openrouter_base_url,
+                temperature=0,
+                max_retries=5,
+                default_headers={
+                    "HTTP-Referer": "https://github.com/DPramuditha/PhishLens-Agent",
+                    "X-Title": "PhishLens Agent",
+                },
+            )
 
         # Define the workflow
         workflow = StateGraph(PhishLensState)
