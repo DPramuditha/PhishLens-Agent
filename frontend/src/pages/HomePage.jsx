@@ -39,6 +39,7 @@ import { DotmHex2 } from '../components/ui/dotm-hex-2';
 import OrchestratorProgress from '../components/OrchestratorProgress';
 import { useToast } from '../components/ToastContext';
 import MessageActionBar from '../components/MessageActionBar';
+import RealtimeTodoList from '../components/RealtimeTodoList';
 import WelcomeCharacterAnimation from '../components/WelcomeCharacterAnimation';
 import AppleTopControls from '../components/AppleTopControls';
 
@@ -524,6 +525,7 @@ export default function HomePage() {
   const [hasSentMessage, setHasSentMessage] = useState(false);
   const [showOrbs, setShowOrbs] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showAgentTasks, setShowAgentTasks] = useState(false);
 
   const [currentWordIdx, setCurrentWordIdx] = useState(0);
   const [isThinking, setIsThinking] = useState(false);
@@ -583,6 +585,7 @@ export default function HomePage() {
         setMessages([]);
         setHasSentMessage(false);
         setChatTitle('New Scan');
+        setShowAgentTasks(false);
       },
       hasDot: false,
     },
@@ -882,6 +885,7 @@ export default function HomePage() {
     setMessages((prev) => [...prev, userMsg, loadingBotMsg]);
     setInput('');
     setIsLoading(true);
+    setShowAgentTasks(true);
     setChatTitle(query);
 
     if (isFirst) {
@@ -1063,6 +1067,7 @@ export default function HomePage() {
       )
     );
     setIsLoading(true);
+    setShowAgentTasks(true);
 
     try {
       const response = await fetch('http://localhost:8000/api/scan/', {
@@ -1558,6 +1563,15 @@ export default function HomePage() {
         onClose={() => setIsSearchOpen(false)}
         isDarkMode={isDarkMode}
       />
+
+      {/* Real-time Agent Tasks To-Do list (bottom right) */}
+      {showAgentTasks && (
+        <RealtimeTodoList 
+          isScanning={isLoading}
+          status={isLoading ? 'loading' : messages[messages.length - 1]?.status || 'completed'}
+          onClose={() => setShowAgentTasks(false)}
+        />
+      )}
     </div>
   );
 }

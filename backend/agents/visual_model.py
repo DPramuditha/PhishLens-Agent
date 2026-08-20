@@ -3,11 +3,10 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 from torchvision import models, transforms
-from torchvision.models import EfficientNet_B0_Weights
 from PIL import Image
 
 # Path to the visual ML model weights
-MODEL_PATH = Path(__file__).resolve().parent.parent.parent / "models" / "best_phishing_detector.pth"
+MODEL_PATH = Path(__file__).resolve().parent.parent.parent / "models" / "phishing_model_stage1.pth"
 
 # Model transform: Resize to 224x224 and normalize as in the training notebook
 val_test_transform = transforms.Compose([
@@ -24,11 +23,17 @@ def _get_visual_model():
     if _visual_model is not None:
         return _visual_model
 
-    # Reconstruct the model architecture
-    weights = EfficientNet_B0_Weights.IMAGENET1K_V1
-    model = models.efficientnet_b0(weights=weights)
+    # Reconstruct the model architecture matching phishing_model_stage1.pth
+    model = models.efficientnet_b0(weights=None)
     num_features = model.classifier[1].in_features
-    model.classifier[1] = nn.Linear(num_features, 1)
+    model.classifier = nn.Sequential(
+        nn.Dropout(p=0.3, inplace=True),
+        nn.Linear(num_features, 512),
+        nn.ReLU(),
+        nn.BatchNorm1d(512),
+        nn.Dropout(p=0.2),
+        nn.Linear(512, 1)
+    )
 
     # Load state dict (force CPU since we don't need GPU for single-image inference)
     state_dict = torch.load(MODEL_PATH, map_location="cpu")
