@@ -26,6 +26,8 @@ from backend.auth_views import (
     logout_view,
     email_login_view,
     email_register_view,
+    update_profile_view,
+    change_password_view,
 )
 
 urlpatterns = [
@@ -35,6 +37,8 @@ urlpatterns = [
     # Authentication endpoints
     path('api/auth/google/', google_auth_view, name='google_auth'),
     path('api/auth/me/', current_user_view, name='current_user'),
+    path('api/auth/profile/update/', update_profile_view, name='update_profile'),
+    path('api/auth/change-password/', change_password_view, name='change_password'),
     path('api/auth/logout/', logout_view, name='logout'),
     path('api/auth/login/', email_login_view, name='email_login'),
     path('api/auth/register/', email_register_view, name='email_register'),

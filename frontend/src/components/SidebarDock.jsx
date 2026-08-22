@@ -415,14 +415,16 @@ export default function SidebarDock({
 
   // ── Mouse handlers ─────────────────────────────────────────────────────────
   const handleMouseMove = useCallback((e) => {
+    if (isExpanded) return;
     isHovering.current = true;
     applyMagnify(e.clientY);
-  }, [applyMagnify]);
+  }, [applyMagnify, isExpanded]);
 
   const handleMouseLeave = useCallback(() => {
+    if (isExpanded) return;
     isHovering.current = false;
     resetSizes();
-  }, [resetSizes]);
+  }, [resetSizes, isExpanded]);
 
   // ── Set initial pill height and run entrance animation ─────────────────────
   useLayoutEffect(() => {

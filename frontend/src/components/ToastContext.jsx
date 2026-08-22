@@ -3,14 +3,33 @@ import { createContext, useContext, useState, useCallback, useRef } from 'react'
 const ToastContext = createContext(null);
 
 let toastIdCounter = 0;
+const MAX_TOASTS = 2;
 
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
+  const lastToastRef = useRef({ title: '', message: '', time: 0 });
 
-  const addToast = useCallback(({ type = 'info', title, message, duration = 5000 }) => {
+  const addToast = useCallback(({ type = 'info', title, message, duration = 4500 }) => {
+    const now = Date.now();
+    // Deduplicate identical spam within 1.2 seconds
+    if (
+      lastToastRef.current.title === title &&
+      lastToastRef.current.message === message &&
+      now - lastToastRef.current.time < 1200
+    ) {
+      return null;
+    }
+    lastToastRef.current = { title, message, time: now };
+
     const id = ++toastIdCounter;
     const toast = { id, type, title, message, duration };
-    setToasts((prev) => [...prev, toast]);
+
+    setToasts((prev) => {
+      // Keep at most 2 active notifications (drop oldest if exceeding MAX_TOASTS)
+      const trimmed = prev.length >= MAX_TOASTS ? prev.slice(prev.length - (MAX_TOASTS - 1)) : prev;
+      return [...trimmed, toast];
+    });
+
     return id;
   }, []);
 

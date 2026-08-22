@@ -183,6 +183,52 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // Update User Profile
+  const updateUserProfile = async (profileData) => {
+    try {
+      const res = await authFetch(`${API_BASE}/api/auth/profile/update/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profileData),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || data.detail || 'Failed to update profile');
+      }
+      if (data.token) {
+        setToken(data.token);
+        localStorage.setItem(STORAGE_TOKEN_KEY, data.token);
+      }
+      if (data.user) {
+        setUser(data.user);
+        localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(data.user));
+      }
+      return { success: true, user: data.user, message: data.message };
+    } catch (err) {
+      console.error('Update profile error:', err);
+      return { success: false, error: err.message };
+    }
+  };
+
+  // Change User Password
+  const changeUserPassword = async ({ currentPassword, newPassword }) => {
+    try {
+      const res = await authFetch(`${API_BASE}/api/auth/change-password/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || data.detail || 'Failed to change password');
+      }
+      return { success: true, message: data.message };
+    } catch (err) {
+      console.error('Change password error:', err);
+      return { success: false, error: err.message };
+    }
+  };
+
   // Logout
   const logout = () => {
     try {
@@ -233,6 +279,8 @@ export function AuthProvider({ children }) {
     loginWithGoogle,
     registerWithEmail,
     loginWithEmail,
+    updateUserProfile,
+    changeUserPassword,
     logout,
     authFetch,
     API_BASE,

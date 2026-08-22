@@ -507,3 +507,114 @@ def email_register_view(request):
             "given_name": user.first_name,
         },
     }, status=201)
+
+
+@csrf_exempt
+@require_http_methods(["POST", "PUT"])
+@jwt_required
+def update_profile_view(request):
+    """
+    POST/PUT /api/auth/profile/update/
+    Header: Authorization: Bearer <token>
+    Body: { "name": "..." } or { "first_name": "...", "last_name": "..." }
+
+    Updates the user's personal profile information and returns renewed JWT token.
+    """
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, AttributeError):
+        return JsonResponse({"error": "Invalid JSON payload."}, status=400)
+
+    user = request.user
+    claims = getattr(request, "user_claims", {})
+    name = data.get("name", "").strip()
+    first_name = data.get("first_name", "").strip()
+    last_name = data.get("last_name", "").strip()
+
+    if name and not first_name:
+        parts = name.split(" ", 1)
+        first_name = parts[0].strip()
+        last_name = parts[1].strip() if len(parts) > 1 else ""
+
+    if not first_name and not name:
+        return JsonResponse({"error": "Please provide a valid display name."}, status=400)
+
+    user.first_name = first_name or user.first_name
+    if last_name or ("last_name" in data) or name:
+        user.last_name = last_name
+    user.save()
+
+    picture = claims.get("picture", "")
+    token = generate_jwt_token(user, picture=picture)
+    display_name = f"{user.first_name} {user.last_name}".strip() or user.username
+
+    return JsonResponse({
+        "status": "success",
+        "message": "Profile updated successfully.",
+        "token": token,
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "name": display_name,
+            "picture": picture,
+            "given_name": user.first_name,
+        },
+    }, status=200)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@jwt_required
+def change_password_view(request):
+    """
+    POST /api/auth/change-password/
+    Header: Authorization: Bearer <token>
+    Body: { "current_password": "...", "new_password": "..." }
+
+    Verifies the user's existing password and safely updates it to a new strong password.
+    """
+    try:
+        data = json.loads(request.body)
+        current_password = data.get("current_password", "")
+        new_password = data.get("new_password", "")
+    except (json.JSONDecodeError, AttributeError):
+        return JsonResponse({"error": "Invalid JSON payload."}, status=400)
+
+    user = request.user
+
+    # If the user has an existing password set, verify current password
+    if user.has_usable_password():
+        if not current_password:
+            return JsonResponse({"error": "Current password is required."}, status=400)
+        if not user.check_password(current_password):
+            return JsonResponse({"error": "Current password is incorrect."}, status=400)
+
+    # Validate new password complexity
+    if not new_password or len(new_password) < 8:
+        return JsonResponse({"error": "New password must be at least 8 characters long."}, status=400)
+
+    if not re.search(r'[A-Z]', new_password):
+        return JsonResponse({"error": "New password must contain at least one uppercase letter (A-Z)."}, status=400)
+
+    if not re.search(r'[a-z]', new_password):
+        return JsonResponse({"error": "New password must contain at least one lowercase letter (a-z)."}, status=400)
+
+    if not re.search(r'[0-9]', new_password):
+        return JsonResponse({"error": "New password must contain at least one numeric digit (0-9)."}, status=400)
+
+    if not re.search(r'[!@#$%^&*()_+\-=\[\]{};\':"\\|,.<>\/?~`]', new_password):
+        return JsonResponse({"error": "New password must contain at least one special character (!@#$%^&* etc.)."}, status=400)
+
+    try:
+        validate_password(new_password, user=user)
+    except ValidationError as ve:
+        return JsonResponse({"error": "; ".join(ve.messages)}, status=400)
+
+    user.set_password(new_password)
+    user.save()
+
+    return JsonResponse({
+        "status": "success",
+        "message": "Password has been changed successfully.",
+    }, status=200)
+

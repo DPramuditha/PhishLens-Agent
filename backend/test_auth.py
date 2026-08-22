@@ -19,6 +19,8 @@ from backend.auth_views import (
     google_auth_view,
     email_register_view,
     email_login_view,
+    update_profile_view,
+    change_password_view,
     jwt_required,
 )
 from backend.agents.views import scan_url_view
@@ -114,6 +116,7 @@ def run_tests():
     assert "token" in data_reg, "Registration response missing JWT token"
     assert data_reg["user"]["email"] == unique_email
     assert data_reg["user"]["name"] == "Dimuthu Pramuditha"
+    user_token = data_reg["token"]
     print("[PASS] [TEST 7] User successfully registered in database with PBKDF2 hashing & JWT issuance (201 Created)")
 
     # 8. Test Duplicate Email Registration (should be 409 Conflict)
@@ -145,7 +148,34 @@ def run_tests():
     assert resp_bad_login.status_code == 401, f"Expected 401, got {resp_bad_login.status_code}"
     print("[PASS] [TEST 10] Wrong password rejected (401 Unauthorized)")
 
-    print("\nALL 10 BACKEND AUTHENTICATION & SECURITY TESTS PASSED SUCCESSFULLY!")
+    # 11. Test Update Profile endpoint (/api/auth/profile/update/)
+    update_req = factory.post(
+        "/api/auth/profile/update/",
+        data=json.dumps({"name": "Dimuthu Updated"}),
+        content_type="application/json",
+        HTTP_AUTHORIZATION=f"Bearer {user_token}"
+    )
+    update_resp = update_profile_view(update_req)
+    assert update_resp.status_code == 200, f"Expected 200, got {update_resp.status_code}: {update_resp.content}"
+    update_data = json.loads(update_resp.content)
+    assert update_data["user"]["name"] == "Dimuthu Updated"
+    print("[PASS] [TEST 11] Profile name updated and returned with renewed JWT (200 OK)")
+
+    # 12. Test Change Password endpoint (/api/auth/change-password/)
+    pw_req = factory.post(
+        "/api/auth/change-password/",
+        data=json.dumps({
+            "current_password": "SecurePassword123!#",
+            "new_password": "NewSecurePassword456!@"
+        }),
+        content_type="application/json",
+        HTTP_AUTHORIZATION=f"Bearer {user_token}"
+    )
+    pw_resp = change_password_view(pw_req)
+    assert pw_resp.status_code == 200, f"Expected 200, got {pw_resp.status_code}: {pw_resp.content}"
+    print("[PASS] [TEST 12] Password successfully changed with complexity validation (200 OK)")
+
+    print("\nALL 12 BACKEND AUTHENTICATION & SECURITY TESTS PASSED SUCCESSFULLY!")
 
 if __name__ == "__main__":
     run_tests()

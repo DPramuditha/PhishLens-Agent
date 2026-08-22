@@ -13,12 +13,10 @@ import {
   FileText,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import Lottie from 'lottie-react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { ScrollSmoother } from 'gsap/ScrollSmoother';
 
-gsap.registerPlugin(ScrollTrigger, ScrollSmoother);
+gsap.registerPlugin(ScrollTrigger);
 
 import chatAnimData from '../sidebar_images/chat.json';
 import darkChatAnimData from '../sidebar_images/dark-chat.json';
@@ -71,22 +69,26 @@ function WelcomeTitle({ name, isInputFocused, isTyping, isDarkMode }) {
     const chars = containerRef.current.querySelectorAll('.welcome-char');
     if (chars.length === 0) return;
 
-    gsap.fromTo(chars,
-      {
-        opacity: 0,
-        rotationX: -90,
-        y: 30,
-        transformOrigin: '50% 100%',
-      },
-      {
-        opacity: 1,
-        rotationX: 0,
-        y: 0,
-        duration: 0.7,
-        stagger: 0.035,
-        ease: 'back.out(1.7)',
-      }
-    );
+    const ctx = gsap.context(() => {
+      gsap.fromTo(chars,
+        {
+          opacity: 0,
+          rotationX: -90,
+          y: 30,
+          transformOrigin: '50% 100%',
+        },
+        {
+          opacity: 1,
+          rotationX: 0,
+          y: 0,
+          duration: 0.7,
+          stagger: 0.035,
+          ease: 'back.out(1.7)',
+        }
+      );
+    }, containerRef);
+
+    return () => ctx.revert();
   }, []);
 
   // Hover handler: 3D flip each name letter with stagger
@@ -197,6 +199,7 @@ function PlaceholderCycler({ leftPaddingClass }) {
   const isAnimatingRef = useRef(false);
 
   useEffect(() => {
+    let currentWords = null;
     const interval = setInterval(() => {
       if (isAnimatingRef.current) return;
 
@@ -207,6 +210,7 @@ function PlaceholderCycler({ leftPaddingClass }) {
       if (words.length === 0) return;
 
       isAnimatingRef.current = true;
+      currentWords = words;
 
       // Animate current words out: bottom-to-top means sliding UPwards
       gsap.to(words, {
@@ -221,7 +225,10 @@ function PlaceholderCycler({ leftPaddingClass }) {
       });
     }, 3800);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      if (currentWords) gsap.killTweensOf(currentWords);
+    };
   }, []);
 
   useLayoutEffect(() => {
@@ -238,7 +245,7 @@ function PlaceholderCycler({ leftPaddingClass }) {
     });
 
     // Animate words in
-    gsap.to(words, {
+    const tween = gsap.to(words, {
       y: 0,
       opacity: 1,
       duration: 0.45,
@@ -248,6 +255,10 @@ function PlaceholderCycler({ leftPaddingClass }) {
         isAnimatingRef.current = false;
       }
     });
+
+    return () => {
+      tween.kill();
+    };
   }, [index]);
 
   return (
@@ -334,31 +345,38 @@ function BackgroundOrbs({ hasSentMessage }) {
     if (!orb1Ref.current || !orb2Ref.current) return;
 
     /* float orb1 */
-    gsap.to(orb1Ref.current, {
-      x: 60,
-      y: -40,
-      duration: 7,
+    const tween1 = gsap.to(orb1Ref.current, {
+      x: 50,
+      y: -30,
+      duration: 8,
       repeat: -1,
       yoyo: true,
       ease: 'sine.inOut',
+      force3D: true,
     });
 
     /* float orb2 */
-    gsap.to(orb2Ref.current, {
-      x: -50,
-      y: 50,
-      duration: 9,
+    const tween2 = gsap.to(orb2Ref.current, {
+      x: -40,
+      y: 40,
+      duration: 10,
       repeat: -1,
       yoyo: true,
       ease: 'sine.inOut',
-      delay: 1.5,
+      delay: 1,
+      force3D: true,
     });
+
+    return () => {
+      tween1.kill();
+      tween2.kill();
+    };
   }, []);
 
   return (
     <div
       className="pointer-events-none fixed inset-0 overflow-hidden"
-      style={{ zIndex: 0 }}
+      style={{ zIndex: 0, contain: 'strict' }}
       aria-hidden="true"
     >
       {/* purple-blue orb — left */}
@@ -373,6 +391,8 @@ function BackgroundOrbs({ hasSentMessage }) {
           opacity: 0.28,
           bottom: hasSentMessage ? '-80px' : '8%',
           left: hasSentMessage ? '-80px' : '15%',
+          willChange: 'transform',
+          transform: 'translate3d(0, 0, 0)',
           transition: 'bottom 0.8s cubic-bezier(0.4,0,0.2,1), left 0.8s cubic-bezier(0.4,0,0.2,1)',
         }}
       />
@@ -388,6 +408,8 @@ function BackgroundOrbs({ hasSentMessage }) {
           opacity: 0.28,
           bottom: hasSentMessage ? '-60px' : '6%',
           right: hasSentMessage ? '-80px' : '10%',
+          willChange: 'transform',
+          transform: 'translate3d(0, 0, 0)',
           transition: 'bottom 0.8s cubic-bezier(0.4,0,0.2,1), right 0.8s cubic-bezier(0.4,0,0.2,1)',
         }}
       />
@@ -535,7 +557,7 @@ export default function HomePage() {
   const navigate = useNavigate();
   const { user, token, authFetch } = useAuth();
   const { addToast } = useToast();
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
   const [chatTitle, setChatTitle] = useState('New Scan');
   const [messages, setMessages] = useState([]);
   const mainRef = useRef(null);
@@ -677,22 +699,7 @@ export default function HomePage() {
     }
   }, [isDarkMode]);
 
-  // Initialize GSAP ScrollSmoother
-  useEffect(() => {
-    const smoother = ScrollSmoother.create({
-      wrapper: '#smooth-wrapper',
-      content: '#smooth-content',
-      smooth: 1.2,
-      effects: true,
-    });
-    smootherRef.current = smoother;
-
-    return () => {
-      smoother.kill();
-    };
-  }, []);
-
-  // Refresh ScrollTrigger and ScrollSmoother when messages are added or sidebar expands/collapses
+  // Refresh ScrollTrigger when messages are added or sidebar expands/collapses
   useEffect(() => {
     ScrollTrigger.refresh();
     const timer = setTimeout(() => {
@@ -703,11 +710,7 @@ export default function HomePage() {
 
   // Autoscroll message container when new messages arrive
   useEffect(() => {
-    if (smootherRef.current) {
-      smootherRef.current.scrollTo(messagesEndRef.current, true);
-    } else {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   useEffect(() => {
@@ -825,21 +828,25 @@ export default function HomePage() {
   // ── Reset/Update Unified Input Bar position relative to its hero placeholder ──
   const resetInputPosition = useCallback(() => {
     if (hasSentMessage || !inputPlaceholderRef.current || !inputFormRef.current || !heroInputWrapRef.current) return;
-    const rectPlaceholder = inputPlaceholderRef.current.getBoundingClientRect();
-    const currentY = gsap.getProperty(heroInputWrapRef.current, "y") || 0;
-    const rectForm = inputFormRef.current.getBoundingClientRect();
-    const untranslatedFormTop = rectForm.top - currentY;
-    const dy = rectPlaceholder.top - untranslatedFormTop;
-    gsap.set(heroInputWrapRef.current, { y: dy });
+    requestAnimationFrame(() => {
+      if (!inputPlaceholderRef.current || !inputFormRef.current || !heroInputWrapRef.current) return;
+      const rectPlaceholder = inputPlaceholderRef.current.getBoundingClientRect();
+      const currentY = gsap.getProperty(heroInputWrapRef.current, "y") || 0;
+      const rectForm = inputFormRef.current.getBoundingClientRect();
+      const untranslatedFormTop = rectForm.top - currentY;
+      const dy = rectPlaceholder.top - untranslatedFormTop;
+      gsap.set(heroInputWrapRef.current, { y: dy });
+    });
   }, [hasSentMessage]);
 
   useEffect(() => {
     resetInputPosition();
-    const t = setTimeout(resetInputPosition, 50);
-    window.addEventListener('resize', resetInputPosition);
+    const handleResize = () => {
+      resetInputPosition();
+    };
+    window.addEventListener('resize', handleResize, { passive: true });
     return () => {
-      window.removeEventListener('resize', resetInputPosition);
-      clearTimeout(t);
+      window.removeEventListener('resize', handleResize);
     };
   }, [resetInputPosition, isExpanded]);
 
@@ -1275,7 +1282,13 @@ export default function HomePage() {
       {/* Main Content Area */}
       <main
         ref={mainRef}
-        className="flex-1 flex flex-col h-full bg-white dark:bg-[#1a1a1a] text-slate-700 dark:text-slate-400 relative transition-colors duration-300 overflow-hidden"
+        className="flex-1 flex flex-col h-full bg-white dark:bg-[#1a1a1a] text-slate-700 dark:text-slate-400 relative transition-all duration-500 overflow-hidden"
+        style={{
+          marginLeft: isExpanded ? '330px' : '0px',
+          width: isExpanded ? 'calc(100% - 330px)' : '100%',
+          transition: 'margin-left 0.5s cubic-bezier(0.25, 1, 0.5, 1), width 0.5s cubic-bezier(0.25, 1, 0.5, 1)',
+          willChange: 'margin-left, width',
+        }}
       >
 
         {/* ── Persistent floating background orbs ── */}
@@ -1324,15 +1337,7 @@ export default function HomePage() {
 
         <div
           id="smooth-wrapper"
-          className="flex-1 w-full h-full overflow-y-auto no-scrollbar relative z-10 bg-white dark:bg-[#1a1a1a] transition-colors duration-300"
-          style={{
-            position: 'fixed',
-            top: 0,
-            height: '100%',
-            left: isExpanded ? '330px' : '0px',
-            width: isExpanded ? 'calc(100% - 330px)' : '100%',
-            transition: 'left 0.5s cubic-bezier(0.25, 1, 0.5, 1), width 0.5s cubic-bezier(0.25, 1, 0.5, 1)',
-          }}
+          className="flex-1 w-full h-full overflow-y-auto overflow-x-hidden no-scrollbar relative z-10 bg-white dark:bg-[#1a1a1a] transition-colors duration-300 scroll-smooth"
         >
           <div id="smooth-content" className="w-full flex flex-col min-h-full">
 
@@ -1502,6 +1507,7 @@ export default function HomePage() {
             left: isExpanded ? '330px' : '0px',
             width: isExpanded ? 'calc(100% - 330px)' : '100%',
             transition: 'left 0.5s cubic-bezier(0.25, 1, 0.5, 1), width 0.5s cubic-bezier(0.25, 1, 0.5, 1)',
+            willChange: 'left, width',
             bottom: 0,
           }}
         >
