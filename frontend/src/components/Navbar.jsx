@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Menu, X, ChevronRight } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export default function Navbar({ brandName = "PhishLens", onActionClick }) {
   const navigate = useNavigate();
+  const { isAuthenticated, user } = useAuth();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -62,22 +64,37 @@ export default function Navbar({ brandName = "PhishLens", onActionClick }) {
 
         {/* Right Action Buttons */}
         <div className="hidden sm:flex items-center gap-2.5">
-          <Link
-            to="/login"
-            className="text-[13.5px] font-medium text-zinc-300 hover:text-white px-3 py-1.5 transition-colors duration-200"
-          >
-            Sign in
-          </Link>
-          <button
-            type="button"
-            onClick={() => {
-              if (onActionClick) onActionClick();
-              else navigate('/chat');
-            }}
-            className="bg-white text-black font-semibold text-[13px] px-4 py-1.5 rounded-full hover:bg-zinc-100 active:scale-[0.97] transition-all duration-150 cursor-pointer"
-          >
-            Get Started
-          </button>
+          {isAuthenticated ? (
+            <button
+              type="button"
+              onClick={() => navigate('/chat')}
+              className="flex items-center gap-2 bg-white text-black font-semibold text-[13px] px-4 py-1.5 rounded-full hover:bg-zinc-100 active:scale-[0.97] transition-all duration-150 cursor-pointer"
+            >
+              {user?.picture && (
+                <img src={user.picture} alt="" className="w-4 h-4 rounded-full" />
+              )}
+              <span>Go to Chat</span>
+            </button>
+          ) : (
+            <>
+              <Link
+                to="/login"
+                className="text-[13.5px] font-medium text-zinc-300 hover:text-white px-3 py-1.5 transition-colors duration-200"
+              >
+                Sign in
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onActionClick) onActionClick();
+                  else navigate('/chat');
+                }}
+                className="bg-white text-black font-semibold text-[13px] px-4 py-1.5 rounded-full hover:bg-zinc-100 active:scale-[0.97] transition-all duration-150 cursor-pointer"
+              >
+                Get Started
+              </button>
+            </>
+          )}
         </div>
 
         {/* Mobile Menu Trigger */}

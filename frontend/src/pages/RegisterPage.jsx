@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useGoogleLogin } from '@react-oauth/google';
 import gsap from 'gsap';
-import { ShieldCheck, ChevronDown, Check, Mail, Lock, Eye, EyeOff, ArrowRight, ArrowLeft } from 'lucide-react';
+import { ShieldCheck, ChevronDown, Check, Mail, User, Lock, Eye, EyeOff, ArrowRight, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ToastContext';
 
@@ -16,10 +16,10 @@ const PROGRESS_ITEMS = [
   'Generate threat-intel report',
 ];
 
-export default function LoginPage() {
+export default function RegisterPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAuthenticated, loginWithGoogle, loginWithEmail } = useAuth();
+  const { isAuthenticated, loginWithGoogle, registerWithEmail } = useAuth();
   const { addToast } = useToast();
 
   /* refs */
@@ -33,7 +33,8 @@ export default function LoginPage() {
   const inputRef = useRef(null);
 
   /* state */
-  const [step, setStep] = useState(1); // 1: Email, 2: Password
+  const [step, setStep] = useState(1); // 1: Name, 2: Email, 3: Password
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -99,7 +100,7 @@ export default function LoginPage() {
     return () => ctx.revert();
   }, []);
 
-  // Focus input on step change
+  // Focus input on step change & animate input field
   useEffect(() => {
     setErrorMsg('');
     if (inputRef.current) {
@@ -115,7 +116,7 @@ export default function LoginPage() {
         const result = await loginWithGoogle(null, tokenResponse.access_token);
         if (result.success) {
           addToast({
-            title: 'Welcome back!',
+            title: 'Welcome to PhishLens',
             message: `Signed in as ${result.user?.name || result.user?.email}`,
             type: 'success',
           });
@@ -160,36 +161,58 @@ export default function LoginPage() {
     triggerGoogleLogin();
   };
 
-  /* ── Step-by-Step Progressive Login Handler ── */
+  /* ── Step-by-Step Progressive Handler ── */
   const handleStepSubmit = (e) => {
     if (e) e.preventDefault();
     setErrorMsg('');
 
     if (step === 1) {
+      if (!name.trim() || name.trim().length < 2) {
+        setErrorMsg('Please enter your full name (at least 2 characters).');
+        return;
+      }
+      setStep(2);
+    } else if (step === 2) {
       if (!email.trim()) {
         setErrorMsg('Please enter your email address.');
         return;
       }
       if (!EMAIL_REGEX.test(email.trim())) {
-        setErrorMsg('Please enter a valid email address.');
+        setErrorMsg('Please enter a valid email address (e.g. name@company.com).');
         return;
       }
-      setStep(2);
-    } else if (step === 2) {
-      handleFinalLogin();
+      setStep(3);
+    } else if (step === 3) {
+      handleFinalRegister();
     }
   };
 
   const handleBack = () => {
     setErrorMsg('');
     if (step > 1) {
-      setStep(1);
+      setStep((prev) => prev - 1);
     }
   };
 
-  const handleFinalLogin = async () => {
-    if (!password) {
-      setErrorMsg('Please enter your password.');
+  const handleFinalRegister = async () => {
+    if (!password || password.length < 8) {
+      setErrorMsg('Password must be at least 8 characters long.');
+      return;
+    }
+    if (!/[A-Z]/.test(password)) {
+      setErrorMsg('Password must contain at least one uppercase letter (A-Z).');
+      return;
+    }
+    if (!/[a-z]/.test(password)) {
+      setErrorMsg('Password must contain at least one lowercase letter (a-z).');
+      return;
+    }
+    if (!/[0-9]/.test(password)) {
+      setErrorMsg('Password must contain at least one number (0-9).');
+      return;
+    }
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/.test(password)) {
+      setErrorMsg('Password must contain at least one special character (!@#$%).');
       return;
     }
 
@@ -197,27 +220,30 @@ export default function LoginPage() {
     setErrorMsg('');
 
     try {
-      const result = await loginWithEmail(email.trim().toLowerCase(), password);
+      const result = await registerWithEmail({
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        password,
+      });
 
       if (result.success) {
         addToast({
-          title: 'Welcome Back',
-          message: `Signed in as ${result.user?.name || result.user?.email}`,
+          title: 'Account Created',
+          message: `Welcome to PhishLens, ${result.user?.name || name}!`,
           type: 'success',
         });
 
-        const destination = location.state?.from?.pathname || '/chat';
         gsap.to(formRef.current, {
           scale: 0.96,
           opacity: 0,
           duration: 0.35,
-          onComplete: () => navigate(destination, { replace: true }),
+          onComplete: () => navigate('/chat', { replace: true }),
         });
       } else {
-        setErrorMsg(result.error || 'Invalid email or password.');
+        setErrorMsg(result.error || 'Registration failed. Please check your details.');
       }
     } catch (err) {
-      setErrorMsg(err.message || 'Authentication error. Please try again.');
+      setErrorMsg(err.message || 'An error occurred during registration.');
     } finally {
       setIsSubmitting(false);
     }
@@ -226,6 +252,8 @@ export default function LoginPage() {
   const addItemRef = (el) => {
     if (el && !itemsRef.current.includes(el)) itemsRef.current.push(el);
   };
+
+  const firstName = name.trim().split(' ')[0] || 'there';
 
   return (
     <div ref={pageRef} className="flex min-h-svh w-full font-[Cabin,system-ui,sans-serif] overflow-hidden">
@@ -249,13 +277,15 @@ export default function LoginPage() {
           {/* heading */}
           <div ref={headingRef} className="mb-8">
             <h1 className="font-[Habibi,Georgia,'Times_New_Roman',serif] font-normal text-[clamp(36px,5vw,52px)] leading-[1.15] text-stone-100 m-0 mb-4 tracking-tight">
-              Detect fast,<br />
+              Create account,<br />
               protect faster
             </h1>
             <p className="text-base text-stone-400 m-0 tracking-wide">
-              {step === 1 ? 'AI-powered phishing detection with ' : 'Enter password for '}
+              {step === 1 && 'AI-powered phishing detection with '}
+              {step === 2 && `Step 2: Enter email for `}
+              {step === 3 && `Step 3: Secure account for `}
               <span className="text-purple-400 font-semibold">
-                {step === 1 ? 'PhishLens' : email}
+                {step === 1 ? 'PhishLens' : step === 2 ? firstName : email}
               </span>
             </p>
           </div>
@@ -271,7 +301,7 @@ export default function LoginPage() {
               disabled={isSubmitting}
               onClick={handleGoogleClick}
               className={`w-full flex items-center justify-center gap-2.5 bg-white/[0.06] text-stone-200 border border-white/[0.12] rounded-xl font-[inherit] text-[15px] font-semibold cursor-pointer transition-all duration-250 py-2.5 px-4 hover:bg-white/10 hover:border-white/20 hover:-translate-y-px ${
-                isSubmitting && !password ? 'opacity-60 cursor-not-allowed' : ''
+                isSubmitting ? 'opacity-60 cursor-not-allowed' : ''
               }`}
             >
               {isSubmitting && !password ? (
@@ -314,10 +344,10 @@ export default function LoginPage() {
             {/* Step Indicators Bar */}
             <div className="flex items-center justify-between mb-3 px-1">
               <span className="text-xs font-semibold text-purple-400">
-                Step {step} of 2
+                Step {step} of 3
               </span>
               <div className="flex items-center gap-1.5">
-                {[1, 2].map((s) => (
+                {[1, 2, 3].map((s) => (
                   <button
                     key={s}
                     type="button"
@@ -337,8 +367,27 @@ export default function LoginPage() {
 
             {/* Step-by-Step Adaptive Input Form */}
             <form onSubmit={handleStepSubmit} className="space-y-3">
-              {/* STEP 1: Email */}
+              {/* STEP 1: Full Name */}
               {step === 1 && (
+                <div className="relative">
+                  <User
+                    size={17}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-500 pointer-events-none"
+                  />
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full py-2.5 px-4 pl-[42px] bg-white/5 border border-white/10 rounded-xl text-stone-200 font-[inherit] text-[15px] outline-none transition-all duration-250 placeholder:text-stone-500 focus:border-purple-400 focus:bg-white/[0.07] focus:shadow-[0_0_0_3px_rgba(192,132,252,0.12)] box-border"
+                    placeholder="Enter your full name"
+                    required
+                  />
+                </div>
+              )}
+
+              {/* STEP 2: Email Address */}
+              {step === 2 && (
                 <div className="relative">
                   <Mail
                     size={17}
@@ -350,35 +399,55 @@ export default function LoginPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full py-2.5 px-4 pl-[42px] bg-white/5 border border-white/10 rounded-xl text-stone-200 font-[inherit] text-[15px] outline-none transition-all duration-250 placeholder:text-stone-500 focus:border-purple-400 focus:bg-white/[0.07] focus:shadow-[0_0_0_3px_rgba(192,132,252,0.12)] box-border"
-                    placeholder="Enter your email"
+                    placeholder="Enter your email address"
                     required
                   />
                 </div>
               )}
 
-              {/* STEP 2: Password */}
-              {step === 2 && (
-                <div className="relative">
-                  <Lock
-                    size={17}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-500 pointer-events-none"
-                  />
-                  <input
-                    ref={inputRef}
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full py-2.5 px-4 pl-[42px] pr-10 bg-white/5 border border-white/10 rounded-xl text-stone-200 font-[inherit] text-[15px] outline-none transition-all duration-250 placeholder:text-stone-500 focus:border-purple-400 focus:bg-white/[0.07] focus:shadow-[0_0_0_3px_rgba(192,132,252,0.12)] box-border"
-                    placeholder="Enter your password"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-500 hover:text-stone-300 transition-colors p-1 cursor-pointer"
-                  >
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
+              {/* STEP 3: Password */}
+              {step === 3 && (
+                <div className="space-y-2">
+                  <div className="relative">
+                    <Lock
+                      size={17}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-500 pointer-events-none"
+                    />
+                    <input
+                      ref={inputRef}
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full py-2.5 px-4 pl-[42px] pr-10 bg-white/5 border border-white/10 rounded-xl text-stone-200 font-[inherit] text-[15px] outline-none transition-all duration-250 placeholder:text-stone-500 focus:border-purple-400 focus:bg-white/[0.07] focus:shadow-[0_0_0_3px_rgba(192,132,252,0.12)] box-border"
+                      placeholder="Create a secure password"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-500 hover:text-stone-300 transition-colors p-1 cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+
+                  {/* Password rules mini checklist */}
+                  {password.length > 0 && (
+                    <div className="text-[11px] text-stone-400 px-1 pt-1 grid grid-cols-2 gap-1">
+                      <span className={password.length >= 8 ? 'text-emerald-400' : 'text-stone-500'}>
+                        • 8+ chars
+                      </span>
+                      <span className={/[A-Z]/.test(password) ? 'text-emerald-400' : 'text-stone-500'}>
+                        • 1 uppercase
+                      </span>
+                      <span className={/[0-9]/.test(password) ? 'text-emerald-400' : 'text-stone-500'}>
+                        • 1 number
+                      </span>
+                      <span className={/[!@#$%^&*]/.test(password) ? 'text-emerald-400' : 'text-stone-500'}>
+                        • 1 symbol
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -410,11 +479,11 @@ export default function LoginPage() {
                   {isSubmitting ? (
                     <span className="flex items-center gap-2">
                       <span className="w-4 h-4 rounded-full border-2 border-stone-800/30 border-t-stone-800 animate-spin" />
-                      Signing in...
+                      Creating account...
                     </span>
-                  ) : step === 2 ? (
+                  ) : step === 3 ? (
                     <>
-                      <span>Sign in to PhishLens</span>
+                      <span>Complete registration</span>
                       <ShieldCheck size={17} />
                     </>
                   ) : (
@@ -428,12 +497,12 @@ export default function LoginPage() {
             </form>
 
             <div className="mt-5 text-center text-xs text-stone-400">
-              Don't have an account?{' '}
+              Already have an account?{' '}
               <Link
-                to="/register"
+                to="/login"
                 className="text-purple-400 font-semibold hover:text-purple-300 transition-colors underline-offset-4 hover:underline"
               >
-                Create an account
+                Sign in
               </Link>
             </div>
           </div>
