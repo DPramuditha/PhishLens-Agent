@@ -211,20 +211,23 @@ def capture_screenshot(url: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Tool 2 — Visual ML Model
+# Tool 2 — Two-Stage Visual ML Model
 # ---------------------------------------------------------------------------
 
 @tool
 def run_visual_ml_model(screenshot_path: str) -> str:
     """
-    Run the custom PyTorch visual classification model on a website screenshot
-    to detect if it is phishing or legitimate.
-
-    This model performs binary classification of the screenshot to determine if the
-    overall visual design represents a phishing attempt (probability >= 0.60).
+    Run the custom PyTorch two-stage visual computer vision model on a website screenshot:
+    
+    - Stage 1 (Binary Phishing Classifier - EfficientNet-B0): Performs binary classification
+      of the full-page screenshot into phishing vs legitimate (threshold probability >= 0.60).
+    - Stage 2 (Brand Identification - ResNet-50 Siamese Network): If Stage 1 flags phishing,
+      Stage 2 localizes the brand logo, computes 128-D cosine similarity embeddings, and matches
+      against the reference brand gallery to identify the specific impersonated brand.
 
     Args:
         screenshot_path: Absolute file path to the screenshot PNG captured by capture_screenshot
     """
     result = predict_screenshot(screenshot_path)
     return json.dumps(result, indent=2)
+
