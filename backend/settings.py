@@ -21,12 +21,23 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-(n$4ht5l3!vn2hpg+1_7k%-2)2qkuy3c%eub9ridwt6^ypmrno'
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-(n$4ht5l3!vn2hpg+1_7k%-2)2qkuy3c%eub9ridwt6^ypmrno')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv('DEBUG', 'True').lower() in ('true', '1', 't')
 
 ALLOWED_HOSTS = ['*']
+
+# ===== Google OAuth 2.0 Settings =====
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '').strip()
+GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '').strip()
+GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:5173/login').strip()
+
+# ===== JWT Configuration Settings =====
+JWT_SECRET = os.getenv('JWT_SECRET', SECRET_KEY)
+JWT_ALGORITHM = os.getenv('JWT_ALGORITHM', 'HS256')
+JWT_EXPIRY_HOURS = int(os.getenv('JWT_EXPIRY_HOURS', '24'))
+
 
 
 # Application definition

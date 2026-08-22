@@ -13,12 +13,15 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from dotenv import load_dotenv
 
+from backend.auth_views import jwt_required
+
 # Load env from backend/.env
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 
 @csrf_exempt
 @require_http_methods(["POST"])
+@jwt_required
 def scan_url_view(request):
     """
     POST /api/scan/

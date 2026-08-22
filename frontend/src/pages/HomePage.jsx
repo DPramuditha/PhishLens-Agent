@@ -41,6 +41,7 @@ import MessageActionBar from '../components/MessageActionBar';
 import RealtimeTodoList from '../components/RealtimeTodoList';
 import WelcomeCharacterAnimation from '../components/WelcomeCharacterAnimation';
 import AppleTopControls from '../components/AppleTopControls';
+import { useAuth } from '../context/AuthContext';
 
 const PLACEHOLDERS = [
   'Paste URL to scan for phishing...',
@@ -532,6 +533,7 @@ function AnimatedCyclingWord({ word, isThinking }) {
 
 export default function HomePage() {
   const navigate = useNavigate();
+  const { user, token, authFetch } = useAuth();
   const { addToast } = useToast();
   const [isExpanded, setIsExpanded] = useState(false);
   const [chatTitle, setChatTitle] = useState('New Scan');
@@ -551,9 +553,11 @@ export default function HomePage() {
   const [isThinking, setIsThinking] = useState(false);
   const isCyclingAnimating = useRef(false);
 
-  const profileName = 'Dimuthu Pramuditha';
-  const profileEmail = 'dimuthu@example.com';
+  const profileName = user?.name || user?.email || 'User';
+  const profileEmail = user?.email || '';
+  const profilePicture = user?.picture || '';
   const profileInitial = profileName.trim().charAt(0).toUpperCase();
+  const userFirstName = user?.given_name || (user?.name ? user.name.split(' ')[0] : 'There');
 
   const chatLottieRef = useRef(null);
   const searchLottieRef = useRef(null);
@@ -646,7 +650,13 @@ export default function HomePage() {
     {
       id: 'profile',
       label: `Profile: ${profileName}`,
-      icon: (
+      icon: profilePicture ? (
+        <img
+          src={profilePicture}
+          alt={profileName}
+          className="w-full h-full rounded-full object-cover shadow-sm border border-white/20"
+        />
+      ) : (
         <div
           className="w-full h-full rounded-full bg-indigo-500 text-white flex items-center justify-center text-sm font-semibold shadow-sm"
           style={{ fontSize: 15, fontWeight: 700 }}
@@ -952,11 +962,16 @@ export default function HomePage() {
     triggerOrbAnimation();
 
     try {
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch('http://localhost:8000/api/scan/', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({ url: processedUrl }),
       });
 
@@ -1076,11 +1091,16 @@ export default function HomePage() {
     setShowAgentTasks(true);
 
     try {
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch('http://localhost:8000/api/scan/', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({ url: urlToScan }),
       });
 
@@ -1249,6 +1269,7 @@ export default function HomePage() {
         onToggleDarkMode={() => setIsDarkMode((prev) => !prev)}
         profileName={profileName}
         profileEmail={profileEmail}
+        profilePicture={profilePicture}
       />
 
       {/* Main Content Area */}
@@ -1425,10 +1446,10 @@ export default function HomePage() {
               <h1
                 ref={heroTitleRef}
                 className="relative z-10 text-3xl md:text-5xl font-black tracking-tight mb-6 min-h-[1.2em] w-full font-habibi"
-                aria-label={`Good evening, ${USER_FIRST_NAME}`}
+                aria-label={`Good evening, ${userFirstName}`}
               >
                 <WelcomeTitle
-                  name={USER_FIRST_NAME}
+                  name={userFirstName}
                   isInputFocused={isInputFocused}
                   isTyping={isTyping}
                   isDarkMode={isDarkMode}

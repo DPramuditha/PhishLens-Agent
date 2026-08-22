@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useGoogleLogin } from '@react-oauth/google';
 import gsap from 'gsap';
 import { ShieldCheck, ChevronDown, Check, Mail } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { useToast } from '../components/ToastContext';
 
 /* ───────── Progress items for right panel ───────── */
 const PROGRESS_ITEMS = [
@@ -13,6 +16,9 @@ const PROGRESS_ITEMS = [
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { isAuthenticated, loginWithGoogle } = useAuth();
+  const { addToast } = useToast();
 
   /* refs */
   const pageRef = useRef(null);
@@ -26,6 +32,15 @@ export default function LoginPage() {
   /* state */
   const [email, setEmail] = useState('');
   const [progressOpen, setProgressOpen] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // If already authenticated, redirect to /chat
+  useEffect(() => {
+    if (isAuthenticated) {
+      const destination = location.state?.from?.pathname || '/chat';
+      navigate(destination, { replace: true });
+    }
+  }, [isAuthenticated, navigate, location]);
 
   /* ── GSAP entrance animations ── */
   useEffect(() => {
@@ -77,23 +92,66 @@ export default function LoginPage() {
     return () => ctx.revert();
   }, []);
 
-  /* ── handlers ── */
-  const handleGoogleLogin = () => {
-    gsap.to(formRef.current, {
-      scale: 0.96,
-      opacity: 0,
-      duration: 0.35,
-      onComplete: () => navigate('/'),
-    });
+  /* ── Google OAuth login hook ── */
+  const triggerGoogleLogin = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      setIsSubmitting(true);
+      try {
+        const result = await loginWithGoogle(null, tokenResponse.access_token);
+        if (result.success) {
+          addToast({
+            title: 'Welcome to PhishLens',
+            message: `Signed in as ${result.user?.name || result.user?.email}`,
+            type: 'success',
+          });
+
+          const destination = location.state?.from?.pathname || '/chat';
+          gsap.to(formRef.current, {
+            scale: 0.96,
+            opacity: 0,
+            duration: 0.35,
+            onComplete: () => navigate(destination, { replace: true }),
+          });
+        } else {
+          addToast({
+            title: 'Authentication Error',
+            message: result.error || 'Could not verify Google credentials.',
+            type: 'error',
+          });
+        }
+      } catch (err) {
+        addToast({
+          title: 'Sign In Failed',
+          message: err.message || 'Unexpected authentication failure.',
+          type: 'error',
+        });
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    onError: (error) => {
+      console.error('Google Sign In Error:', error);
+      addToast({
+        title: 'Google Sign In',
+        message: 'Google login popup closed or was cancelled.',
+        type: 'error',
+      });
+      setIsSubmitting(false);
+    },
+  });
+
+  const handleGoogleClick = () => {
+    if (isSubmitting) return;
+    triggerGoogleLogin();
   };
 
   const handleEmailLogin = (e) => {
     e.preventDefault();
-    gsap.to(formRef.current, {
-      scale: 0.96,
-      opacity: 0,
-      duration: 0.35,
-      onComplete: () => navigate('/chat'),
+    if (!email) return;
+    addToast({
+      title: 'Email Sign In',
+      message: 'Email & Password authentication will be configured next.',
+      type: 'info',
     });
   };
 
@@ -141,28 +199,40 @@ export default function LoginPage() {
             {/* Google button */}
             <button
               type="button"
-              onClick={handleGoogleLogin}
-              className="w-full flex items-center justify-center gap-2.5 bg-white/[0.06] text-stone-200 border border-white/[0.12] rounded-xl font-[inherit] text-[15px] font-semibold cursor-pointer transition-all duration-250 py-2.5 px-4 hover:bg-white/10 hover:border-white/20 hover:-translate-y-px"
+              disabled={isSubmitting}
+              onClick={handleGoogleClick}
+              className={`w-full flex items-center justify-center gap-2.5 bg-white/[0.06] text-stone-200 border border-white/[0.12] rounded-xl font-[inherit] text-[15px] font-semibold cursor-pointer transition-all duration-250 py-2.5 px-4 hover:bg-white/10 hover:border-white/20 hover:-translate-y-px ${
+                isSubmitting ? 'opacity-60 cursor-not-allowed' : ''
+              }`}
             >
-              <svg className="shrink-0" viewBox="0 0 24 24" width="20" height="20">
-                <path
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1Z"
-                  fill="#4285F4"
-                />
-                <path
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A10.997 10.997 0 0 0 12 23Z"
-                  fill="#34A853"
-                />
-                <path
-                  d="M5.84 14.09A6.6 6.6 0 0 1 5.5 12c0-.72.12-1.42.35-2.09V7.07H2.18A10.998 10.998 0 0 0 1 12c0 1.78.43 3.46 1.18 4.93l3.66-2.84Z"
-                  fill="#FBBC05"
-                />
-                <path
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15A10.94 10.94 0 0 0 12 1 10.998 10.998 0 0 0 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53Z"
-                  fill="#EA4335"
-                />
-              </svg>
-              Continue with Google
+              {isSubmitting ? (
+                <span className="flex items-center gap-2">
+                  <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                  Connecting to Google...
+                </span>
+              ) : (
+                <>
+                  <svg className="shrink-0" viewBox="0 0 24 24" width="20" height="20">
+                    <path
+                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1Z"
+                      fill="#4285F4"
+                    />
+                    <path
+                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A10.997 10.997 0 0 0 12 23Z"
+                      fill="#34A853"
+                    />
+                    <path
+                      d="M5.84 14.09A6.6 6.6 0 0 1 5.5 12c0-.72.12-1.42.35-2.09V7.07H2.18A10.998 10.998 0 0 0 1 12c0 1.78.43 3.46 1.18 4.93l3.66-2.84Z"
+                      fill="#FBBC05"
+                    />
+                    <path
+                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15A10.94 10.94 0 0 0 12 1 10.998 10.998 0 0 0 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53Z"
+                      fill="#EA4335"
+                    />
+                  </svg>
+                  Continue with Google
+                </>
+              )}
             </button>
 
             {/* divider */}

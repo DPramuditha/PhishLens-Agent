@@ -1,9 +1,11 @@
 import { useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
+import { useAuth } from '../context/AuthContext';
 
-export default function ProfileBottomSheet({ isOpen, onClose, isDarkMode, onToggleDarkMode, profileName, profileEmail }) {
+export default function ProfileBottomSheet({ isOpen, onClose, isDarkMode, onToggleDarkMode, profileName, profileEmail, profilePicture }) {
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const sheetRef = useRef(null);
   const overlayRef = useRef(null);
 
@@ -24,6 +26,12 @@ export default function ProfileBottomSheet({ isOpen, onClose, isDarkMode, onTogg
     } else {
       onClose();
     }
+  };
+
+  const handleLogout = () => {
+    logout();
+    handleClose();
+    navigate('/login');
   };
 
   if (!isOpen) return null;
@@ -63,13 +71,21 @@ export default function ProfileBottomSheet({ isOpen, onClose, isDarkMode, onTogg
 
         {/* Avatar + info */}
         <div className="flex items-center gap-4 py-4">
-          <div className="w-16 h-16 rounded-full bg-indigo-500 text-white flex items-center justify-center text-2xl font-bold shadow-md shrink-0">
-            {profileInitial}
-          </div>
+          {profilePicture ? (
+            <img
+              src={profilePicture}
+              alt={profileName}
+              className="w-16 h-16 rounded-full object-cover shadow-md shrink-0 border-2 border-indigo-500"
+            />
+          ) : (
+            <div className="w-16 h-16 rounded-full bg-indigo-500 text-white flex items-center justify-center text-2xl font-bold shadow-md shrink-0">
+              {profileInitial}
+            </div>
+          )}
           <div className="min-w-0">
             <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 truncate">{profileName}</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{profileEmail}</p>
-            <button className="text-sm text-indigo-500 mt-1 hover:underline cursor-pointer">Edit Profile</button>
+            <span className="inline-block text-xs font-semibold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full mt-1">Google Verified</span>
           </div>
         </div>
 
@@ -113,7 +129,7 @@ export default function ProfileBottomSheet({ isOpen, onClose, isDarkMode, onTogg
 
         {/* Logout */}
         <button
-          onClick={() => navigate('/login')}
+          onClick={handleLogout}
           className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-red-500 text-left rounded-xl cursor-pointer"
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-6">
