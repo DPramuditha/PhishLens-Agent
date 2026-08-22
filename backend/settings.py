@@ -12,10 +12,14 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Load environment variables from backend/.env and root .env
+load_dotenv(os.path.join(BASE_DIR, 'backend', '.env'))
+load_dotenv(os.path.join(BASE_DIR, '.env'))
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -85,12 +89,27 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+DB_ENGINE = os.getenv('DB_ENGINE', '').strip()
+DB_NAME = os.getenv('DB_NAME', '').strip()
+
+if DB_ENGINE == 'django.db.backends.postgresql' or (DB_NAME and DB_ENGINE != 'django.db.backends.sqlite3'):
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': DB_NAME,
+            'USER': os.getenv('DB_USER', 'postgres').strip(),
+            'PASSWORD': os.getenv('DB_PASSWORD', '').strip(),
+            'HOST': os.getenv('DB_HOST', 'localhost').strip(),
+            'PORT': os.getenv('DB_PORT', '5432').strip(),
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation

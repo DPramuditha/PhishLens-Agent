@@ -115,6 +115,74 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // Register with Name, Email & Password (saved to PostgreSQL backend)
+  const registerWithEmail = async ({ name, email, password }) => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/register/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name, email, password }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || data.detail || 'Registration failed');
+      }
+
+      const receivedToken = data.token;
+      const receivedUser = data.user;
+
+      setToken(receivedToken);
+      setUser(receivedUser);
+      localStorage.setItem(STORAGE_TOKEN_KEY, receivedToken);
+      localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(receivedUser));
+
+      return { success: true, user: receivedUser };
+    } catch (err) {
+      console.error('Registration error:', err);
+      return { success: false, error: err.message };
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Login with Email & Password
+  const loginWithEmail = async (email, password) => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/login/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || data.detail || 'Invalid email or password');
+      }
+
+      const receivedToken = data.token;
+      const receivedUser = data.user;
+
+      setToken(receivedToken);
+      setUser(receivedUser);
+      localStorage.setItem(STORAGE_TOKEN_KEY, receivedToken);
+      localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(receivedUser));
+
+      return { success: true, user: receivedUser };
+    } catch (err) {
+      console.error('Email login error:', err);
+      return { success: false, error: err.message };
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Logout
   const logout = () => {
     try {
@@ -163,6 +231,8 @@ export function AuthProvider({ children }) {
     isAuthenticated: !!user && !!token,
     isLoading,
     loginWithGoogle,
+    registerWithEmail,
+    loginWithEmail,
     logout,
     authFetch,
     API_BASE,

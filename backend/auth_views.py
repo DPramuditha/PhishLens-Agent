@@ -386,10 +386,11 @@ def email_login_view(request):
     if not email or not password:
         return JsonResponse({"error": "Email and password are required."}, status=400)
 
-    # Django authenticate checks username
-    user = User.objects.filter(email=email).first()
-    if user:
-        user = authenticate(username=user.username, password=password)
+    # Case-insensitive lookup for email or username
+    user_obj = User.objects.filter(email__iexact=email).first() or User.objects.filter(username__iexact=email).first()
+    user = None
+    if user_obj:
+        user = authenticate(username=user_obj.username, password=password)
 
     if not user:
         return JsonResponse({"error": "Invalid email or password."}, status=401)
@@ -410,45 +411,98 @@ def email_login_view(request):
     }, status=200)
 
 
+import re
+from django.core.exceptions import ValidationError
+from django.contrib.auth.password_validation import validate_password
+
+EMAIL_REGEX = re.compile(r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$')
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def email_register_view(request):
     """
     POST /api/auth/register/
-    Body: { "email": "...", "password": "...", "name": "..." }
+    Body: { "name": "...", "email": "...", "password": "..." }
+
+    Performs full security validation:
+    1. Validates name length.
+    2. Validates RFC-compliant email structure and uniqueness.
+    3. Enforces strong password rules (8+ chars, uppercase, lowercase, digit, special char).
+    4. Runs Django core password validators.
+    5. Saves salted hashed user in PostgreSQL/DB and returns 24h JWT.
     """
     try:
         data = json.loads(request.body)
+        name = data.get("name", "").strip()
         email = data.get("email", "").strip().lower()
         password = data.get("password", "")
-        name = data.get("name", "").strip()
     except (json.JSONDecodeError, AttributeError):
-        return JsonResponse({"error": "Invalid JSON body."}, status=400)
+        return JsonResponse({"error": "Invalid JSON payload."}, status=400)
 
-    if not email or not password:
-        return JsonResponse({"error": "Email and password are required."}, status=400)
+    # 1. Name validation
+    if not name or len(name) < 2:
+        return JsonResponse({"error": "Please enter your full name (at least 2 characters)."}, status=400)
 
-    if len(password) < 6:
-        return JsonResponse({"error": "Password must be at least 6 characters long."}, status=400)
+    # 2. Email validation
+    if not email:
+        return JsonResponse({"error": "Email address is required."}, status=400)
 
-    if User.objects.filter(email=email).exists() or User.objects.filter(username=email).exists():
-        return JsonResponse({"error": "An account with this email already exists."}, status=400)
+    if not EMAIL_REGEX.match(email):
+        return JsonResponse({"error": "Please enter a valid email address (e.g. name@company.com)."}, status=400)
 
-    user = User.objects.create_user(
-        username=email,
-        email=email,
-        password=password,
-        first_name=name,
-    )
+    if User.objects.filter(email__iexact=email).exists() or User.objects.filter(username__iexact=email).exists():
+        return JsonResponse({"error": "An account with this email address already exists. Please sign in."}, status=409)
+
+    # 3. Strict Password Complexity Validation
+    if not password or len(password) < 8:
+        return JsonResponse({"error": "Password must be at least 8 characters long."}, status=400)
+
+    if not re.search(r'[A-Z]', password):
+        return JsonResponse({"error": "Password must contain at least one uppercase letter (A-Z)."}, status=400)
+
+    if not re.search(r'[a-z]', password):
+        return JsonResponse({"error": "Password must contain at least one lowercase letter (a-z)."}, status=400)
+
+    if not re.search(r'[0-9]', password):
+        return JsonResponse({"error": "Password must contain at least one numeric digit (0-9)."}, status=400)
+
+    if not re.search(r'[!@#$%^&*()_+\-=\[\]{};\':"\\|,.<>\/?~`]', password):
+        return JsonResponse({"error": "Password must contain at least one special character (!@#$%^&* etc.)."}, status=400)
+
+    # 4. Django core password validation
+    try:
+        validate_password(password)
+    except ValidationError as ve:
+        return JsonResponse({"error": "; ".join(ve.messages)}, status=400)
+
+    # 5. Create user in PostgreSQL database
+    name_parts = name.split(" ", 1)
+    first_name = name_parts[0].strip()
+    last_name = name_parts[1].strip() if len(name_parts) > 1 else ""
+
+    try:
+        user = User.objects.create_user(
+            username=email,
+            email=email,
+            password=password,
+            first_name=first_name,
+            last_name=last_name,
+        )
+    except Exception as e:
+        return JsonResponse({"error": f"Failed to create user account: {str(e)}"}, status=500)
+
     token = generate_jwt_token(user)
+    display_name = f"{user.first_name} {user.last_name}".strip() or user.username
 
     return JsonResponse({
         "status": "success",
+        "message": "Account created successfully.",
         "token": token,
         "user": {
             "id": user.id,
             "email": user.email,
-            "name": name or email,
+            "name": display_name,
             "picture": "",
             "given_name": user.first_name,
         },

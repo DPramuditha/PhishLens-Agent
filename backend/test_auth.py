@@ -9,6 +9,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend.settings')
 django.setup()
 
 import json
+import uuid
 from django.test import RequestFactory
 from django.contrib.auth.models import User
 from backend.auth_views import (
@@ -16,6 +17,8 @@ from backend.auth_views import (
     decode_jwt_token,
     current_user_view,
     google_auth_view,
+    email_register_view,
+    email_login_view,
     jwt_required,
 )
 from backend.agents.views import scan_url_view
@@ -81,7 +84,68 @@ def run_tests():
     assert resp_bad_google.status_code == 401, f"Expected 401, got {resp_bad_google.status_code}"
     print("[PASS] [TEST 5] Invalid Google credential properly rejected (401)")
 
-    print("\nALL 5 BACKEND AUTHENTICATION & SECURITY TESTS PASSED SUCCESSFULLY!")
+    # 6. Test /api/auth/register/ with weak passwords (should be rejected)
+    weak_cases = [
+        {"name": "A", "email": "valid@phishlens.ai", "password": "Password123!"}, # Name too short
+        {"name": "Valid Name", "email": "not-an-email", "password": "Password123!"}, # Bad email
+        {"name": "Valid Name", "email": "valid@phishlens.ai", "password": "short"}, # Short password
+        {"name": "Valid Name", "email": "valid@phishlens.ai", "password": "nouppercase123!"}, # No uppercase
+        {"name": "Valid Name", "email": "valid@phishlens.ai", "password": "NOLOWERCASE123!"}, # No lowercase
+        {"name": "Valid Name", "email": "valid@phishlens.ai", "password": "NoNumbersHere!"}, # No number
+        {"name": "Valid Name", "email": "valid@phishlens.ai", "password": "NoSpecialChar123"}, # No special char
+    ]
+    for case in weak_cases:
+        req = factory.post("/api/auth/register/", data=json.dumps(case), content_type="application/json")
+        resp = email_register_view(req)
+        assert resp.status_code == 400, f"Expected 400 for {case}, got {resp.status_code}: {resp.content}"
+    print("[PASS] [TEST 6] Strict password complexity and RFC email validation enforced (400 Bad Request)")
+
+    # 7. Test Successful User Registration & JWT Issuance
+    unique_email = f"user_{uuid.uuid4().hex[:8]}@phishlens.ai"
+    reg_payload = {
+        "name": "Dimuthu Pramuditha",
+        "email": unique_email,
+        "password": "SecurePassword123!#",
+    }
+    req_reg = factory.post("/api/auth/register/", data=json.dumps(reg_payload), content_type="application/json")
+    resp_reg = email_register_view(req_reg)
+    assert resp_reg.status_code == 201, f"Expected 201, got {resp_reg.status_code}: {resp_reg.content}"
+    data_reg = json.loads(resp_reg.content)
+    assert "token" in data_reg, "Registration response missing JWT token"
+    assert data_reg["user"]["email"] == unique_email
+    assert data_reg["user"]["name"] == "Dimuthu Pramuditha"
+    print("[PASS] [TEST 7] User successfully registered in database with PBKDF2 hashing & JWT issuance (201 Created)")
+
+    # 8. Test Duplicate Email Registration (should be 409 Conflict)
+    req_dup = factory.post("/api/auth/register/", data=json.dumps(reg_payload), content_type="application/json")
+    resp_dup = email_register_view(req_dup)
+    assert resp_dup.status_code == 409, f"Expected 409, got {resp_dup.status_code}"
+    print("[PASS] [TEST 8] Duplicate email registration rejected (409 Conflict)")
+
+    # 9. Test Email Login with Registered User
+    login_payload = {
+        "email": unique_email,
+        "password": "SecurePassword123!#",
+    }
+    req_login = factory.post("/api/auth/login/", data=json.dumps(login_payload), content_type="application/json")
+    resp_login = email_login_view(req_login)
+    assert resp_login.status_code == 200, f"Expected 200, got {resp_login.status_code}"
+    data_login = json.loads(resp_login.content)
+    assert "token" in data_login
+    assert data_login["user"]["email"] == unique_email
+    print("[PASS] [TEST 9] Email & Password login verified with JWT issuance (200 OK)")
+
+    # 10. Test Login with Wrong Password
+    bad_login_payload = {
+        "email": unique_email,
+        "password": "WrongPassword999!",
+    }
+    req_bad_login = factory.post("/api/auth/login/", data=json.dumps(bad_login_payload), content_type="application/json")
+    resp_bad_login = email_login_view(req_bad_login)
+    assert resp_bad_login.status_code == 401, f"Expected 401, got {resp_bad_login.status_code}"
+    print("[PASS] [TEST 10] Wrong password rejected (401 Unauthorized)")
+
+    print("\nALL 10 BACKEND AUTHENTICATION & SECURITY TESTS PASSED SUCCESSFULLY!")
 
 if __name__ == "__main__":
     run_tests()
