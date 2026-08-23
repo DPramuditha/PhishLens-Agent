@@ -218,6 +218,30 @@ def jwt_required(view_func):
     return _wrapped_view
 
 
+def optional_jwt(view_func):
+    """
+    Decorator that attaches `request.user` and `request.user_claims` if a valid
+    Bearer token is present, but allows guest/anonymous access if no token is provided.
+    """
+    def _wrapped_view(request, *args, **kwargs):
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header:
+            auth_header = request.META.get("HTTP_AUTHORIZATION", "")
+
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split("Bearer ", 1)[1].strip()
+            payload, error = decode_jwt_token(token)
+            if not error and payload:
+                user_id = payload.get("user_id")
+                user = User.objects.filter(id=user_id).first()
+                if user:
+                    request.user_claims = payload
+                    request.user = user
+        return view_func(request, *args, **kwargs)
+
+    return _wrapped_view
+
+
 # ─────────────────────────────────────────────────────────────
 # API Endpoints & Verification Helpers
 # ─────────────────────────────────────────────────────────────
