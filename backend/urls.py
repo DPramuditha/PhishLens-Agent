@@ -27,15 +27,19 @@ from backend.agents.views import (
     chat_message_view,
     chat_memory_view,
     user_screenshots_view,
+    export_pdf_view,
+    export_chat_pdf_view,
 )
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/scan/', scan_url_view, name='scan_url'),
+    path('api/scan/pdf/', export_pdf_view, name='export_scan_pdf'),
     path('api/health/', health_check, name='health_check'),
     # Chat & Agent Memory Endpoints
     path('api/chats/', chats_list_create_view, name='chats_list_create'),
     path('api/chats/<uuid:chat_id>/', chat_detail_view, name='chat_detail'),
+    path('api/chats/<uuid:chat_id>/pdf/', export_chat_pdf_view, name='export_chat_pdf'),
     path('api/chats/<uuid:chat_id>/message/', chat_message_view, name='chat_message'),
     path('api/chats/<uuid:chat_id>/memory/', chat_memory_view, name='chat_memory'),
     path('api/screenshots/', user_screenshots_view, name='user_screenshots'),

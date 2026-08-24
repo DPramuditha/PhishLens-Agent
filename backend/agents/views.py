@@ -20,7 +20,7 @@ from urllib.parse import urlparse
 
 from django.conf import settings
 from django.db.models import Q
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from dotenv import load_dotenv
@@ -28,6 +28,7 @@ from dotenv import load_dotenv
 from backend.auth_views import optional_jwt
 from backend.agents.models import ChatSession, ChatMessage, AgentMemoryRecord
 from backend.agents.memory import long_term_memory
+from backend.agents.pdf_report_agent import PDFReportAgent
 
 # Load env
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
@@ -446,3 +447,111 @@ def health_check(request):
             "long_term": "PostgresStore + AgentMemoryRecord",
         }
     })
+
+
+# ---------------------------------------------------------------------------
+# PDF Report Export Endpoints
+# ---------------------------------------------------------------------------
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@optional_jwt
+def export_pdf_view(request):
+    """
+    POST /api/scan/pdf/
+    Body: {
+        "url": "https://example.com",
+        "report": { ... },
+        "screenshot_data": "data:image/...",
+        "url_analysis_data": { ... },
+        "duration": 3.4
+    }
+    Generates and streams a high-resolution PDF threat assessment report.
+    """
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except (json.JSONDecodeError, AttributeError):
+        return JsonResponse({"error": "Invalid JSON body."}, status=400)
+
+    url = body.get("url") or body.get("target_url") or "Unknown Target"
+    report = body.get("report") or {}
+    screenshot_data = body.get("screenshot_data") or body.get("screenshot_url")
+    url_analysis_data = body.get("url_analysis_data")
+    duration = body.get("duration") or body.get("total_duration_sec")
+
+    parsed = urlparse(url)
+    clean_domain = parsed.hostname or url.replace("://", "_").replace("/", "_")
+    filename = f"PhishLens_Security_Report_{clean_domain}.pdf"
+
+    try:
+        agent = PDFReportAgent()
+        pdf_bytes = agent.generate_pdf(
+            url=url,
+            report=report,
+            screenshot_data=screenshot_data,
+            url_analysis_data=url_analysis_data,
+            duration=duration,
+        )
+
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        response["Content-Length"] = len(pdf_bytes)
+        return response
+    except Exception as e:
+        return JsonResponse({"error": f"Failed to generate PDF report: {str(e)}"}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+@optional_jwt
+def export_chat_pdf_view(request, chat_id):
+    """
+    GET /api/chats/<chat_id>/pdf/
+    Generates and streams the PDF report for a saved chat session from database.
+    """
+    try:
+        session_uuid = uuid.UUID(str(chat_id))
+    except ValueError:
+        return JsonResponse({"error": "Invalid UUID format for chat_id."}, status=400)
+
+    chat = ChatSession.objects.filter(id=session_uuid).first()
+    if not chat:
+        return JsonResponse({"error": "Chat session not found."}, status=404)
+
+    # Find the latest scan message with a report
+    scan_msg = chat.messages.filter(report__isnull=False).order_by("-created_at").first()
+    if not scan_msg:
+        # Fallback to any assistant message
+        scan_msg = chat.messages.filter(sender="assistant").order_by("-created_at").first()
+
+    report = scan_msg.report if scan_msg and scan_msg.report else {
+        "risk_level": "UNKNOWN",
+        "risk_score": 0,
+        "summary": scan_msg.text if scan_msg else "No scan data available.",
+    }
+    url = scan_msg.target_url if scan_msg and scan_msg.target_url else chat.title
+    screenshot_data = scan_msg.screenshot_data if scan_msg else None
+    url_analysis_data = scan_msg.url_analysis_data if scan_msg else None
+    duration = scan_msg.duration_sec if scan_msg else None
+
+    parsed = urlparse(url)
+    clean_domain = parsed.hostname or url.replace("://", "_").replace("/", "_")
+    filename = f"PhishLens_Security_Report_{clean_domain}.pdf"
+
+    try:
+        agent = PDFReportAgent()
+        pdf_bytes = agent.generate_pdf(
+            url=url,
+            report=report,
+            screenshot_data=screenshot_data,
+            url_analysis_data=url_analysis_data,
+            duration=duration,
+        )
+
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        response["Content-Length"] = len(pdf_bytes)
+        return response
+    except Exception as e:
+        return JsonResponse({"error": f"Failed to generate PDF report: {str(e)}"}, status=500)
+

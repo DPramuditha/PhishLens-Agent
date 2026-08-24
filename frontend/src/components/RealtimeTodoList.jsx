@@ -341,7 +341,7 @@ export default function RealtimeTodoList({
                 <span
                   className={`min-w-0 flex-1 truncate text-[11.5px] transition-colors duration-200 ${
                     isTaskDone
-                      ? "font-medium line-through text-gray-400 dark:text-zinc-500"
+                      ? "font-medium text-gray-700 dark:text-zinc-200"
                       : isTaskActive
                       ? "font-bold text-gray-900 dark:text-zinc-100"
                       : isTaskFailed

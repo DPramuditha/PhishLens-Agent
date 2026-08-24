@@ -28,10 +28,12 @@ import {
 import gsap from 'gsap';
 import { AnimatedCircularProgressBar } from './ui/animated-circular-progress-bar';
 import { Highlight } from './ui/highlighter';
+import FileDownloadCard from './FileDownloadCard';
+import PDFBuildingAnimation from './PDFBuildingAnimation';
 
-// Helper component to type out text word by word sequentially
-function WordTypingText({ text, speed = 30, onComplete, trigger = false }) {
-  const [displayText, setDisplayText] = useState('');
+// Helper component to type out text word by word sequentially (or immediately for history)
+function WordTypingText({ text, speed = 30, onComplete, trigger = false, animate = true }) {
+  const [displayText, setDisplayText] = useState(animate ? '' : (text || ''));
   const onCompleteRef = useRef(onComplete);
 
   // Keep ref up to date
@@ -40,6 +42,11 @@ function WordTypingText({ text, speed = 30, onComplete, trigger = false }) {
   }, [onComplete]);
 
   useEffect(() => {
+    if (!animate) {
+      setDisplayText(text || '');
+      return;
+    }
+
     if (!trigger || !text) {
       setDisplayText('');
       return;
@@ -69,11 +76,11 @@ function WordTypingText({ text, speed = 30, onComplete, trigger = false }) {
     }, speed);
 
     return () => clearInterval(interval);
-  }, [text, speed, trigger]);
+  }, [text, speed, trigger, animate]);
 
   if (!trigger) return null;
 
-  return <span>{displayText}</span>;
+  return <span>{!animate ? text : displayText}</span>;
 }
 
 // Subcomponent for displaying execution trace logs with smooth height animation
@@ -190,14 +197,25 @@ function InfoRow({ label, value, fullWidth = false, valueColor }) {
 }
 
 // Subcomponent for rendering the beautiful, complete scan report dashboard
-export default function ReportDashboard({ report, duration, screenshotUrl, toolTrace, urlAnalysisData }) {
+export default function ReportDashboard({
+  report,
+  duration,
+  screenshotUrl,
+  toolTrace,
+  urlAnalysisData,
+  url,
+  chatId,
+  isLive = false,
+}) {
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const containerRef = useRef(null);
-  const [activeStep, setActiveStep] = useState(0);
+  const [activeStep, setActiveStep] = useState(isLive ? 0 : 9999);
+  const [isPdfReady, setIsPdfReady] = useState(!isLive);
 
   useEffect(() => {
-    setActiveStep(0);
-  }, [report]);
+    setActiveStep(isLive ? 0 : 9999);
+    setIsPdfReady(!isLive);
+  }, [report, isLive]);
 
   // Helper to extract clean URL from summary text
   const getUrlFromSummary = (summaryText) => {
@@ -205,24 +223,32 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
     return match ? match[0] : 'https://secure-login-update-bank.com';
   };
 
+  const analyzedUrl = url || getUrlFromSummary(report?.summary);
+
   // Entrance animations using GSAP
   useEffect(() => {
     if (!containerRef.current || !report) return;
 
     const ctx = gsap.context(() => {
-      gsap.set('.animate-left', { x: -30, opacity: 0 });
-      gsap.set('.animate-report', { x: 30, opacity: 0 });
-      gsap.set('.animate-footer', { opacity: 0 });
+      if (isLive) {
+        gsap.set('.animate-left', { x: -30, opacity: 0 });
+        gsap.set('.animate-report', { x: 30, opacity: 0 });
+        gsap.set('.animate-footer', { opacity: 0 });
 
-      const tl = gsap.timeline({ defaults: { ease: 'power4.out', duration: 0.9 } });
+        const tl = gsap.timeline({ defaults: { ease: 'power4.out', duration: 0.9 } });
 
-      tl.to('.animate-left', { x: 0, opacity: 1, duration: 1.2 })
-        .to('.animate-report', { x: 0, opacity: 1, duration: 1.0 }, '-=0.9')
-        .to('.animate-footer', { opacity: 1, duration: 0.6 }, '-=0.5');
+        tl.to('.animate-left', { x: 0, opacity: 1, duration: 1.2 })
+          .to('.animate-report', { x: 0, opacity: 1, duration: 1.0 }, '-=0.9')
+          .to('.animate-footer', { opacity: 1, duration: 0.6 }, '-=0.5');
+      } else {
+        gsap.set('.animate-left', { x: 0, opacity: 1 });
+        gsap.set('.animate-report', { x: 0, opacity: 1 });
+        gsap.set('.animate-footer', { opacity: 1 });
+      }
     }, containerRef);
 
     return () => ctx.revert();
-  }, [report]);
+  }, [report, isLive]);
 
   // Lightbox slide panel animation
   useEffect(() => {
@@ -274,7 +300,6 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
   const score = report?.risk_score ?? 0;
   const riskLevel = String(report?.risk_level || 'UNKNOWN').toUpperCase();
   const summaryText = report?.summary || 'Phishing analysis report completed.';
-  const analyzedUrl = getUrlFromSummary(summaryText);
 
   const hasBrand = Boolean(report?.brand_impersonation && report.brand_impersonation.detected);
   const brandName = report?.brand_impersonation?.brand || 'Unknown Brand';
@@ -285,11 +310,12 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
   const findingsCount = findingsList.length;
   const findingsStartStep = hasBrand ? 2 : 1;
   const safetyStartStep = findingsStartStep + findingsCount;
+  const pdfBuildStartStep = safetyStartStep + (report?.safety_advice ? 1 : 0);
 
   return (
     <div
       ref={containerRef}
-      className="w-full flex flex-col gap-6 text-gray-800 dark:text-gray-100"
+      className="w-full flex flex-col gap-6 text-gray-800 dark:text-gray-100 font-inter"
     >
       {/* ─── TOP SECTION: Webpage Screenshot ─── */}
       <div className="animate-left flex flex-col gap-2.5 w-full max-w-2xl mx-auto">
@@ -323,8 +349,8 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
         </div>
       </div>
 
-      {/* ─── BOTTOM SECTION: Security Report Details (Structured Plain Text with Typing) ─── */}
-      <div className="animate-report flex flex-col gap-6 w-full max-w-2xl mx-auto text-left">
+      {/* ─── BOTTOM SECTION: Security Report Details (Structured Plain Text with Typing in Inter Font) ─── */}
+      <div className="animate-report font-inter flex flex-col gap-6 w-full max-w-2xl mx-auto text-left">
         
         {/* Verdict & Circular Progress Bar Row */}
         <div className="flex items-center justify-between gap-6 border-b border-gray-200/50 dark:border-gray-850/40 pb-5">
@@ -359,6 +385,7 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
               text={summaryText} 
               speed={35} 
               trigger={activeStep >= 0}
+              animate={isLive}
               onComplete={() => setActiveStep(hasBrand ? 1 : findingsStartStep)}
             />
           </p>
@@ -483,6 +510,7 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
                 text={`Target Mimics: ${brandName} (Confidence: ${brandConfidence}%)`} 
                 speed={35}
                 trigger={activeStep >= 1}
+                animate={isLive}
                 onComplete={() => setActiveStep(findingsStartStep)}
               />
             </p>
@@ -515,11 +543,12 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
                     <p className="text-[16.5px] md:text-[18px] leading-relaxed text-gray-700 dark:text-gray-200 font-medium relative">
                       <span className="font-black text-gray-900 dark:text-white">{category}{severity}: </span>
                       {isVisualML ? (
-                        <Highlight color={highlightColor} trigger={typingCompleteTrigger} duration={0.9} delay={0.1}>
+                        <Highlight color={highlightColor} trigger={!isLive || typingCompleteTrigger} duration={isLive ? 0.9 : 0} delay={isLive ? 0.1 : 0}>
                           <WordTypingText 
                             text={f?.detail || ''} 
                             speed={35}
                             trigger={stepTrigger}
+                            animate={isLive}
                             onComplete={() => setActiveStep(findingsStartStep + idx + 1)}
                           />
                         </Highlight>
@@ -528,6 +557,7 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
                           text={f?.detail || ''} 
                           speed={35}
                           trigger={stepTrigger}
+                          animate={isLive}
                           onComplete={() => setActiveStep(findingsStartStep + idx + 1)}
                         />
                       )}
@@ -550,6 +580,8 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
                 text={report.safety_advice} 
                 speed={35}
                 trigger={activeStep >= safetyStartStep}
+                animate={isLive}
+                onComplete={() => setActiveStep(pdfBuildStartStep)}
               />
             </p>
           </div>
@@ -584,6 +616,30 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
                 </p>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ─── PDF Building Animation (triggers after all writing steps complete on live scans only) ─── */}
+        {isLive && activeStep >= pdfBuildStartStep && !isPdfReady && (
+          <div className="mt-3">
+            <PDFBuildingAnimation
+              onSettled={() => setIsPdfReady(true)}
+              hasScreenshot={Boolean(screenshotUrl)}
+            />
+          </div>
+        )}
+
+        {/* ─── PDF Report Download Card (revealed once building animation settles or immediately in history view) ─── */}
+        {isPdfReady && (
+          <div className="mt-2 transition-all duration-500 animate-fadeIn">
+            <FileDownloadCard
+              url={analyzedUrl}
+              report={report}
+              screenshotUrl={screenshotUrl}
+              urlAnalysisData={urlAnalysisData}
+              duration={duration}
+              chatId={chatId}
+            />
           </div>
         )}
 

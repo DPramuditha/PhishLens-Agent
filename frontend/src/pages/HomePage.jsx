@@ -627,13 +627,16 @@ export default function HomePage() {
             overallStatus: msg.overall_status,
             duration: msg.duration_sec,
             error: msg.error,
+            isLive: false,
           }));
 
           setMessages(formatted);
           setHasSentMessage(true);
+          setShowAgentTasks(true);
         } else {
           setMessages([]);
           setHasSentMessage(false);
+          setShowAgentTasks(false);
         }
       } catch (err) {
         console.error('Error loading chat session:', err);
@@ -1133,6 +1136,7 @@ export default function HomePage() {
                   overallStatus: data.overall_status,
                   duration: data.total_duration_sec,
                   error: data.error,
+                  isLive: true,
                 }
               : msg
           )
@@ -1277,6 +1281,7 @@ export default function HomePage() {
               overallStatus: data.overall_status,
               duration: data.total_duration_sec,
               error: data.error,
+              isLive: true,
             }
             : msg
         )
@@ -1482,10 +1487,13 @@ export default function HomePage() {
                               screenshotUrl={msg.screenshotUrl}
                               toolTrace={msg.toolTrace}
                               urlAnalysisData={msg.urlAnalysisData}
+                              url={msg.url}
+                              chatId={activeChatId}
+                              isLive={Boolean(msg.isLive)}
                             />
                           )}
                           {msg.status === 'completed' && !msg.report && msg.text && (
-                            <div className="p-4 rounded-2xl bg-white dark:bg-[#252525] border border-gray-200 dark:border-gray-700/80 text-gray-800 dark:text-gray-100 text-[14.5px] leading-relaxed shadow-sm max-w-[85%] whitespace-pre-wrap">
+                            <div className="p-4 rounded-2xl bg-white dark:bg-[#252525] border border-gray-200 dark:border-gray-700/80 text-gray-800 dark:text-gray-100 text-[14.5px] leading-relaxed shadow-sm max-w-[85%] whitespace-pre-wrap font-inter">
                               {msg.text}
                             </div>
                           )}
