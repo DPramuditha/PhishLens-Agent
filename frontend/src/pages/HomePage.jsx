@@ -1105,12 +1105,16 @@ export default function HomePage() {
           }
         }
 
-        // Extract screenshot URL
-        let resolvedScreenshotUrl = data.screenshot_url || null;
+        // Extract screenshot URL (supports Base64 data URI and remote URL)
+        let resolvedScreenshotUrl = data.screenshot_url || data.screenshot_data || null;
         if (!resolvedScreenshotUrl && data.screenshot_path) {
-          const parts = data.screenshot_path.split(/[/\\]/);
-          const filename = parts[parts.length - 1];
-          resolvedScreenshotUrl = `http://localhost:8000/media/screenshots/${filename}`;
+          if (data.screenshot_path.startsWith('data:image/') || data.screenshot_path.startsWith('http://') || data.screenshot_path.startsWith('https://')) {
+            resolvedScreenshotUrl = data.screenshot_path;
+          } else {
+            const parts = data.screenshot_path.split(/[/\\]/);
+            const filename = parts[parts.length - 1];
+            resolvedScreenshotUrl = `http://localhost:8000/media/screenshots/${filename}`;
+          }
         }
 
         // Update bot message with structured report details
@@ -1247,11 +1251,15 @@ export default function HomePage() {
 
       const data = await response.json();
 
-      let resolvedScreenshotUrl = data.screenshot_url || null;
+      let resolvedScreenshotUrl = data.screenshot_url || data.screenshot_data || null;
       if (!resolvedScreenshotUrl && data.screenshot_path) {
-        const parts = data.screenshot_path.split(/[/\\]/);
-        const filename = parts[parts.length - 1];
-        resolvedScreenshotUrl = `http://localhost:8000/media/screenshots/${filename}`;
+        if (data.screenshot_path.startsWith('data:image/') || data.screenshot_path.startsWith('http://') || data.screenshot_path.startsWith('https://')) {
+          resolvedScreenshotUrl = data.screenshot_path;
+        } else {
+          const parts = data.screenshot_path.split(/[/\\]/);
+          const filename = parts[parts.length - 1];
+          resolvedScreenshotUrl = `http://localhost:8000/media/screenshots/${filename}`;
+        }
       }
 
       const isFailed = data.overall_status === 'FAILED';

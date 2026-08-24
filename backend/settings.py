@@ -53,16 +53,20 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'backend.apps.authentication',
     'backend.agents',
 ]
 
 MIDDLEWARE = [
+    'backend.core.middleware.cors.CORSMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'backend.middleware.CORSMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'backend.core.middleware.jwt_auth.JWTAuthenticationMiddleware',
+    'backend.core.middleware.rate_limit.RateLimitMiddleware',
+    'backend.core.middleware.request_logging.RequestLoggingMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -90,14 +94,14 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DB_ENGINE = os.getenv('DB_ENGINE', '').strip()
-DB_NAME = os.getenv('DB_NAME', '').strip()
+DB_ENGINE = os.getenv('DB_ENGINE', 'django.db.backends.postgresql').strip()
+DB_NAME = os.getenv('DB_NAME', 'phishlens_db').strip()
 
 if DB_ENGINE == 'django.db.backends.postgresql' or (DB_NAME and DB_ENGINE != 'django.db.backends.sqlite3'):
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
-            'NAME': DB_NAME,
+            'NAME': DB_NAME or 'phishlens_db',
             'USER': os.getenv('DB_USER', 'postgres').strip(),
             'PASSWORD': os.getenv('DB_PASSWORD', '').strip(),
             'HOST': os.getenv('DB_HOST', 'localhost').strip(),

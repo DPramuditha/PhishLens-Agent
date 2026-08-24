@@ -7,6 +7,7 @@ that the LLM reads to decide when to call it.
 
 import asyncio
 import base64
+import io
 import json
 import os
 import re
@@ -14,6 +15,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse
 
+from typing import Optional, Dict, Any, List
 from langchain_core.tools import tool
 from playwright.async_api import async_playwright
 from backend.agents.visual_model import predict_screenshot
@@ -26,10 +28,6 @@ os.environ["PW_TEST_SCREENSHOT_NO_FONTS_READY"] = "1"
 # Helpers
 # ---------------------------------------------------------------------------
 
-SCREENSHOTS_DIR = Path(__file__).resolve().parent.parent.parent / "media" / "screenshots"
-SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
-
-
 def _extract_domain(url: str) -> str:
     """Extract the registered domain from a URL."""
     parsed = urlparse(url)
@@ -38,24 +36,27 @@ def _extract_domain(url: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Tool 1 — Web Scraping Agent (Screenshot Capture)
+# Tool 1 — Web Scraping Agent (Screenshot Capture in Memory)
 # ---------------------------------------------------------------------------
 
 @tool
 def capture_screenshot(url: str) -> str:
     """
-    Capture a full-page screenshot of the target URL using an optimized headless browser.
+    Capture a full-page/viewport screenshot of the target URL using a stealth headless browser.
 
     Use this tool FIRST when analysing a website for phishing.
-    It navigates to the URL using an optimized network profile,
-    blocks unnecessary scripts/trackers to minimize load latency,
-    and saves a PNG screenshot to disk.
+    It navigates to the URL, allows dynamic SPA frameworks (React/Vue) and stylesheets to paint,
+    dismisses loading overlays, and returns a 1280x800 PNG screenshot directly as a Base64 data URI
+    without writing any media files to disk.
 
     Returns a JSON object with:
-    - screenshot_path: file path to the saved screenshot
+    - screenshot_data: Base64 data URI of the captured screenshot (data:image/png;base64,...)
+    - screenshot_url: Base64 data URI for direct rendering
+    - screenshot_path: None (stored in-memory/DB only)
     - page_title: the <title> of the page
     - final_url: the URL after any redirects
     - status: "success" or "error"
+    - warning: warning message if partial load occurred
     - error: error message if status is "error"
 
     Args:
@@ -67,55 +68,49 @@ def capture_screenshot(url: str) -> str:
 
     async def _capture():
         async with async_playwright() as p:
-            # Optimize startup time with lean arguments and bot-bypass flags
+            # Modern Headless Chromium with proper software rasterization
             browser = await p.chromium.launch(
                 headless=True,
                 args=[
-                    "--disable-gpu",
-                    "--disable-dev-shm-usage",
+                    "--headless=new",
                     "--no-sandbox",
                     "--disable-setuid-sandbox",
-                    "--disable-web-security",  # Disable CORS/web security to load all fonts/assets
+                    "--disable-dev-shm-usage",
                     "--disable-blink-features=AutomationControlled",
-                    "--blink-settings=imagesEnabled=true" # Ensure images render for visual check
+                    "--disable-web-security",
+                    "--allow-running-insecure-content",
+                    "--window-size=1280,800",
                 ]
             )
             context = await browser.new_context(
                 viewport={"width": 1280, "height": 800},
-                ignore_https_errors=True,  # Bypass certificate verification errors
                 user_agent=(
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/122.0.0.0 Safari/537.36"
+                    "Chrome/124.0.0.0 Safari/537.36"
                 ),
+                ignore_https_errors=True,
+                bypass_csp=True,
+                device_scale_factor=1,
             )
-            # Add headers to match a real browser
+            # Anti-bot detection stealth
+            await context.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+                Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+                window.chrome = { runtime: {} };
+            """)
+
+            # Set realistic headers
             await context.set_extra_http_headers({
                 "Accept-Language": "en-US,en;q=0.9",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
             })
+
             page = await context.new_page()
 
-            # Latency Optimization: Block analytical/ad resources that delay load times
-            # but don't impact the layout or branding of the site.
-            blocked_patterns = [
-                r"analytics", r"telemetry", r"tracking", r"doubleclick", r"google-analytics",
-                r"facebook\.net", r"hotjar", r"mixpanel", r"adsystem", r"optimizely"
-            ]
-            async def route_handler(route):
-                try:
-                    request_url = route.request.url.lower()
-                    if any(re.search(pattern, request_url) for pattern in blocked_patterns):
-                        await route.abort()
-                    else:
-                        await route.continue_()
-                except Exception:
-                    try:
-                        await route.continue_()
-                    except Exception:
-                        pass
-
-            await page.route("**/*", route_handler)
+            # Auto-dismiss any unexpected alert/confirm dialogs
+            page.on("dialog", lambda dialog: asyncio.create_task(dialog.dismiss()))
 
             title = "Unknown Page"
             final_url = url
@@ -123,60 +118,83 @@ def capture_screenshot(url: str) -> str:
             err_msg = None
 
             try:
-                # Latency Optimization: Use "domcontentloaded" to avoid waiting for heavy ads/trackers
-                # and bound the load time to 20 seconds max.
-                await page.goto(url, wait_until="domcontentloaded", timeout=20000)
-                # Let dynamic JS/SPA frameworks and images finish rendering
-                await page.wait_for_timeout(2000)
-                title = await page.title()
+                # Navigate with domcontentloaded (fast & reliable)
+                await page.goto(url, wait_until="domcontentloaded", timeout=18000)
                 final_url = page.url
             except Exception as nav_ex:
-                # Fallback: If page load times out, wait a moment and proceed anyway
-                err_msg = f"Navigation completed with warning/timeout: {str(nav_ex)}"
+                err_msg = f"Page load warning/timeout: {str(nav_ex)}"
                 try:
-                    await page.wait_for_timeout(1500)
-                    title = await page.title() or "Loaded partially"
                     final_url = page.url
                 except Exception:
                     pass
 
-            # Capture screenshot
-            screenshot_bytes = None
-            
-            # Step 1: Capture viewport screenshot first (fast, reliable, almost never crashes)
+            # Wait for dynamic JS, hydration, and fonts to render
             try:
-                screenshot_bytes = await page.screenshot(full_page=False, type="png", timeout=15000)
-            except Exception as ss_viewport_ex:
-                err_msg = f"Viewport screenshot failed: {str(ss_viewport_ex)}"
-
-            # Step 2: Try capturing full-page screenshot (if it crashes, we already have viewport bytes)
-            if screenshot_bytes:
+                await page.wait_for_timeout(2500)
+                # Dismiss splash preloaders/spinners if present and trigger lazy-load
+                await page.evaluate("""
+                    () => {
+                        const loaders = document.querySelectorAll(
+                            '.preloader, #preloader, .loader, #loader, .spinner, .splash-screen, .loading-overlay, #loading'
+                        );
+                        loaders.forEach(el => {
+                            el.style.display = 'none';
+                            el.style.opacity = '0';
+                            el.style.visibility = 'hidden';
+                        });
+                        window.scrollBy(0, 150);
+                        window.scrollTo(0, 0);
+                    }
+                """)
+                await page.wait_for_timeout(1000)
+                title = await page.title() or "Untitled Page"
+            except Exception:
                 try:
-                    full_page_bytes = await page.screenshot(full_page=True, type="png", timeout=25000)
-                    screenshot_bytes = full_page_bytes
-                except Exception as ss_full_ex:
-                    # Keep viewport bytes, log warning
-                    err_msg = f"Full-page capture failed/timed out, viewport returned: {str(ss_full_ex)}"
+                    title = await page.title() or "Untitled Page"
+                except Exception:
+                    pass
 
-            # Save screenshot to disk
-            timestamp = int(time.time())
-            safe_domain = re.sub(r"[^a-zA-Z0-9]", "_", _extract_domain(url))
-            filename = f"{safe_domain}_{timestamp}.png"
-            filepath = SCREENSHOTS_DIR / filename
-            
-            if screenshot_bytes:
-                filepath.write_bytes(screenshot_bytes)
+            # Capture viewport screenshot in memory
+            screenshot_bytes = None
+            try:
+                screenshot_bytes = await page.screenshot(
+                    full_page=False,
+                    animations="disabled",
+                    timeout=10000
+                )
+            except Exception as ss_ex:
+                err_msg = f"Screenshot capture error: {str(ss_ex)}"
+
+            # Encode screenshot directly to Base64 Data URI in memory
+            if screenshot_bytes and len(screenshot_bytes) > 500:
+                b64_str = base64.b64encode(screenshot_bytes).decode("utf-8")
+                screenshot_data = f"data:image/png;base64,{b64_str}"
             else:
-                # Solid light-gray placeholder PNG
-                placeholder_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
-                filepath.write_bytes(base64.b64decode(placeholder_b64))
+                # Generate high-resolution 1280x800 fallback banner canvas in memory
+                from PIL import Image, ImageDraw
+                fallback_img = Image.new("RGB", (1280, 800), color=(24, 24, 27))
+                draw = ImageDraw.Draw(fallback_img)
+                # Header warning banner
+                draw.rectangle((0, 0, 1280, 80), fill=(220, 38, 38))
+                draw.text((40, 28), f"[!] PHISHLENS SCREENSHOT CAPTURE NOTICE: {url}", fill=(255, 255, 255))
+                draw.text((40, 120), f"Target URL: {url}", fill=(220, 220, 220))
+                draw.text((40, 160), f"Status: {err_msg or 'Connection could not be established'}", fill=(180, 180, 180))
+                draw.text((40, 200), "The visual analysis will proceed using available DOM & lexical signals.", fill=(140, 140, 140))
+                
+                buf = io.BytesIO()
+                fallback_img.save(buf, format="PNG")
+                buf.seek(0)
+                b64_str = base64.b64encode(buf.getvalue()).decode("utf-8")
+                screenshot_data = f"data:image/png;base64,{b64_str}"
                 if not err_msg:
-                    err_msg = "Could not capture screenshot of target website. A blank/placeholder image was saved instead."
+                    err_msg = "Screenshot capture produced empty bytes; created informative diagnostic canvas."
 
             await browser.close()
 
             return {
-                "screenshot_path": str(filepath),
+                "screenshot_data": screenshot_data,
+                "screenshot_url": screenshot_data,
+                "screenshot_path": None,
                 "page_title": title,
                 "final_url": final_url,
                 "status": status,
@@ -200,22 +218,41 @@ def capture_screenshot(url: str) -> str:
         return json.dumps(result, indent=2)
 
     except Exception as e:
+        try:
+            from PIL import Image, ImageDraw
+            fallback_img = Image.new("RGB", (1280, 800), color=(24, 24, 27))
+            draw = ImageDraw.Draw(fallback_img)
+            draw.rectangle((0, 0, 1280, 80), fill=(220, 38, 38))
+            draw.text((40, 28), f"[!] PHISHLENS SCREENSHOT CAPTURE NOTICE: {url}", fill=(255, 255, 255))
+            draw.text((40, 120), f"Target URL: {url}", fill=(220, 220, 220))
+            draw.text((40, 160), f"Status: {str(e)}", fill=(180, 180, 180))
+            draw.text((40, 200), "Visual ML analysis will evaluate diagnostic canvas.", fill=(140, 140, 140))
+            buf = io.BytesIO()
+            fallback_img.save(buf, format="PNG")
+            buf.seek(0)
+            b64_str = base64.b64encode(buf.getvalue()).decode("utf-8")
+            screenshot_data = f"data:image/png;base64,{b64_str}"
+        except Exception:
+            screenshot_data = None
+
         return json.dumps({
+            "screenshot_data": screenshot_data,
+            "screenshot_url": screenshot_data,
             "screenshot_path": None,
-            "page_title": None,
-            "final_url": None,
+            "page_title": "Screenshot Error",
+            "final_url": url,
             "status": "error",
+            "warning": f"Screenshot capture error: {str(e)}",
             "error": str(e),
         }, indent=2)
 
 
-
 # ---------------------------------------------------------------------------
-# Tool 2 — Two-Stage Visual ML Model
+# Tool 2 — Two-Stage Visual ML Model (In-Memory Base64 Support)
 # ---------------------------------------------------------------------------
 
 @tool
-def run_visual_ml_model(screenshot_path: str) -> str:
+def run_visual_ml_model(screenshot_data: Optional[str] = "", screenshot_path: Optional[str] = "") -> str:
     """
     Run the custom PyTorch two-stage visual computer vision model on a website screenshot:
     
@@ -226,8 +263,30 @@ def run_visual_ml_model(screenshot_path: str) -> str:
       against the reference brand gallery to identify the specific impersonated brand.
 
     Args:
-        screenshot_path: Absolute file path to the screenshot PNG captured by capture_screenshot
+        screenshot_data: Base64 data URI string of the screenshot (data:image/png;base64,...)
+        screenshot_path: Optional legacy file path or data URI
     """
-    result = predict_screenshot(screenshot_path)
-    return json.dumps(result, indent=2)
+    target_input = (screenshot_data or "").strip() or (screenshot_path or "").strip()
+    if not target_input:
+        return json.dumps({
+            "status": "error",
+            "error": "No screenshot input provided for visual ML model.",
+            "prediction": "unknown",
+            "probability": None,
+            "brand_impersonation": {"detected": False, "brand": None, "confidence": None},
+            "annotated_screenshot_data": None,
+        })
+    try:
+        from backend.agents.visual_model import predict_screenshot
+        result = predict_screenshot(target_input)
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "error": f"Visual model execution error: {str(e)}",
+            "prediction": "unknown",
+            "probability": None,
+            "brand_impersonation": {"detected": False, "brand": None, "confidence": None},
+            "annotated_screenshot_data": None,
+        }, indent=2)
 

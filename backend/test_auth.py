@@ -11,24 +11,38 @@ django.setup()
 import json
 import uuid
 from django.test import RequestFactory
-from django.contrib.auth.models import User
-from backend.auth_views import (
+from django.contrib.auth.models import User, AnonymousUser
+from django.http import HttpResponse
+
+from backend.core.security import (
     generate_jwt_token,
     decode_jwt_token,
-    current_user_view,
+    validate_password_strength,
+    validate_email_address,
+)
+from backend.core.middleware import (
+    JWTAuthenticationMiddleware,
+    CORSMiddleware,
+    RateLimitMiddleware,
+    jwt_required,
+    optional_jwt,
+)
+from backend.apps.authentication.views import (
     google_auth_view,
-    email_register_view,
+    current_user_view,
     email_login_view,
+    email_register_view,
     update_profile_view,
     change_password_view,
-    jwt_required,
+    logout_view,
 )
-from backend.agents.views import scan_url_view
+from backend.core.utils.responses import api_success, api_error, api_unauthorized
 
 factory = RequestFactory()
 
+
 def run_tests():
-    print("=== Running PhishLens Authentication & Security Tests ===")
+    print("=== Running PhishLens Clean Modular Architecture & Security Tests ===")
 
     # 1. Test User & JWT Token Generation
     user, _ = User.objects.get_or_create(
@@ -47,36 +61,44 @@ def run_tests():
     assert payload["picture"] == "https://lh3.googleusercontent.com/test-pic"
     print("[PASS] [TEST 1] JWT Generation and Claims encoding/decoding")
 
-    # 2. Test Unauthenticated /api/scan/
-    req_unauth = factory.post("/api/scan/", data=json.dumps({"url": "https://example.com"}), content_type="application/json")
-    resp_unauth = scan_url_view(req_unauth)
-    assert resp_unauth.status_code == 401, f"Expected 401, got {resp_unauth.status_code}"
-    print("[PASS] [TEST 2] Unauthenticated scan request properly rejected (401 Unauthorized)")
+    # 2. Test JWT Authentication Middleware with valid token
+    def dummy_view(req):
+        return HttpResponse(f"User: {req.user.username}, is_auth: {req.user.is_authenticated}")
 
-    # 3. Test Invalid Token /api/scan/
-    req_bad_token = factory.post(
-        "/api/scan/",
-        data=json.dumps({"url": "https://example.com"}),
-        content_type="application/json",
-        HTTP_AUTHORIZATION="Bearer invalid.fake.token"
-    )
-    resp_bad_token = scan_url_view(req_bad_token)
-    assert resp_bad_token.status_code == 401, f"Expected 401, got {resp_bad_token.status_code}"
-    print("[PASS] [TEST 3] Forged/invalid JWT token properly rejected (401 Unauthorized)")
+    jwt_mw = JWTAuthenticationMiddleware(dummy_view)
+    req_mw_valid = factory.get("/api/test/", HTTP_AUTHORIZATION=f"Bearer {token}")
+    resp_mw_valid = jwt_mw(req_mw_valid)
+    assert req_mw_valid.user.is_authenticated, "Middleware failed to authenticate valid JWT"
+    assert req_mw_valid.user.email == "security_test@phishlens.ai"
+    print("[PASS] [TEST 2] Global JWTAuthenticationMiddleware populates request.user for valid Bearer token")
 
-    # 4. Test /api/auth/me/ with valid token
-    req_me = factory.get(
-        "/api/auth/me/",
-        HTTP_AUTHORIZATION=f"Bearer {token}"
-    )
+    # 3. Test JWT Authentication Middleware with invalid/forged token
+    req_mw_invalid = factory.get("/api/test/", HTTP_AUTHORIZATION="Bearer invalid.fake.token")
+    resp_mw_invalid = jwt_mw(req_mw_invalid)
+    assert not req_mw_invalid.user.is_authenticated, "Middleware authenticated an invalid token"
+    assert isinstance(req_mw_invalid.user, AnonymousUser)
+    print("[PASS] [TEST 3] Global JWTAuthenticationMiddleware assigns AnonymousUser for forged token")
+
+    # 4. Test Protected @jwt_required Decorator
+    @jwt_required
+    def protected_view(req):
+        return api_success(data={"secret": 42})
+
+    req_prot_unauth = factory.get("/api/secret/")
+    resp_prot_unauth = protected_view(req_prot_unauth)
+    assert resp_prot_unauth.status_code == 401, f"Expected 401, got {resp_prot_unauth.status_code}"
+    print("[PASS] [TEST 4] Protected route decorator (@jwt_required) blocks unauthenticated requests (401)")
+
+    # 5. Test Protected current_user_view (/api/auth/me/) with valid token
+    req_me = factory.get("/api/auth/me/", HTTP_AUTHORIZATION=f"Bearer {token}")
     resp_me = current_user_view(req_me)
     assert resp_me.status_code == 200, f"Expected 200, got {resp_me.status_code}"
     data_me = json.loads(resp_me.content)
     assert data_me["user"]["email"] == "security_test@phishlens.ai"
     assert data_me["user"]["name"] == "Security Auditor"
-    print("[PASS] [TEST 4] Protected current_user_view (/api/auth/me/) returns authenticated claims")
+    print("[PASS] [TEST 5] Protected current_user_view (/api/auth/me/) returns authenticated user profile")
 
-    # 5. Test /api/auth/google/ rejection of empty/invalid credential
+    # 6. Test /api/auth/google/ rejection of empty/invalid credential
     req_bad_google = factory.post(
         "/api/auth/google/",
         data=json.dumps({"credential": "invalid_fake_google_credential"}),
@@ -84,25 +106,25 @@ def run_tests():
     )
     resp_bad_google = google_auth_view(req_bad_google)
     assert resp_bad_google.status_code == 401, f"Expected 401, got {resp_bad_google.status_code}"
-    print("[PASS] [TEST 5] Invalid Google credential properly rejected (401)")
+    print("[PASS] [TEST 6] Invalid Google credential properly rejected (401 Unauthorized)")
 
-    # 6. Test /api/auth/register/ with weak passwords (should be rejected)
+    # 7. Test /api/auth/register/ with weak passwords (should be rejected)
     weak_cases = [
-        {"name": "A", "email": "valid@phishlens.ai", "password": "Password123!"}, # Name too short
-        {"name": "Valid Name", "email": "not-an-email", "password": "Password123!"}, # Bad email
-        {"name": "Valid Name", "email": "valid@phishlens.ai", "password": "short"}, # Short password
-        {"name": "Valid Name", "email": "valid@phishlens.ai", "password": "nouppercase123!"}, # No uppercase
-        {"name": "Valid Name", "email": "valid@phishlens.ai", "password": "NOLOWERCASE123!"}, # No lowercase
-        {"name": "Valid Name", "email": "valid@phishlens.ai", "password": "NoNumbersHere!"}, # No number
-        {"name": "Valid Name", "email": "valid@phishlens.ai", "password": "NoSpecialChar123"}, # No special char
+        {"name": "A", "email": "valid@phishlens.ai", "password": "Password123!"},
+        {"name": "Valid Name", "email": "not-an-email", "password": "Password123!"},
+        {"name": "Valid Name", "email": "valid@phishlens.ai", "password": "short"},
+        {"name": "Valid Name", "email": "valid@phishlens.ai", "password": "nouppercase123!"},
+        {"name": "Valid Name", "email": "valid@phishlens.ai", "password": "NOLOWERCASE123!"},
+        {"name": "Valid Name", "email": "valid@phishlens.ai", "password": "NoNumbersHere!"},
+        {"name": "Valid Name", "email": "valid@phishlens.ai", "password": "NoSpecialChar123"},
     ]
     for case in weak_cases:
         req = factory.post("/api/auth/register/", data=json.dumps(case), content_type="application/json")
         resp = email_register_view(req)
         assert resp.status_code == 400, f"Expected 400 for {case}, got {resp.status_code}: {resp.content}"
-    print("[PASS] [TEST 6] Strict password complexity and RFC email validation enforced (400 Bad Request)")
+    print("[PASS] [TEST 7] Strict password complexity and RFC email validation enforced (400 Bad Request)")
 
-    # 7. Test Successful User Registration & JWT Issuance
+    # 8. Test Successful User Registration & JWT Issuance
     unique_email = f"user_{uuid.uuid4().hex[:8]}@phishlens.ai"
     reg_payload = {
         "name": "Dimuthu Pramuditha",
@@ -117,15 +139,15 @@ def run_tests():
     assert data_reg["user"]["email"] == unique_email
     assert data_reg["user"]["name"] == "Dimuthu Pramuditha"
     user_token = data_reg["token"]
-    print("[PASS] [TEST 7] User successfully registered in database with PBKDF2 hashing & JWT issuance (201 Created)")
+    print("[PASS] [TEST 8] User successfully registered in database with PBKDF2 hashing & JWT issuance (201 Created)")
 
-    # 8. Test Duplicate Email Registration (should be 409 Conflict)
+    # 9. Test Duplicate Email Registration (should be 409 Conflict)
     req_dup = factory.post("/api/auth/register/", data=json.dumps(reg_payload), content_type="application/json")
     resp_dup = email_register_view(req_dup)
     assert resp_dup.status_code == 409, f"Expected 409, got {resp_dup.status_code}"
-    print("[PASS] [TEST 8] Duplicate email registration rejected (409 Conflict)")
+    print("[PASS] [TEST 9] Duplicate email registration rejected (409 Conflict)")
 
-    # 9. Test Email Login with Registered User
+    # 10. Test Email Login with Registered User
     login_payload = {
         "email": unique_email,
         "password": "SecurePassword123!#",
@@ -136,9 +158,9 @@ def run_tests():
     data_login = json.loads(resp_login.content)
     assert "token" in data_login
     assert data_login["user"]["email"] == unique_email
-    print("[PASS] [TEST 9] Email & Password login verified with JWT issuance (200 OK)")
+    print("[PASS] [TEST 10] Email & Password login verified with JWT issuance (200 OK)")
 
-    # 10. Test Login with Wrong Password
+    # 11. Test Login with Wrong Password
     bad_login_payload = {
         "email": unique_email,
         "password": "WrongPassword999!",
@@ -146,9 +168,9 @@ def run_tests():
     req_bad_login = factory.post("/api/auth/login/", data=json.dumps(bad_login_payload), content_type="application/json")
     resp_bad_login = email_login_view(req_bad_login)
     assert resp_bad_login.status_code == 401, f"Expected 401, got {resp_bad_login.status_code}"
-    print("[PASS] [TEST 10] Wrong password rejected (401 Unauthorized)")
+    print("[PASS] [TEST 11] Wrong password rejected (401 Unauthorized)")
 
-    # 11. Test Update Profile endpoint (/api/auth/profile/update/)
+    # 12. Test Update Profile endpoint (/api/auth/profile/update/)
     update_req = factory.post(
         "/api/auth/profile/update/",
         data=json.dumps({"name": "Dimuthu Updated"}),
@@ -159,9 +181,9 @@ def run_tests():
     assert update_resp.status_code == 200, f"Expected 200, got {update_resp.status_code}: {update_resp.content}"
     update_data = json.loads(update_resp.content)
     assert update_data["user"]["name"] == "Dimuthu Updated"
-    print("[PASS] [TEST 11] Profile name updated and returned with renewed JWT (200 OK)")
+    print("[PASS] [TEST 12] Profile name updated and returned with renewed JWT (200 OK)")
 
-    # 12. Test Change Password endpoint (/api/auth/change-password/)
+    # 13. Test Change Password endpoint (/api/auth/change-password/)
     pw_req = factory.post(
         "/api/auth/change-password/",
         data=json.dumps({
@@ -173,9 +195,29 @@ def run_tests():
     )
     pw_resp = change_password_view(pw_req)
     assert pw_resp.status_code == 200, f"Expected 200, got {pw_resp.status_code}: {pw_resp.content}"
-    print("[PASS] [TEST 12] Password successfully changed with complexity validation (200 OK)")
+    print("[PASS] [TEST 13] Password successfully changed with complexity validation (200 OK)")
 
-    print("\nALL 12 BACKEND AUTHENTICATION & SECURITY TESTS PASSED SUCCESSFULLY!")
+    # 14. Test CORS Middleware
+    cors_mw = CORSMiddleware(lambda r: HttpResponse("ok"))
+    req_options = factory.options("/api/scan/")
+    resp_options = cors_mw(req_options)
+    assert resp_options["Access-Control-Allow-Origin"] == "*"
+    assert "Authorization" in resp_options["Access-Control-Allow-Headers"]
+    print("[PASS] [TEST 14] CORSMiddleware correctly handles OPTIONS preflight and headers")
+
+    # 15. Test Rate Limiting Middleware
+    rate_mw = RateLimitMiddleware(lambda r: HttpResponse("ok"))
+    rate_mw.max_requests_per_window = 3  # Set low threshold for testing
+    req_rate = factory.get("/api/scan/")
+    for _ in range(3):
+        r = rate_mw(req_rate)
+        assert r.status_code == 200
+    r_blocked = rate_mw(req_rate)
+    assert r_blocked.status_code == 429, f"Expected 429 Rate Limited, got {r_blocked.status_code}"
+    print("[PASS] [TEST 15] RateLimitMiddleware enforces request throttling and returns 429")
+
+    print("\nALL 15 MODULAR ARCHITECTURE, MIDDLEWARE, AND SECURITY TESTS PASSED!")
+
 
 if __name__ == "__main__":
     run_tests()

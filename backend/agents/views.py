@@ -33,14 +33,14 @@ from backend.agents.memory import long_term_memory
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 
-def _resolve_screenshot_url(request, screenshot_path: str) -> str:
-    """Helper to convert local filesystem screenshot path to client-accessible URL."""
-    if not screenshot_path:
+def _resolve_screenshot_url(request, screenshot_val: str) -> str:
+    """Helper to return Base64 data URI or convert local filesystem screenshot path to client-accessible URL."""
+    if not screenshot_val:
         return None
-    if screenshot_path.startswith("http://") or screenshot_path.startswith("https://"):
-        return screenshot_path
+    if screenshot_val.startswith("data:image/") or screenshot_val.startswith("http://") or screenshot_val.startswith("https://"):
+        return screenshot_val
     
-    filename = os.path.basename(screenshot_path)
+    filename = os.path.basename(screenshot_val)
     # Use request build_absolute_uri or localhost default
     media_url = getattr(settings, "MEDIA_URL", "/media/")
     if not media_url.endswith("/"):
@@ -50,15 +50,19 @@ def _resolve_screenshot_url(request, screenshot_path: str) -> str:
 
 def _format_chat_message(request, msg: ChatMessage) -> dict:
     """Formats a ChatMessage model instance for API responses."""
-    resolved_screenshot = _resolve_screenshot_url(request, msg.screenshot_path)
+    screenshot_url = msg.screenshot_data or _resolve_screenshot_url(request, msg.screenshot_path)
+    annotated_url = msg.annotated_screenshot_data or None
     return {
         "id": str(msg.id),
         "sender": msg.sender,
         "message_type": msg.message_type,
         "text": msg.text,
         "target_url": msg.target_url,
+        "screenshot_data": msg.screenshot_data,
         "screenshot_path": msg.screenshot_path,
-        "screenshot_url": resolved_screenshot,
+        "screenshot_url": screenshot_url,
+        "annotated_screenshot_data": annotated_url,
+        "annotated_screenshot_url": annotated_url,
         "report": msg.report,
         "url_analysis_data": msg.url_analysis_data,
         "tool_trace": msg.tool_trace,
@@ -108,9 +112,9 @@ def scan_url_view(request):
         orchestrator = OrchestratorAgent()
         result = orchestrator.run(url=url, chat_id=chat_id, user=getattr(request, "user", None))
         
-        # Add resolved screenshot URL
-        if result.get("screenshot_path"):
-            result["screenshot_url"] = _resolve_screenshot_url(request, result["screenshot_path"])
+        # Add resolved screenshot URLs (prioritize Base64 in-memory data)
+        result["screenshot_url"] = result.get("screenshot_data") or _resolve_screenshot_url(request, result.get("screenshot_path"))
+        result["annotated_screenshot_url"] = result.get("annotated_screenshot_data") or _resolve_screenshot_url(request, result.get("annotated_screenshot_path"))
 
         return JsonResponse(result, status=200, json_dumps_params={"indent": 2})
     except Exception as e:
@@ -162,7 +166,7 @@ def chats_list_create_view(request):
             last_screenshot = None
             if last_msg:
                 last_report = last_msg.report
-                last_screenshot = _resolve_screenshot_url(request, last_msg.screenshot_path)
+                last_screenshot = last_msg.screenshot_data or _resolve_screenshot_url(request, last_msg.screenshot_path)
 
             chats_data.append({
                 "id": str(chat.id),
@@ -368,16 +372,19 @@ def user_screenshots_view(request):
     user = getattr(request, "user", None)
     is_authenticated = user and getattr(user, "is_authenticated", False)
 
+    has_screenshot_q = (
+        (Q(screenshot_data__isnull=False) & ~Q(screenshot_data="")) |
+        (Q(screenshot_path__isnull=False) & ~Q(screenshot_path=""))
+    )
+
     if is_authenticated:
         qs = ChatMessage.objects.filter(
-            chat__user=user,
-            screenshot_path__isnull=False
-        ).exclude(screenshot_path="")
+            chat__user=user
+        ).filter(has_screenshot_q)
     else:
         qs = ChatMessage.objects.filter(
-            chat__user__isnull=True,
-            screenshot_path__isnull=False
-        ).exclude(screenshot_path="")
+            chat__user__isnull=True
+        ).filter(has_screenshot_q)
 
     query = request.GET.get("q", "").strip()
     if query:
@@ -393,7 +400,7 @@ def user_screenshots_view(request):
 
     items = []
     for msg in qs.select_related("chat").order_by("-created_at")[:100]:
-        resolved_ss = _resolve_screenshot_url(request, msg.screenshot_path)
+        resolved_ss = msg.screenshot_data or _resolve_screenshot_url(request, msg.screenshot_path)
         if not resolved_ss:
             continue
 

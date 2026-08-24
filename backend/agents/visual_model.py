@@ -14,15 +14,62 @@ Stage 2: ResNet-50 Siamese Network for Brand Identification
   being impersonated.
 """
 
+import io
+import base64
 import os
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models, transforms
 from PIL import Image, ImageDraw, ImageFont
+
+
+def _load_image(image_input: Any) -> Optional[Image.Image]:
+    """
+    Loads a PIL Image from:
+    1. Base64 Data URI (e.g. 'data:image/png;base64,...')
+    2. Raw Base64 string
+    3. Raw bytes / BytesIO
+    4. PIL Image instance
+    5. Local file path string
+    """
+    if image_input is None:
+        return None
+    if isinstance(image_input, Image.Image):
+        return image_input.copy()
+    if isinstance(image_input, (bytes, bytearray)):
+        return Image.open(io.BytesIO(image_input))
+    if isinstance(image_input, io.BytesIO):
+        return Image.open(image_input)
+    if isinstance(image_input, str):
+        cleaned = image_input.strip()
+        if not cleaned:
+            return None
+        # Handle Base64 Data URI
+        if cleaned.startswith("data:image/") and ";base64," in cleaned:
+            try:
+                b64_str = cleaned.split(";base64,")[1]
+                img_bytes = base64.b64decode(b64_str)
+                return Image.open(io.BytesIO(img_bytes))
+            except Exception:
+                return None
+        # Handle raw Base64 string (if long and not a valid file path)
+        if len(cleaned) > 256 and not os.path.exists(cleaned):
+            try:
+                img_bytes = base64.b64decode(cleaned)
+                return Image.open(io.BytesIO(img_bytes))
+            except Exception:
+                pass
+        # Handle local file path if present
+        if os.path.exists(cleaned):
+            try:
+                return Image.open(cleaned)
+            except Exception:
+                return None
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -286,23 +333,24 @@ def extract_logo_candidate_regions(screenshot: Image.Image) -> List[Tuple[str, I
 # ---------------------------------------------------------------------------
 # Stage 2: ResNet-50 Siamese Brand Identification Function
 # ---------------------------------------------------------------------------
-def predict_brand_impersonation(screenshot_path: str, threshold: float = STAGE2_SIMILARITY_THRESHOLD) -> Dict[str, Any]:
+def predict_brand_impersonation(screenshot_input: Any, threshold: float = STAGE2_SIMILARITY_THRESHOLD) -> Dict[str, Any]:
     """
     Identifies the brand being impersonated in a webpage screenshot using the
     ResNet-50 Siamese Network in 128-dimensional Cosine Similarity space.
 
     Args:
-        screenshot_path: File path to the screenshot image PNG.
+        screenshot_input: Base64 data URI, raw bytes, PIL Image, or file path.
         threshold: Minimum cosine similarity threshold (default 0.70) to declare brand match.
 
     Returns:
         dict: Brand identification results containing detected brand name,
               similarity score, confidence, and top candidate ranking.
     """
-    if not screenshot_path or not os.path.exists(screenshot_path):
+    img = _load_image(screenshot_input)
+    if img is None:
         return {
             "status": "error",
-            "error": f"Screenshot path '{screenshot_path}' does not exist.",
+            "error": "Invalid screenshot input (could not decode image).",
             "brand_impersonation_detected": False,
             "identified_brand": None,
             "similarity_score": None,
@@ -311,7 +359,7 @@ def predict_brand_impersonation(screenshot_path: str, threshold: float = STAGE2_
         }
 
     try:
-        img = Image.open(screenshot_path).convert("RGB")
+        img = img.convert("RGB")
         candidates = extract_logo_candidate_regions(img)
         siamese_model = _get_stage2_siamese_model()
         gallery = _get_brand_gallery_embeddings()
@@ -369,9 +417,86 @@ def predict_brand_impersonation(screenshot_path: str, threshold: float = STAGE2_
 
 
 # ---------------------------------------------------------------------------
-# Integrated Two-Stage Prediction Pipeline
+# Visual Annotation Engine (In-Memory Base64)
 # ---------------------------------------------------------------------------
-def predict_screenshot(screenshot_path: str) -> Dict[str, Any]:
+def generate_annotated_screenshot(
+    screenshot_input: Any,
+    prediction: str,
+    prob: float,
+    brand_impersonation: Dict[str, Any],
+    best_region: Optional[str] = None
+) -> Optional[str]:
+    """
+    Generates an annotated visual evidence screenshot with bounding boxes
+    and threat badges highlighting detected visual phishing indicators.
+    Returns the annotated image as an in-memory Base64 Data URI string.
+    """
+    img = _load_image(screenshot_input)
+    if img is None:
+        return None
+
+    try:
+        annotated_img = img.convert("RGBA")
+        draw = ImageDraw.Draw(annotated_img)
+        w, h = annotated_img.size
+
+        is_phishing = prediction == "phishing"
+        brand_name = brand_impersonation.get("brand")
+
+        if is_phishing:
+            # Determine bounding box based on detected region
+            if best_region == "top_left_header":
+                box = (10, 10, int(w * 0.40), int(h * 0.25))
+            elif best_region == "top_center_header":
+                box = (int(w * 0.25), 10, int(w * 0.75), int(h * 0.25))
+            elif best_region == "center_auth_box":
+                box = (int(w * 0.20), int(h * 0.15), int(w * 0.80), int(h * 0.65))
+            elif best_region == "top_navbar":
+                box = (10, 10, w - 10, int(h * 0.18))
+            else:
+                box = (10, 10, int(w * 0.45), int(h * 0.28))
+
+            if brand_name:
+                color = (220, 38, 38, 255)  # Crimson red
+                label = f"[!] SPOOFED BRAND DETECTED: {brand_name} (ResNet-50 Siamese Match)"
+            else:
+                color = (234, 88, 12, 255)  # Orange warning
+                label = f"[!] SUSPICIOUS VISUAL PHISHING PATTERN ({prob * 100:.1f}% ML Probability)"
+
+            # Draw threat bounding box
+            draw.rectangle(box, outline=color, width=4)
+
+            # Draw header banner for the label
+            banner_h = 32
+            banner_box = (box[0], max(0, box[1] - banner_h), min(w - 10, box[0] + len(label) * 8 + 30), box[1])
+            if box[1] < banner_h:
+                banner_box = (box[0], box[1], min(w - 10, box[0] + len(label) * 8 + 30), box[1] + banner_h)
+            draw.rectangle(banner_box, fill=color)
+            draw.text((banner_box[0] + 8, banner_box[1] + 8), label, fill=(255, 255, 255, 255))
+        else:
+            # Clean top banner for verified legitimate site
+            color = (22, 163, 74, 255)  # Emerald green
+            conf_pct = (1.0 - prob) * 100.0 if prob is not None else 95.0
+            label = f"[OK] VISUALLY VERIFIED LEGITIMATE (Visual ML Confidence: {conf_pct:.1f}%)"
+            banner_h = 32
+            draw.rectangle((0, 0, w, banner_h), fill=color)
+            draw.text((16, 8), label, fill=(255, 255, 255, 255))
+
+        # Save into in-memory buffer as Base64 Data URI
+        buf = io.BytesIO()
+        annotated_img.convert("RGB").save(buf, format="PNG")
+        buf.seek(0)
+        b64_encoded = base64.b64encode(buf.getvalue()).decode("utf-8")
+        return f"data:image/png;base64,{b64_encoded}"
+
+    except Exception:
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Integrated Two-Stage Prediction Pipeline (In-Memory Base64 Support)
+# ---------------------------------------------------------------------------
+def predict_screenshot(screenshot_input: Any) -> Dict[str, Any]:
     """
     Executes the complete Two-Stage Computer Vision Phishing & Brand Identification Pipeline:
 
@@ -386,27 +511,30 @@ def predict_screenshot(screenshot_path: str) -> Dict[str, Any]:
       - Identifies the specific impersonated brand and similarity confidence score.
 
     Args:
-        screenshot_path: Absolute file path to the screenshot PNG.
+        screenshot_input: Base64 data URI, raw bytes, PIL Image, or file path.
 
     Returns:
         dict: Unified analysis result containing Stage 1 binary prediction,
-              Stage 2 brand identification, and backward-compatible report keys.
+              Stage 2 brand identification, annotated Base64 screenshot, and report keys.
     """
-    if not screenshot_path or not os.path.exists(screenshot_path):
+    img = _load_image(screenshot_input)
+    if img is None:
         return {
             "status": "error",
-            "error": f"Screenshot path '{screenshot_path}' does not exist or is empty.",
+            "error": "Screenshot input is empty or could not be loaded into an image.",
             "prediction": None,
             "probability": None,
-            "brand_impersonation": {"detected": False, "brand": None, "confidence": None}
+            "brand_impersonation": {"detected": False, "brand": None, "confidence": None},
+            "annotated_screenshot_data": None,
+            "annotated_screenshot_path": None,
         }
 
     try:
         # -----------------------------------------------------------------------
         # STAGE 1: EfficientNet-B0 Binary Classification
         # -----------------------------------------------------------------------
-        img = Image.open(screenshot_path).convert("RGB")
-        transformed_img = val_test_transform(img).unsqueeze(0)
+        img_rgb = img.convert("RGB")
+        transformed_img = val_test_transform(img_rgb).unsqueeze(0)
 
         stage1_model = _get_stage1_model()
         with torch.no_grad():
@@ -429,7 +557,7 @@ def predict_screenshot(screenshot_path: str) -> Dict[str, Any]:
         }
 
         if prediction == "phishing":
-            stage2_out = predict_brand_impersonation(screenshot_path, threshold=STAGE2_SIMILARITY_THRESHOLD)
+            stage2_out = predict_brand_impersonation(img_rgb, threshold=STAGE2_SIMILARITY_THRESHOLD)
             stage2_result = {
                 "triggered": True,
                 "brand_impersonation_detected": stage2_out.get("brand_impersonation_detected", False),
@@ -466,9 +594,29 @@ def predict_screenshot(screenshot_path: str) -> Dict[str, Any]:
             "confidence": stage2_result.get("confidence")
         }
 
+        # Generate Visual Annotation Evidence (In-Memory Base64)
+        annotated_screenshot_data = generate_annotated_screenshot(
+            screenshot_input=img_rgb,
+            prediction=prediction,
+            prob=prob,
+            brand_impersonation=brand_impersonation_dict,
+            best_region=stage2_result.get("best_region")
+        )
+
+        screenshot_data_str = screenshot_input if isinstance(screenshot_input, str) and screenshot_input.startswith("data:image/") else None
+        if screenshot_data_str is None:
+            # Convert img to base64 if needed
+            buf = io.BytesIO()
+            img_rgb.save(buf, format="PNG")
+            screenshot_data_str = f"data:image/png;base64,{base64.b64encode(buf.getvalue()).decode('utf-8')}"
+
         return {
             "status": "success",
-            "screenshot_path": screenshot_path,
+            "screenshot_data": screenshot_data_str,
+            "screenshot_path": None,
+            "annotated_screenshot_data": annotated_screenshot_data,
+            "annotated_screenshot_path": None,
+            "annotated_screenshot_url": annotated_screenshot_data,
             "stage1_binary_classification": {
                 "prediction": prediction,
                 "phishing_probability": round(prob, 4),
@@ -490,6 +638,8 @@ def predict_screenshot(screenshot_path: str) -> Dict[str, Any]:
             "error": str(e),
             "prediction": None,
             "probability": None,
-            "brand_impersonation": {"detected": False, "brand": None, "confidence": None}
+            "brand_impersonation": {"detected": False, "brand": None, "confidence": None},
+            "annotated_screenshot_data": None,
+            "annotated_screenshot_path": None,
         }
 
