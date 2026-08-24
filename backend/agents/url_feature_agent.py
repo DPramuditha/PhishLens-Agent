@@ -151,10 +151,22 @@ def analyze_url_features(url: str) -> str:
             if isinstance(updated_date, list):
                 updated_date = updated_date[0]
 
-            from datetime import datetime
+            from datetime import datetime, timezone
             domain_age_days = None
             if creation_date:
-                domain_age_days = (datetime.now() - creation_date).days
+                try:
+                    if hasattr(creation_date, "tzinfo") and creation_date.tzinfo is not None:
+                        now_dt = datetime.now(creation_date.tzinfo)
+                    else:
+                        now_dt = datetime.now()
+                    domain_age_days = max(0, (now_dt - creation_date).days)
+                except Exception:
+                    # Fallback naive comparison
+                    try:
+                        naive_creation = creation_date.replace(tzinfo=None) if hasattr(creation_date, "replace") else creation_date
+                        domain_age_days = max(0, (datetime.now() - naive_creation).days)
+                    except Exception:
+                        domain_age_days = None
 
             # Extract the registered domain name from WHOIS
             registered_domain = None
@@ -330,7 +342,7 @@ def analyze_url_features(url: str) -> str:
             round(min(1.0, subdomain_depth / 4.0), 4),                             # 8. subdomain_depth_norm
             round(min(1.0, len(url_suspicious_keywords) / 3.0), 4),                # 9. suspicious_keywords_norm
             1.0 if len(typosquatting_matches) > 0 else 0.0,                        # 10. typosquatting_flag
-            1.0 if ssl_certificate.get("valid") else 0.0,                          # 11. ssl_valid_flag
+            1.0 if (ssl_certificate.get("status") == "success" and ssl_certificate.get("is_trusted")) else 0.0,  # 11. ssl_valid_flag
             round(age_risk, 4),                                                     # 12. domain_age_risk_norm
         ]
 

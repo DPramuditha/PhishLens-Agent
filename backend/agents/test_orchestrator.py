@@ -19,6 +19,10 @@ nest_asyncio.apply()
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
+import django
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
+django.setup()
+
 from backend.agents.orchestrator import OrchestratorAgent
 
 

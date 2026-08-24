@@ -458,21 +458,22 @@ def generate_annotated_screenshot(
 
             if brand_name:
                 color = (220, 38, 38, 255)  # Crimson red
-                label = f"[!] SPOOFED BRAND DETECTED: {brand_name} (ResNet-50 Siamese Match)"
+                label = f"Logo Detected: {brand_name}"
             else:
                 color = (234, 88, 12, 255)  # Orange warning
-                label = f"[!] SUSPICIOUS VISUAL PHISHING PATTERN ({prob * 100:.1f}% ML Probability)"
+                label = f"Suspicious Logo Region ({prob * 100:.1f}%)"
 
-            # Draw threat bounding box
-            draw.rectangle(box, outline=color, width=4)
+            # Draw simple square bounding box around the logo region
+            draw.rectangle(box, outline=color, width=3)
 
-            # Draw header banner for the label
-            banner_h = 32
-            banner_box = (box[0], max(0, box[1] - banner_h), min(w - 10, box[0] + len(label) * 8 + 30), box[1])
-            if box[1] < banner_h:
-                banner_box = (box[0], box[1], min(w - 10, box[0] + len(label) * 8 + 30), box[1] + banner_h)
-            draw.rectangle(banner_box, fill=color)
-            draw.text((banner_box[0] + 8, banner_box[1] + 8), label, fill=(255, 255, 255, 255))
+            # Draw small label tag above the box
+            label_h = 22
+            label_w = len(label) * 7 + 16
+            label_box = (box[0], max(0, box[1] - label_h), min(w, box[0] + label_w), box[1])
+            if box[1] < label_h:
+                label_box = (box[0], box[3], min(w, box[0] + label_w), box[3] + label_h)
+            draw.rectangle(label_box, fill=color)
+            draw.text((label_box[0] + 8, label_box[1] + 4), label, fill=(255, 255, 255, 255))
         else:
             # Clean top banner for verified legitimate site
             color = (22, 163, 74, 255)  # Emerald green

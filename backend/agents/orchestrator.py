@@ -46,7 +46,6 @@ from backend.agents.report_generator import (
     extract_tool_trace,
 )
 from backend.agents.memory import (
-    short_term_memory,
     long_term_memory,
     get_domain_threat_history,
     check_domain_whitelist,
@@ -158,11 +157,8 @@ class OrchestratorAgent:
 
         workflow.add_edge("report_generation", END)
 
-        # Compile with Short-term checkpointer and Long-term store
-        self.agent = workflow.compile(
-            checkpointer=short_term_memory.checkpointer,
-            store=long_term_memory.store,
-        )
+        # Compile workflow
+        self.agent = workflow.compile()
 
     def _extract_clean_domain(self, url: str) -> str:
         """Helper to extract domain name."""
@@ -247,13 +243,15 @@ class OrchestratorAgent:
         """Runs binary visual classifier on in-memory screenshot."""
         screenshot_data = state.get("screenshot_data") or ""
         screenshot_path = state.get("screenshot_path") or ""
+        screenshot_warning = state.get("screenshot_warning") or ""
         target_input = screenshot_data or screenshot_path
-        if not target_input:
+        if not target_input or "produced empty bytes" in screenshot_warning or "Connection could not be established" in screenshot_warning:
             return {
                 "visual_model_output": {
-                    "status": "error",
-                    "error": "No screenshot data available",
+                    "status": "unavailable",
+                    "error": screenshot_warning or "No valid rendered screenshot available",
                     "prediction": "unknown",
+                    "probability": None,
                     "brand_impersonation": {"detected": False, "brand": None, "confidence": None},
                 },
                 "annotated_screenshot_data": None,
@@ -261,7 +259,7 @@ class OrchestratorAgent:
                 "tool_trace": [
                     {
                         "step": "info",
-                        "message": "Siamese Network skipped: no screenshot data available"
+                        "message": "Siamese Network skipped: no live rendered screenshot available"
                     }
                 ]
             }
@@ -410,18 +408,28 @@ class OrchestratorAgent:
         # Format long-term memory section
         memory_section = "No prior scan history in long-term memory."
         if domain_intel:
-            memory_section = f"""Domain Reputation from Long-Term Memory:
+            memory_section = f"""Domain Reputation from Long-Term Memory (Reference only — re-evaluate current URL evidence):
 - Total prior scans: {domain_intel.get('scan_count', 0)}
 - Latest recorded risk score: {domain_intel.get('latest_risk_score')} ({domain_intel.get('latest_risk_level')})
 - Suspected brand: {domain_intel.get('suspected_brand', 'None')}
 - History: {json.dumps(domain_intel.get('history', []), indent=2)}"""
+
+        # Precompute deterministic multi-agent synthesis as baseline
+        deterministic_baseline = self._synthesize_fallback_report(
+            url=url,
+            domain=domain,
+            url_features=url_features,
+            html_features=html_features,
+            visual_model_output=visual_model_output,
+            domain_intel=domain_intel
+        )
 
         report_prompt = f"""You are PhishLens, an expert cybersecurity analyst specializing in phishing website detection.
 
 We have analyzed the target URL: {url}
 Target Domain: {domain}
 
-Here are the findings from our specialized analysis components and long-term threat memory:
+Here are the detailed extraction outputs from our specialized analysis components and long-term threat memory:
 
 1. Long-Term Threat Memory & Domain Reputation:
 {memory_section}
@@ -435,7 +443,8 @@ Here are the findings from our specialized analysis components and long-term thr
 4. Visual Screenshot Analysis (Visual ML Model Classifier):
 {json.dumps(visual_for_llm, indent=2)}
 
-Based on these findings, synthesize your final analysis and output a structured phishing risk report. Factor in the visual ML model's prediction and probability score under the visual/screenshot analysis findings. Also note any notable patterns comparing against long-term memory history.
+Synthesize ALL findings across visual ML, HTML/DOM structure, URL lexical/WHOIS, and threat memory to calculate the final risk score (0-100) and risk level.
+DO NOT simply copy historical scores from memory. Compute the fresh risk score based on the extracted evidence.
 
 ## Final Report Format
 
@@ -482,24 +491,20 @@ Be thorough, precise, and evidence-based.
             raw_content = response.content
             parsed = parse_report(raw_content)
             if parsed and isinstance(parsed, dict) and "risk_score" in parsed and "risk_level" in parsed:
-                report = parsed
+                llm_score = parsed.get("risk_score")
+                if isinstance(llm_score, (int, float)):
+                    parsed["risk_score"] = int(max(0, min(100, llm_score)))
+                    report = parsed
         except Exception as llm_err:
             llm_error_detail = str(llm_err)
             logger.warning(f"[Orchestrator] Primary LLM synthesis failed ({llm_err}), falling back to deterministic multi-agent synthesis.")
             print(f"\n[Orchestrator] LLM ERROR DETAILS:\n{llm_error_detail}\n")
 
-        # If LLM returned empty or unparseable report, generate complete deterministic multi-agent report
+        # If LLM returned empty, unparseable, or invalid report, use the complete deterministic multi-agent report
         used_fallback = False
         if not report:
             used_fallback = True
-            report = self._synthesize_fallback_report(
-                url=url,
-                domain=domain,
-                url_features=url_features,
-                html_features=html_features,
-                visual_model_output=visual_model_output,
-                domain_intel=domain_intel
-            )
+            report = deterministic_baseline
             raw_content = json.dumps(report, indent=2)
 
         # Add synthesis metadata to report
@@ -540,30 +545,42 @@ Be thorough, precise, and evidence-based.
         domain_intel: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Deterministic multi-agent threat synthesis fallback that computes a full, accurate,
-        structured report directly from visual, DOM, lexical/WHOIS, and memory signals.
+        Deterministic multi-agent threat synthesis engine that computes an accurate,
+        evidence-based risk score directly from Visual ML, DOM structure, Lexical/WHOIS,
+        and Long-Term Memory signals.
         """
         findings = []
-        base_score = 5
+        risk_score = 0
 
-        # 1. Visual ML model signals
+        url_features = url_features or {}
+        html_features = html_features or {}
+        visual_model_output = visual_model_output or {}
+        domain_intel = domain_intel or {}
+
+        # -------------------------------------------------------------------
+        # 1. VISUAL COMPUTER VISION ML MODEL SIGNALS (Weight: 0 to 45 pts)
+        # -------------------------------------------------------------------
         visual_pred = (visual_model_output.get("prediction") or "").lower()
         visual_prob = visual_model_output.get("probability")
         brand_info = visual_model_output.get("brand_impersonation") or {}
         brand_detected = bool(brand_info.get("detected"))
         brand_name = brand_info.get("brand")
-        brand_conf = brand_info.get("confidence")
+        brand_conf = brand_info.get("confidence") or 0.0
 
         if visual_pred == "phishing" or (isinstance(visual_prob, (int, float)) and visual_prob >= 0.60):
-            base_score += 45
-            prob_pct = round((visual_prob or 0.75) * 100, 1)
+            prob_val = visual_prob if isinstance(visual_prob, (int, float)) else 0.75
+            prob_pct = round(prob_val * 100, 1)
+            ml_points = int(30 + (prob_val - 0.60) * 37.5)
+            ml_points = min(45, max(30, ml_points))
+            risk_score += ml_points
             findings.append({
                 "category": "Visual Analysis",
                 "detail": f"Visual ML model classified the interface as potential phishing with {prob_pct}% probability.",
-                "severity": "high"
+                "severity": "critical" if prob_val >= 0.80 else "high"
             })
         elif visual_pred == "legitimate":
-            conf_pct = round((1 - (visual_prob or 0.1)) * 100, 1)
+            prob_val = visual_prob if isinstance(visual_prob, (int, float)) else 0.05
+            conf_pct = round((1.0 - prob_val) * 100, 1)
             findings.append({
                 "category": "Visual Analysis",
                 "detail": f"Visual ML model verified interface legitimacy with {conf_pct}% confidence.",
@@ -571,70 +588,299 @@ Be thorough, precise, and evidence-based.
             })
 
         if brand_detected and brand_name:
-            base_score += 35
+            brand_points = int(25 + brand_conf * 10)
+            risk_score += brand_points
             findings.append({
-                "category": "Visual Analysis",
-                "detail": f"Brand impersonation detected: visual elements match {brand_name} with {round((brand_conf or 0.8) * 100)}% similarity.",
+                "category": "Screenshot Analysis",
+                "detail": f"Brand impersonation detected: visual elements match {brand_name} with {round(brand_conf * 100)}% similarity.",
                 "severity": "critical"
             })
 
-        # 2. HTML/DOM signals
-        input_fields = html_features.get("input_fields") or {}
-        if input_fields.get("password_fields", 0) > 0:
-            base_score += 15
-            findings.append({
-                "category": "HTML Structure",
-                "detail": f"Page contains {input_fields.get('password_fields')} credential/password input field(s).",
-                "severity": "medium"
-            })
-        forms = html_features.get("forms") or {}
-        form_details = forms.get("details", [])
-        if any(f.get("action_is_external") for f in form_details):
-            base_score += 25
-            findings.append({
-                "category": "HTML Structure",
-                "detail": "Form submissions are directed to an external foreign domain.",
-                "severity": "high"
-            })
-
-        # 3. URL Lexical & WHOIS signals
-        whois_info = url_features.get("whois") or {}
-        domain_age = whois_info.get("domain_age_days")
-        if domain_age is not None and domain_age < 30:
-            base_score += 20
-            findings.append({
-                "category": "URL Analysis",
-                "detail": f"Recently registered domain (registered {domain_age} days ago).",
-                "severity": "high"
-            })
-        elif domain_age is not None and domain_age > 365:
-            base_score = max(5, base_score - 5)
-            findings.append({
-                "category": "URL Analysis",
-                "detail": f"Established domain with {round(domain_age / 365, 1)} years of registration history.",
-                "severity": "low"
-            })
-
-        typosquatting = url_features.get("typosquatting") or []
+        # -------------------------------------------------------------------
+        # 2. URL LEXICAL, WHOIS & NETWORK SIGNALS (Weight: 0 to 45 pts)
+        # -------------------------------------------------------------------
+        # A. Typosquatting
+        typosquatting = (
+            url_features.get("typosquatting_analysis") or
+            url_features.get("typosquatting") or
+            []
+        )
         if typosquatting:
-            base_score += 25
+            risk_score += 35
             for t in typosquatting:
+                brand_t = t.get("brand", "target brand")
+                pattern_t = t.get("pattern") or f"Suspected brand typosquatting detected targeting {brand_t}."
                 findings.append({
                     "category": "URL Analysis",
-                    "detail": t.get("pattern", "Suspected brand typosquatting detected."),
+                    "detail": pattern_t,
+                    "severity": "critical"
+                })
+                if not brand_detected:
+                    brand_detected = True
+                    brand_name = brand_t
+                    brand_conf = 0.85
+
+        # B. WHOIS Domain Age
+        whois_info = url_features.get("whois") or {}
+        domain_age = whois_info.get("domain_age_days")
+        if domain_age is not None and isinstance(domain_age, (int, float)):
+            if domain_age < 14:
+                risk_score += 25
+                findings.append({
+                    "category": "URL Analysis",
+                    "detail": f"Extremely new domain registered only {domain_age} day(s) ago (high phishing risk).",
+                    "severity": "critical"
+                })
+            elif domain_age < 30:
+                risk_score += 20
+                findings.append({
+                    "category": "URL Analysis",
+                    "detail": f"Recently registered domain (registered {domain_age} days ago).",
                     "severity": "high"
                 })
+            elif domain_age < 90:
+                risk_score += 10
+                findings.append({
+                    "category": "URL Analysis",
+                    "detail": f"Young domain registered {domain_age} days ago.",
+                    "severity": "medium"
+                })
+            elif domain_age > 365:
+                risk_score = max(0, risk_score - 5)
+                findings.append({
+                    "category": "URL Analysis",
+                    "detail": f"Established domain with {round(domain_age / 365, 1)} years of registration history.",
+                    "severity": "low"
+                })
 
-        # 4. Long-Term Memory history
-        if domain_intel and domain_intel.get("scan_count", 0) > 0:
+        # C. Lexical & Obfuscation Features
+        lexical = url_features.get("lexical_features") or {}
+        if lexical.get("is_ip_address"):
+            risk_score += 25
             findings.append({
-                "category": "Long-Term Memory",
-                "detail": f"Domain history in long-term memory: {domain_intel.get('scan_count')} previous scan(s), last risk was {domain_intel.get('latest_risk_level', 'SAFE')}.",
+                "category": "URL Analysis",
+                "detail": "Target URL uses a raw IP address instead of a standard registered domain name.",
+                "severity": "high"
+            })
+        if (lexical.get("subdomain_depth") or 0) >= 3:
+            depth = lexical.get("subdomain_depth")
+            risk_score += 15
+            findings.append({
+                "category": "URL Analysis",
+                "detail": f"Excessive subdomain nesting ({depth} levels), commonly used for deceptive domain masking.",
+                "severity": "medium"
+            })
+        if (lexical.get("domain_entropy") or 0) > 3.5:
+            entropy = lexical.get("domain_entropy")
+            risk_score += 15
+            findings.append({
+                "category": "URL Analysis",
+                "detail": f"High domain Shannon entropy ({entropy}), suggesting algorithmically generated (DGA) domain name.",
+                "severity": "medium"
+            })
+        if lexical.get("at_sign_present"):
+            risk_score += 15
+            findings.append({
+                "category": "URL Analysis",
+                "detail": "URL contains '@' symbol, indicating potential credentials embedding or URL obfuscation trick.",
+                "severity": "high"
+            })
+        if lexical.get("double_slash_in_path"):
+            risk_score += 15
+            findings.append({
+                "category": "URL Analysis",
+                "detail": "URL path contains '//' sequence, indicative of open redirect abuse.",
+                "severity": "high"
+            })
+        if (lexical.get("hyphen_count") or 0) >= 3:
+            hyphens = lexical.get("hyphen_count")
+            risk_score += 10
+            findings.append({
+                "category": "URL Analysis",
+                "detail": f"Excessive hyphens in hostname ({hyphens} hyphens), typical of deceptive brand-mimicking domains.",
+                "severity": "medium"
+            })
+        if (lexical.get("url_length") or 0) > 80:
+            u_len = lexical.get("url_length")
+            risk_score += 10
+            findings.append({
+                "category": "URL Analysis",
+                "detail": f"Suspiciously long URL ({u_len} characters).",
                 "severity": "low"
             })
 
-        # Clamp score between 5 and 95
-        final_score = max(5, min(95, base_score))
+        # D. Suspicious Keywords in URL
+        url_keywords = url_features.get("suspicious_keywords_in_url") or []
+        if url_keywords:
+            risk_score += min(20, 10 + len(url_keywords) * 3)
+            findings.append({
+                "category": "URL Analysis",
+                "detail": f"Suspicious authentication/security keywords in URL: {', '.join(url_keywords[:4])}.",
+                "severity": "high" if any(k in ["login", "signin", "verify", "secure", "account", "bank", "password"] for k in url_keywords) else "medium"
+            })
+
+        # E. SSL Certificate & Protocol
+        ssl_cert = url_features.get("ssl_certificate") or {}
+        if ssl_cert.get("status") == "untrusted" or ssl_cert.get("is_trusted") is False:
+            risk_score += 25
+            findings.append({
+                "category": "URL Analysis",
+                "detail": f"SSL certificate verification failed: {ssl_cert.get('error') or 'Untrusted or self-signed certificate'}.",
+                "severity": "high"
+            })
+        elif lexical.get("scheme") == "http" or url.startswith("http://"):
+            risk_score += 15
+            findings.append({
+                "category": "URL Analysis",
+                "detail": "Site uses insecure HTTP protocol without SSL/TLS transport encryption.",
+                "severity": "medium"
+            })
+        elif ssl_cert.get("is_trusted"):
+            findings.append({
+                "category": "URL Analysis",
+                "detail": f"Valid SSL certificate issued by {ssl_cert.get('issuer') or 'Trusted Certificate Authority'}.",
+                "severity": "low"
+            })
+
+        # F. Global Ranking (Tranco)
+        global_rank = url_features.get("global_ranking") or {}
+        rank_val = global_rank.get("rank")
+        if rank_val and isinstance(rank_val, int) and rank_val <= 20000:
+            if not brand_detected and risk_score < 30:
+                risk_score = max(0, risk_score - 10)
+                findings.append({
+                    "category": "URL Analysis",
+                    "detail": f"Highly popular legitimate domain (Tranco Global Rank #{rank_val}).",
+                    "severity": "low"
+                })
+
+        # -------------------------------------------------------------------
+        # 3. HTML / DOM STRUCTURAL SIGNALS (Weight: 0 to 40 pts)
+        # -------------------------------------------------------------------
+        input_fields = html_features.get("input_fields") or {}
+        password_count = input_fields.get("password_fields", 0)
+        email_count = input_fields.get("email_fields", 0)
+
+        if password_count > 0:
+            risk_score += 15
+            findings.append({
+                "category": "HTML Structure",
+                "detail": f"Page contains {password_count} credential/password input field(s).",
+                "severity": "medium"
+            })
+        elif email_count > 0:
+            risk_score += 5
+
+        forms = html_features.get("forms") or {}
+        form_details = forms.get("details", [])
+        external_forms = [f for f in form_details if f.get("action_is_external")]
+        if external_forms:
+            risk_score += 30
+            ext_domains = list(set(f.get("action_domain") for f in external_forms if f.get("action_domain")))
+            findings.append({
+                "category": "HTML Structure",
+                "detail": f"Form submissions are directed to an external third-party domain ({', '.join(ext_domains) if ext_domains else 'external domain'}).",
+                "severity": "critical"
+            })
+
+        # Iframes
+        iframes = html_features.get("iframes") or {}
+        iframe_details = iframes.get("details", [])
+        hidden_iframes = [i for i in iframe_details if i.get("potentially_hidden")]
+        if hidden_iframes:
+            risk_score += 20
+            findings.append({
+                "category": "HTML Structure",
+                "detail": f"Detected {len(hidden_iframes)} hidden iframe(s) in DOM, often used for stealth clickjacking or credential harvesting.",
+                "severity": "high"
+            })
+        elif len(iframe_details) > 0:
+            risk_score += 5
+            findings.append({
+                "category": "HTML Structure",
+                "detail": f"Page embeds {len(iframe_details)} iframe container(s).",
+                "severity": "low"
+            })
+
+        # External Resources & Links
+        favicon_info = html_features.get("favicon") or {}
+        if favicon_info.get("is_external"):
+            risk_score += 5
+            findings.append({
+                "category": "HTML Structure",
+                "detail": "Favicon is loaded from an external domain.",
+                "severity": "low"
+            })
+
+        links_info = html_features.get("links") or {}
+        total_links = links_info.get("total", 0)
+        ext_links = links_info.get("external", 0)
+        null_links = links_info.get("null_or_dead", 0)
+
+        if total_links > 3:
+            if ext_links / total_links > 0.60:
+                risk_score += 10
+                findings.append({
+                    "category": "HTML Structure",
+                    "detail": f"Unusually high proportion of external hyperlinks ({round(ext_links/total_links*100)}%).",
+                    "severity": "medium"
+                })
+            if null_links / total_links > 0.50:
+                risk_score += 10
+                findings.append({
+                    "category": "HTML Structure",
+                    "detail": f"High proportion of dead/anchor links ({round(null_links/total_links*100)}%), typical of clone templates.",
+                    "severity": "medium"
+                })
+
+        # DOM Text Suspicious Keywords & Brand Mentions
+        dom_keywords = html_features.get("suspicious_keywords_found") or []
+        if len(dom_keywords) >= 3:
+            risk_score += 15
+            findings.append({
+                "category": "HTML Structure",
+                "detail": f"Multiple phishing-related keywords present in page text: {', '.join(dom_keywords[:5])}.",
+                "severity": "high"
+            })
+        elif len(dom_keywords) >= 1:
+            risk_score += 5
+
+        brand_mentions = html_features.get("brand_mentions_in_text") or []
+        foreign_brand_mentions = [b for b in brand_mentions if b not in domain.lower()]
+        if foreign_brand_mentions:
+            risk_score += 15
+            findings.append({
+                "category": "HTML Structure",
+                "detail": f"Page text prominently references brand(s) {', '.join(foreign_brand_mentions)} not matching domain '{domain}'.",
+                "severity": "high"
+            })
+
+        # -------------------------------------------------------------------
+        # 4. LONG-TERM THREAT MEMORY SIGNALS (Weight: +/- 15 pts)
+        # -------------------------------------------------------------------
+        if domain_intel and domain_intel.get("scan_count", 0) > 0:
+            past_scans = domain_intel.get("scan_count", 0)
+            last_risk = domain_intel.get("latest_risk_level", "SAFE")
+            last_score = domain_intel.get("latest_risk_score", 0)
+            if last_score >= 61:
+                risk_score += 15
+                findings.append({
+                    "category": "Long-Term Memory",
+                    "detail": f"Domain history in threat memory: {past_scans} prior scan(s), previously flagged as {last_risk} ({last_score}%).",
+                    "severity": "high"
+                })
+            else:
+                findings.append({
+                    "category": "Long-Term Memory",
+                    "detail": f"Domain history in long-term memory: {past_scans} previous scan(s) evaluated as {last_risk}.",
+                    "severity": "low"
+                })
+
+        # -------------------------------------------------------------------
+        # 5. FINAL SCORE NORMALIZATION & VERDICT
+        # -------------------------------------------------------------------
+        final_score = max(0, min(100, risk_score))
+
         if final_score <= 20:
             risk_level = "SAFE"
         elif final_score <= 40:
@@ -653,17 +899,32 @@ Be thorough, precise, and evidence-based.
                 "severity": "low"
             })
 
-        summary = (
-            f"Analysis of {url} resulted in a {risk_level} risk score of {final_score}%. "
-            f"{'Brand impersonation was identified targeting ' + brand_name + '. ' if (brand_detected and brand_name) else 'No brand impersonation detected. '}"
-            f"Lexical, structural, and visual indicators have been synthesized to evaluate overall target safety."
-        )
-
-        safety_advice = (
-            "Exercise extreme caution. Do not enter passwords, credit card numbers, or personal credentials."
-            if final_score >= 50 else
-            f"Website appears legitimate and safe for browsing. Always verify the domain name ({domain}) before entering sensitive credentials."
-        )
+        # Generate summary and actionable safety advice
+        if final_score >= 61:
+            summary = (
+                f"Analysis of {url} indicates a {risk_level} phishing risk with an overall risk score of {final_score}%. "
+                f"{'Brand impersonation was identified targeting ' + str(brand_name) + '. ' if (brand_detected and brand_name) else ''}"
+                f"Critical indicators include malicious visual/structural patterns and deceptive lexical attributes."
+            )
+            safety_advice = "DANGER: Do not enter passwords, payment details, or personal information. Close the webpage immediately."
+        elif final_score >= 41:
+            summary = (
+                f"Analysis of {url} resulted in a {risk_level} risk score of {final_score}%. "
+                f"Multiple suspicious indicators were detected across structural and lexical layers that warrant caution."
+            )
+            safety_advice = "Exercise caution. Verify the domain identity and SSL certificate before submitting any sensitive information."
+        elif final_score >= 21:
+            summary = (
+                f"Analysis of {url} yielded a {risk_level} risk score of {final_score}%. "
+                f"Minor anomalies were noted, but no active phishing or brand spoofing indicators were confirmed."
+            )
+            safety_advice = f"Website is likely legitimate. Always check the browser address bar ({domain}) before interacting."
+        else:
+            summary = (
+                f"Analysis of {url} concluded with a {risk_level} risk score of {final_score}%. "
+                f"Visual verification, DOM analysis, and lexical reputation confirm the target is legitimate with no phishing indicators."
+            )
+            safety_advice = f"The website appears safe and legitimate. Ensure your browser displays the trusted domain name ({domain})."
 
         return {
             "risk_score": final_score,
@@ -671,8 +932,8 @@ Be thorough, precise, and evidence-based.
             "findings": findings,
             "brand_impersonation": {
                 "detected": brand_detected,
-                "brand": brand_name,
-                "confidence": brand_conf
+                "brand": brand_name if brand_detected else None,
+                "confidence": round(brand_conf, 2) if brand_detected else None
             },
             "safety_advice": safety_advice,
             "summary": summary

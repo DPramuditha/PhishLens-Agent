@@ -165,8 +165,8 @@ def capture_screenshot(url: str) -> str:
             except Exception as ss_ex:
                 err_msg = f"Screenshot capture error: {str(ss_ex)}"
 
-            # Encode screenshot directly to Base64 Data URI in memory
-            if screenshot_bytes and len(screenshot_bytes) > 500:
+            has_valid_ss = bool(screenshot_bytes and len(screenshot_bytes) > 500)
+            if has_valid_ss:
                 b64_str = base64.b64encode(screenshot_bytes).decode("utf-8")
                 screenshot_data = f"data:image/png;base64,{b64_str}"
             else:
@@ -195,6 +195,7 @@ def capture_screenshot(url: str) -> str:
                 "screenshot_data": screenshot_data,
                 "screenshot_url": screenshot_data,
                 "screenshot_path": None,
+                "has_valid_screenshot": has_valid_ss,
                 "page_title": title,
                 "final_url": final_url,
                 "status": status,
