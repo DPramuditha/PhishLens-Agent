@@ -98,7 +98,15 @@ def run_tests():
     assert data_me["user"]["name"] == "Security Auditor"
     print("[PASS] [TEST 5] Protected current_user_view (/api/auth/me/) returns authenticated user profile")
 
-    # 6. Test /api/auth/google/ rejection of empty/invalid credential
+    # 6. Test /api/auth/google/ rejection of empty/invalid credential & access token
+    req_empty_google = factory.post(
+        "/api/auth/google/",
+        data=json.dumps({}),
+        content_type="application/json"
+    )
+    resp_empty_google = google_auth_view(req_empty_google)
+    assert resp_empty_google.status_code == 400, f"Expected 400, got {resp_empty_google.status_code}"
+
     req_bad_google = factory.post(
         "/api/auth/google/",
         data=json.dumps({"credential": "invalid_fake_google_credential"}),
@@ -106,7 +114,39 @@ def run_tests():
     )
     resp_bad_google = google_auth_view(req_bad_google)
     assert resp_bad_google.status_code == 401, f"Expected 401, got {resp_bad_google.status_code}"
-    print("[PASS] [TEST 6] Invalid Google credential properly rejected (401 Unauthorized)")
+
+    req_bad_access_token = factory.post(
+        "/api/auth/google/",
+        data=json.dumps({"access_token": "invalid_fake_google_access_token"}),
+        content_type="application/json"
+    )
+    resp_bad_access_token = google_auth_view(req_bad_access_token)
+    assert resp_bad_access_token.status_code == 401, f"Expected 401, got {resp_bad_access_token.status_code}"
+
+    # Test Google auth with mocked access token userinfo
+    from unittest.mock import patch
+    with patch("backend.core.security.oauth.requests.get") as mock_get:
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {
+            "email": "google_user@gmail.com",
+            "name": "Google Test User",
+            "given_name": "Google",
+            "family_name": "Test User",
+            "picture": "https://lh3.googleusercontent.com/test.jpg"
+        }
+        req_valid_access = factory.post(
+            "/api/auth/google/",
+            data=json.dumps({"access_token": "ya29.valid_mock_token"}),
+            content_type="application/json"
+        )
+        resp_valid_access = google_auth_view(req_valid_access)
+        assert resp_valid_access.status_code == 200, f"Expected 200, got {resp_valid_access.status_code}"
+        data_valid_access = json.loads(resp_valid_access.content)
+        assert "token" in data_valid_access
+        assert data_valid_access["user"]["email"] == "google_user@gmail.com"
+        assert data_valid_access["user"]["name"] == "Google Test User"
+
+    print("[PASS] [TEST 6] Google auth (credential & access_token validation, error handling & user provisioning) verified")
 
     # 7. Test /api/auth/register/ with weak passwords (should be rejected)
     weak_cases = [
