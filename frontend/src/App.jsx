@@ -31,6 +31,14 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+              <Route
+                path="/chat/:id"
+                element={
+                  <ProtectedRoute>
+                    <HomePage />
+                  </ProtectedRoute>
+                }
+              />
             </Routes>
           </Router>
           <ToastContainer />

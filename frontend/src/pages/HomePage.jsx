@@ -12,7 +12,7 @@ import {
   Shield,
   FileText,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
@@ -29,10 +29,11 @@ import expandAnimData from '../sidebar_images/expand.json';
 import lightExpandAnimData from '../sidebar_images/light-mode-expand.json';
 
 import SearchChat from './SearchChat';
+import ScreenshotsGalleryModal from '../components/ScreenshotsGalleryModal';
 import ProfileBottomSheet from '../components/ProfileBottomSheet';
 import SidebarDock from '../components/SidebarDock';
 import ReportDashboard from '../components/ReportDashboard';
-import { DotmHex2 } from '../components/ui/dotm-hex-2';
+import { DotmSquare19 } from '../components/ui/dotm-square-19';
 import OrchestratorProgress from '../components/OrchestratorProgress';
 import { useToast } from '../components/ToastContext';
 import MessageActionBar from '../components/MessageActionBar';
@@ -532,7 +533,7 @@ function AnimatedCyclingWord({ word, isThinking }) {
             className="inline-flex shrink-0 hero-cycling-loader-wrap mr-3 origin-bottom transform-gpu"
             style={{ backfaceVisibility: 'hidden', transformStyle: 'preserve-3d' }}
           >
-            <DotmHex2 bloom={true} size={28} dotSize={4.5} className="text-indigo-600 dark:text-indigo-400" />
+            <DotmSquare19 bloom={true} size={28} dotSize={4.5} color="#C15B2B" className="text-[#C15B2B]" />
           </span>
         )}
         <span className="bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent dark:from-indigo-400 dark:to-violet-400">
@@ -555,21 +556,95 @@ function AnimatedCyclingWord({ word, isThinking }) {
 
 export default function HomePage() {
   const navigate = useNavigate();
+  const { id: routeChatId } = useParams();
   const { user, token, authFetch } = useAuth();
   const { addToast } = useToast();
   const [isExpanded, setIsExpanded] = useState(true);
   const [chatTitle, setChatTitle] = useState('New Scan');
+  const [activeChatId, setActiveChatId] = useState(routeChatId || null);
   const [messages, setMessages] = useState([]);
   const mainRef = useRef(null);
   const [input, setInput] = useState('');
   const [showProfilePopup, setShowProfilePopup] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isScreenshotsOpen, setIsScreenshotsOpen] = useState(false);
   const [isTitleMenuOpen, setIsTitleMenuOpen] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    try {
+      const saved = localStorage.getItem('phishlens_theme');
+      if (saved !== null) {
+        return saved === 'dark';
+      }
+    } catch {
+      // ignore
+    }
+    return true;
+  });
   const [hasSentMessage, setHasSentMessage] = useState(false);
   const [showOrbs, setShowOrbs] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showAgentTasks, setShowAgentTasks] = useState(false);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+
+  // ── Load Chat Session from PostgreSQL by unique ID (/chat/:id) ──
+  useEffect(() => {
+    if (!routeChatId) {
+      setActiveChatId(null);
+      setMessages([]);
+      setHasSentMessage(false);
+      setChatTitle('New Scan');
+      setShowAgentTasks(false);
+      return;
+    }
+
+    setActiveChatId(routeChatId);
+    let isCancelled = false;
+
+    const loadChat = async () => {
+      try {
+        const headers = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const res = await fetch(`http://localhost:8000/api/chats/${routeChatId}/`, { headers });
+        if (!res.ok) return;
+
+        const data = await res.json();
+        if (isCancelled) return;
+
+        if (data.title) setChatTitle(data.title);
+
+        if (data.messages && data.messages.length > 0) {
+          const formatted = data.messages.map((msg) => ({
+            id: msg.id,
+            isUser: msg.sender === 'user',
+            text: msg.text,
+            url: msg.target_url,
+            status: msg.overall_status === 'FAILED' ? 'failed' : 'completed',
+            report: msg.report,
+            screenshotUrl: msg.screenshot_url,
+            urlAnalysisData: msg.url_analysis_data,
+            toolTrace: msg.tool_trace,
+            overallStatus: msg.overall_status,
+            duration: msg.duration_sec,
+            error: msg.error,
+          }));
+
+          setMessages(formatted);
+          setHasSentMessage(true);
+        } else {
+          setMessages([]);
+          setHasSentMessage(false);
+        }
+      } catch (err) {
+        console.error('Error loading chat session:', err);
+      }
+    };
+
+    loadChat();
+    return () => {
+      isCancelled = true;
+    };
+  }, [routeChatId, token]);
 
   const [currentWordIdx, setCurrentWordIdx] = useState(0);
   const [isThinking, setIsThinking] = useState(false);
@@ -631,6 +706,8 @@ export default function HomePage() {
         setHasSentMessage(false);
         setChatTitle('New Scan');
         setShowAgentTasks(false);
+        setActiveChatId(null);
+        navigate('/chat');
       },
       hasDot: false,
     },
@@ -640,6 +717,22 @@ export default function HomePage() {
       lottieData: isDarkMode ? searchAnimData : darkSearchAnimData,
       lottieRef: searchLottieRef,
       onClick: () => setIsSearchOpen(true),
+      hasDot: false,
+    },
+    {
+      id: 'screenshots',
+      label: 'Captured Screenshots',
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '100%', height: '100%' }}>
+          <path
+            fillRule="evenodd"
+            clipRule="evenodd"
+            d="M10.9451 1.25H13.0549C14.4225 1.24998 15.5248 1.24996 16.3918 1.36652C17.2919 1.48754 18.0498 1.74643 18.6517 2.34835C19.0519 2.74855 19.3004 3.2177 19.4577 3.75175C19.6692 3.75503 19.8458 3.76426 20.0084 3.79001C21.3991 4.01027 22.4898 5.10094 22.71 6.49159C22.7502 6.74548 22.7501 7.03358 22.75 7.43528C22.75 7.45653 22.75 7.4781 22.75 7.5V16.5C22.75 16.5219 22.75 16.5435 22.75 16.5647C22.7501 16.9664 22.7502 17.2545 22.71 17.5084C22.4898 18.8991 21.3991 19.9897 20.0084 20.21C19.8458 20.2357 19.6692 20.245 19.4577 20.2482C19.3004 20.7823 19.0519 21.2514 18.6517 21.6517C18.0498 22.2536 17.2919 22.5125 16.3918 22.6335C15.5248 22.75 14.4225 22.75 13.0549 22.75H10.9452C9.57756 22.75 8.47524 22.75 7.60827 22.6335C6.70816 22.5125 5.95029 22.2536 5.34837 21.6517C4.94817 21.2514 4.69961 20.7823 4.54238 20.2482C4.33086 20.245 4.15422 20.2357 3.99161 20.21C2.60096 19.9897 1.51029 18.8991 1.29004 17.5084C1.24982 17.2545 1.2499 16.9664 1.25001 16.5647C1.25002 16.5435 1.25002 16.5219 1.25002 16.5V7.5C1.25002 7.4781 1.25002 7.45652 1.25001 7.43527C1.2499 7.03357 1.24982 6.74548 1.29004 6.49159C1.51029 5.10094 2.60096 4.01027 3.99161 3.79001C4.15422 3.76426 4.33086 3.75503 4.54238 3.75175C4.69961 3.2177 4.94817 2.74855 5.34837 2.34835C5.95029 1.74643 6.70816 1.48754 7.60827 1.36652C8.47524 1.24996 9.57756 1.24998 10.9451 1.25ZM4.30193 5.26229C4.27396 5.26483 4.24942 5.26788 4.22626 5.27155C3.47745 5.39015 2.89017 5.97743 2.77157 6.72624C2.75235 6.84758 2.75002 7.00684 2.75002 7.5V16.5C2.75002 16.9932 2.75235 17.1524 2.77157 17.2738C2.89017 18.0226 3.47745 18.6099 4.22626 18.7285C4.24942 18.7321 4.27396 18.7352 4.30193 18.7377C4.24999 17.9893 4.25001 17.0995 4.25002 16.0549L4.25002 14.8166C4.25002 14.8161 4.25002 14.8156 4.25002 14.8151L4.25002 7.94512C4.25001 6.90052 4.24999 6.01069 4.30193 5.26229ZM5.75002 15.1209V16C5.75002 17.4354 5.75162 18.4365 5.85317 19.1919C5.95182 19.9257 6.13227 20.3142 6.40903 20.591C6.6858 20.8678 7.07437 21.0482 7.80814 21.1469C8.56349 21.2484 9.56461 21.25 11 21.25H13C14.4354 21.25 15.4366 21.2484 16.1919 21.1469C16.9257 21.0482 17.3143 20.8678 17.591 20.591C17.743 20.439 17.8659 20.2533 17.9622 19.9952L16.0804 18.0092C15.577 17.478 14.8816 17.4416 14.352 17.8781L14.1322 18.0591C13.216 18.8142 11.9548 18.6658 11.1952 17.7751L8.03435 14.0687C7.68431 13.6583 7.1851 13.6485 6.82776 14.0152L5.75002 15.1209ZM18.2292 18.0961L17.1692 16.9775C16.1406 15.892 14.5546 15.7673 13.398 16.7205L13.1783 16.9016C12.9228 17.1121 12.5897 17.0987 12.3365 16.8018L9.17567 13.0954C8.26393 12.0263 6.73916 11.957 5.75357 12.9682L5.75002 12.9719V8C5.75002 6.56458 5.75162 5.56347 5.85317 4.80812C5.95182 4.07435 6.13227 3.68577 6.40903 3.40901C6.6858 3.13225 7.07437 2.9518 7.80814 2.85315C8.56349 2.75159 9.56461 2.75 11 2.75H13C14.4354 2.75 15.4366 2.75159 16.1919 2.85315C16.9257 2.9518 17.3143 3.13225 17.591 3.40901C17.8678 3.68577 18.0482 4.07435 18.1469 4.80812C18.2484 5.56347 18.25 6.56458 18.25 8V16C18.25 16.8326 18.2495 17.519 18.2292 18.0961ZM19.6981 18.7377C19.7261 18.7352 19.7506 18.7321 19.7738 18.7285C20.5226 18.6099 21.1099 18.0226 21.2285 17.2738C21.2477 17.1524 21.25 16.9932 21.25 16.5V7.5C21.25 7.00684 21.2477 6.84758 21.2285 6.72624C21.1099 5.97743 20.5226 5.39015 19.7738 5.27155C19.7506 5.26788 19.7261 5.26483 19.6981 5.26229C19.7501 6.01069 19.75 6.90053 19.75 7.94513V16.0549C19.75 17.0995 19.7501 17.9893 19.6981 18.7377ZM14.5 5.75C14.0858 5.75 13.75 6.08579 13.75 6.5C13.75 6.91421 14.0858 7.25 14.5 7.25C14.9142 7.25 15.25 6.91421 15.25 6.5C15.25 6.08579 14.9142 5.75 14.5 5.75ZM12.25 6.5C12.25 5.25736 13.2574 4.25 14.5 4.25C15.7427 4.25 16.75 5.25736 16.75 6.5C16.75 7.74264 15.7427 8.75 14.5 8.75C13.2574 8.75 12.25 7.74264 12.25 6.5Z"
+            fill="currentColor"
+          />
+        </svg>
+      ),
+      onClick: () => setIsScreenshotsOpen(true),
       hasDot: false,
     },
     {
@@ -692,10 +785,16 @@ export default function HomePage() {
   ];
 
   useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
+    try {
+      if (isDarkMode) {
+        document.documentElement.classList.add('dark');
+        localStorage.setItem('phishlens_theme', 'dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+        localStorage.setItem('phishlens_theme', 'light');
+      }
+    } catch {
+      // ignore
     }
   }, [isDarkMode]);
 
@@ -873,43 +972,51 @@ export default function HomePage() {
     return () => clearTimeout(timer);
   }, [currentWordIdx, isThinking, triggerCycle, hasSentMessage]);
 
-
-
   const handleSend = async (e) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
     const query = input.trim();
-    if (!isValidUrl(query)) {
+    const isUrl = isValidUrl(query);
+
+    // If it's not a URL and no conversation has started, prompt user
+    if (!isUrl && !hasSentMessage && messages.length === 0) {
       addToast({
         type: 'error',
-        title: 'Invalid URL Format',
-        message: 'Please enter a valid website URL or domain name (e.g. google.com).'
+        title: 'Enter Target URL',
+        message: 'Please enter a website URL or domain to begin analysis (e.g. google.com).'
       });
       return;
     }
 
-    // Prepend protocol if user enters bare domain like 'google.com'
-    const processedUrl = query.startsWith('http://') || query.startsWith('https://')
-      ? query
-      : `https://${query}`;
-
     const isFirst = !hasSentMessage;
     const userMsg = { id: Date.now() + '-user', text: query, isUser: true };
     const botMsgId = Date.now() + '-bot';
+    
+    let processedUrl = null;
+    if (isUrl) {
+      processedUrl = query.startsWith('http://') || query.startsWith('https://')
+        ? query
+        : `https://${query}`;
+    }
+
     const loadingBotMsg = {
       id: botMsgId,
-      text: `Scanning URL: ${processedUrl}... Processing DOM structure, lexical attributes, WHOIS details, and visual similarity features. Please wait.`,
+      text: isUrl 
+        ? `Scanning URL: ${processedUrl}... Processing DOM structure, lexical attributes, WHOIS details, and visual similarity features. Please wait.`
+        : 'PhishLens is analyzing and recalling security context...',
       isUser: false,
       status: 'loading',
-      url: processedUrl
+      url: processedUrl || undefined
     };
 
     setMessages((prev) => [...prev, userMsg, loadingBotMsg]);
     setInput('');
     setIsLoading(true);
-    setShowAgentTasks(true);
-    setChatTitle(query);
+    if (isUrl) {
+      setShowAgentTasks(true);
+      setChatTitle(query);
+    }
 
     if (isFirst) {
       // 1. Run the transition timeline
@@ -976,83 +1083,111 @@ export default function HomePage() {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch('http://localhost:8000/api/scan/', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ url: processedUrl }),
-      });
+      if (isUrl) {
+        // Execute URL Scan with Short-Term & Long-Term Memory
+        const response = await fetch('http://localhost:8000/api/scan/', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ url: processedUrl, chat_id: activeChatId || undefined }),
+        });
 
-      if (!response.ok) {
-        throw new Error(`Failed with status ${response.status}`);
-      }
+        if (!response.ok) {
+          throw new Error(`Failed with status ${response.status}`);
+        }
 
-      const data = await response.json();
+        const data = await response.json();
 
-      // Attempt to extract screenshot URL from Django media serving
-      let resolvedScreenshotUrl = null;
-      if (data.screenshot_path) {
-        const parts = data.screenshot_path.split(/[/\\]/);
-        const filename = parts[parts.length - 1];
-        resolvedScreenshotUrl = `http://localhost:8000/media/screenshots/${filename}`;
-      } else if (data.tool_trace) {
-        // Fallback to legacy parsing if not present as top-level key
-        const screenshotStep = data.tool_trace.find(
-          (step) => step.step === 'tool_result' && step.tool === 'capture_screenshot'
-        );
-        if (screenshotStep && screenshotStep.content_preview) {
-          try {
-            // Find absolute screenshot path inside content preview string
-            const cleanedPreview = screenshotStep.content_preview.replace(/\.\.\.$/, '');
-            const parsedPreview = JSON.parse(cleanedPreview + (cleanedPreview.endsWith('}') ? '' : '}'));
-            if (parsedPreview.screenshot_path) {
-              const parts = parsedPreview.screenshot_path.split(/[/\\]/);
-              const filename = parts[parts.length - 1];
-              resolvedScreenshotUrl = `http://localhost:8000/media/screenshots/${filename}`;
-            }
-          } catch (e) {
-            const match = screenshotStep.content_preview.match(/["']screenshot_path["']:\s*["']([^"']+)["']/);
-            if (match && match[1]) {
-              const parts = match[1].split(/[/\\]/);
-              const filename = parts[parts.length - 1];
-              resolvedScreenshotUrl = `http://localhost:8000/media/screenshots/${filename}`;
-            }
+        // Update URL to /chat/<id> if we created a new session
+        if (data.chat_id) {
+          setActiveChatId(data.chat_id);
+          if (!routeChatId || routeChatId !== data.chat_id) {
+            navigate(`/chat/${data.chat_id}`, { replace: true });
           }
         }
-      }
 
-      // Update bot message with structured report details
-      const isFailed = data.overall_status === 'FAILED';
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === botMsgId
-            ? {
-                ...msg,
-                text: isFailed ? `Scan failed: ${data.error || 'Unknown error occurred.'}` : null,
-                status: isFailed ? 'failed' : 'completed',
-                report: data.report,
-                screenshotUrl: resolvedScreenshotUrl,
-                urlAnalysisData: data.url_analysis_data,
-                toolTrace: data.tool_trace,
-                overallStatus: data.overall_status,
-                duration: data.total_duration_sec,
-                error: data.error,
-              }
-            : msg
-        )
-      );
+        // Extract screenshot URL (supports Base64 data URI and remote URL)
+        let resolvedScreenshotUrl = data.screenshot_url || data.screenshot_data || null;
+        if (!resolvedScreenshotUrl && data.screenshot_path) {
+          if (data.screenshot_path.startsWith('data:image/') || data.screenshot_path.startsWith('http://') || data.screenshot_path.startsWith('https://')) {
+            resolvedScreenshotUrl = data.screenshot_path;
+          } else {
+            const parts = data.screenshot_path.split(/[/\\]/);
+            const filename = parts[parts.length - 1];
+            resolvedScreenshotUrl = `http://localhost:8000/media/screenshots/${filename}`;
+          }
+        }
 
-      // Fire toast notification
-      if (isFailed) {
-        addToast({ type: 'error', title: 'Scan Failed', message: data.error || 'Unknown error occurred during analysis.' });
+        // Update bot message with structured report details
+        const isFailed = data.overall_status === 'FAILED';
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === botMsgId
+              ? {
+                  ...msg,
+                  text: isFailed ? `Scan failed: ${data.error || 'Unknown error occurred.'}` : null,
+                  status: isFailed ? 'failed' : 'completed',
+                  report: data.report,
+                  screenshotUrl: resolvedScreenshotUrl,
+                  urlAnalysisData: data.url_analysis_data,
+                  toolTrace: data.tool_trace,
+                  overallStatus: data.overall_status,
+                  duration: data.total_duration_sec,
+                  error: data.error,
+                }
+              : msg
+          )
+        );
+
+        // Fire toast notification
+        if (isFailed) {
+          addToast({ type: 'error', title: 'Scan Failed', message: data.error || 'Unknown error occurred during analysis.' });
+        } else {
+          const riskLevel = data.report?.risk_level || 'Unknown';
+          const riskScore = data.report?.risk_score ?? 0;
+          const toastType = riskScore >= 61 ? 'warning' : riskScore >= 41 ? 'warning' : 'success';
+          addToast({
+            type: toastType,
+            title: `Analysis Complete — ${riskLevel}`,
+            message: `Risk score: ${riskScore}% • Duration: ${data.total_duration_sec}s`,
+          });
+        }
+        setHistoryRefreshKey((k) => k + 1);
       } else {
-        const riskLevel = data.report?.risk_level || 'Unknown';
-        const riskScore = data.report?.risk_score ?? 0;
-        const toastType = riskScore >= 61 ? 'warning' : riskScore >= 41 ? 'warning' : 'success';
-        addToast({
-          type: toastType,
-          title: `Analysis Complete — ${riskLevel}`,
-          message: `Risk score: ${riskScore}% • Duration: ${data.total_duration_sec}s`,
+        // Execute Conversational Follow-up Message using Short-Term & Long-Term Memory
+        const targetChatId = activeChatId || routeChatId || 'temp';
+        const response = await fetch(`http://localhost:8000/api/chats/${targetChatId}/message/`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ message: query }),
         });
+
+        if (!response.ok) {
+          throw new Error(`Failed with status ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data.chat_id) {
+          setActiveChatId(data.chat_id);
+          if (!routeChatId || routeChatId !== data.chat_id) {
+            navigate(`/chat/${data.chat_id}`, { replace: true });
+          }
+        }
+
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === botMsgId
+              ? {
+                  ...msg,
+                  text: data.reply || 'Analysis updated.',
+                  status: data.status === 'error' ? 'failed' : 'completed',
+                  duration: data.duration_sec,
+                  error: data.error,
+                }
+              : msg
+          )
+        );
+        setHistoryRefreshKey((k) => k + 1);
       }
     } catch (err) {
       setMessages((prev) =>
@@ -1060,7 +1195,7 @@ export default function HomePage() {
           msg.id === botMsgId
             ? {
               ...msg,
-              text: `Scan failed: ${err.message}. Make sure Django server is running on http://localhost:8000`,
+              text: `Request failed: ${err.message}. Make sure Django server is running on http://localhost:8000`,
               status: 'failed',
             }
             : msg
@@ -1075,7 +1210,6 @@ export default function HomePage() {
   const handleRescanMessage = async (botMsgId, urlToScan) => {
     if (isLoading) return;
 
-    // Set status to loading for this specific bot message
     setMessages((prev) =>
       prev.map((msg) =>
         msg.id === botMsgId
@@ -1108,7 +1242,7 @@ export default function HomePage() {
       const response = await fetch('http://localhost:8000/api/scan/', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ url: urlToScan }),
+        body: JSON.stringify({ url: urlToScan, chat_id: activeChatId || undefined }),
       });
 
       if (!response.ok) {
@@ -1117,32 +1251,14 @@ export default function HomePage() {
 
       const data = await response.json();
 
-      let resolvedScreenshotUrl = null;
-      if (data.screenshot_path) {
-        const parts = data.screenshot_path.split(/[/\\]/);
-        const filename = parts[parts.length - 1];
-        resolvedScreenshotUrl = `http://localhost:8000/media/screenshots/${filename}`;
-      } else if (data.tool_trace) {
-        const screenshotStep = data.tool_trace.find(
-          (step) => step.step === 'tool_result' && step.tool === 'capture_screenshot'
-        );
-        if (screenshotStep && screenshotStep.content_preview) {
-          try {
-            const cleanedPreview = screenshotStep.content_preview.replace(/\.\.\.$/, '');
-            const parsedPreview = JSON.parse(cleanedPreview + (cleanedPreview.endsWith('}') ? '' : '}'));
-            if (parsedPreview.screenshot_path) {
-              const parts = parsedPreview.screenshot_path.split(/[/\\]/);
-              const filename = parts[parts.length - 1];
-              resolvedScreenshotUrl = `http://localhost:8000/media/screenshots/${filename}`;
-            }
-          } catch (e) {
-            const match = screenshotStep.content_preview.match(/["']screenshot_path["']:\s*["']([^"']+)["']/);
-            if (match && match[1]) {
-              const parts = match[1].split(/[/\\]/);
-              const filename = parts[parts.length - 1];
-              resolvedScreenshotUrl = `http://localhost:8000/media/screenshots/${filename}`;
-            }
-          }
+      let resolvedScreenshotUrl = data.screenshot_url || data.screenshot_data || null;
+      if (!resolvedScreenshotUrl && data.screenshot_path) {
+        if (data.screenshot_path.startsWith('data:image/') || data.screenshot_path.startsWith('http://') || data.screenshot_path.startsWith('https://')) {
+          resolvedScreenshotUrl = data.screenshot_path;
+        } else {
+          const parts = data.screenshot_path.split(/[/\\]/);
+          const filename = parts[parts.length - 1];
+          resolvedScreenshotUrl = `http://localhost:8000/media/screenshots/${filename}`;
         }
       }
 
@@ -1197,63 +1313,7 @@ export default function HomePage() {
   };
 
   const handleSelectChat = (chatId) => {
-    if (chatId === 1) {
-      setMessages([
-        { id: 1, text: 'Can you analyze this suspicious email link for me: http://secure-login-update-bank.com?', sender: 'user' },
-        {
-          id: 2,
-          text: 'Security scan completed for http://secure-login-update-bank.com. Here is the report:',
-          sender: 'bot',
-          status: 'completed',
-          overallStatus: 'suspicious',
-          duration: 3.4,
-          report: {
-            risk_level: 'Suspicious',
-            risk_score: 74,
-            brand_impersonation: { detected: true, brand: 'Chase Bank', confidence: 0.92 },
-            summary: 'The target website displays characteristics of a credential harvesting page mimicking Chase Bank. It utilizes look-alike domain spelling and contains suspicious login form structures.',
-            findings: [
-              { category: 'Visual Signal', severity: 'High', detail: 'Matches Chase Bank logo and color scheme with 92% confidence.' },
-              { category: 'Lexical Signal', severity: 'Medium', detail: 'Domain age is 2 days and contains brand keywords.' }
-            ],
-            safety_advice: 'Do NOT input any credentials on this page. It is highly likely to be a phishing site.'
-          }
-        }
-      ]);
-      setHasSentMessage(true);
-      setChatTitle('Analysis on suspicious email link');
-    } else if (chatId === 2) {
-      setMessages([
-        { id: 1, text: 'What is spear phishing?', sender: 'user' },
-        { id: 2, text: 'Spear phishing is a highly targeted phishing method where attackers customize their emails/messages specifically for a particular individual or organization, often using personal details to build trust.', sender: 'bot' }
-      ]);
-      setHasSentMessage(true);
-      setChatTitle('What is spear phishing?');
-    } else if (chatId === 3) {
-      setMessages([
-        { id: 1, text: 'Please check domain.com', sender: 'user' },
-        {
-          id: 2,
-          text: 'Security scan completed for http://domain.com. Here is the report:',
-          sender: 'bot',
-          status: 'completed',
-          overallStatus: 'safe',
-          duration: 1.8,
-          report: {
-            risk_level: 'Safe',
-            risk_score: 5,
-            brand_impersonation: { detected: false },
-            summary: 'The website http://domain.com appears to be completely safe with no phishing signals or brand impersonation detected.',
-            findings: [
-              { category: 'Domain Info', severity: 'Low', detail: 'Domain is 15 years old and has a valid SSL certificate.' }
-            ],
-            safety_advice: 'The site is safe to visit.'
-          }
-        }
-      ]);
-      setHasSentMessage(true);
-      setChatTitle('Scan results for domain.com');
-    }
+    navigate(`/chat/${chatId}`);
   };
 
   return (
@@ -1266,6 +1326,8 @@ export default function HomePage() {
         activeItemId={null}
         isExpanded={isExpanded}
         onSelectChat={handleSelectChat}
+        activeChatId={activeChatId || routeChatId}
+        refreshKey={historyRefreshKey}
       />
 
       {/* Profile Bottom Sheet (positioned absolutely) */}
@@ -1394,12 +1456,18 @@ export default function HomePage() {
                     ) : (
                       <div className="group relative w-full">
                         <div className="flex-1 min-w-0 bg-transparent py-1.5 flex flex-col gap-4">
-                          {(msg.status === 'loading' || msg.status === 'completed') && (
+                          {(msg.status === 'loading' || (msg.status === 'completed' && msg.report)) && msg.url && (
                             <OrchestratorProgress
                               targetUrl={msg.url || 'Target URL'}
                               status={msg.status}
                               duration={msg.duration}
                             />
+                          )}
+                          {msg.status === 'loading' && !msg.url && (
+                            <div className="p-4 rounded-2xl bg-white dark:bg-[#2a2a2a] border border-gray-200 dark:border-gray-700/80 text-gray-500 dark:text-gray-400 text-sm flex items-center gap-3 shadow-sm max-w-[85%]">
+                              <div className="w-4 h-4 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
+                              <p>{msg.text || 'PhishLens is analyzing and recalling security context...'}</p>
+                            </div>
                           )}
                           {msg.status === 'failed' && (
                             <div className="p-4 rounded-2xl bg-rose-500/10 dark:bg-rose-500/15 border border-rose-500/30 text-rose-600 dark:text-rose-400 flex items-center gap-3 text-sm max-w-[85%] shadow-sm">
@@ -1407,7 +1475,7 @@ export default function HomePage() {
                               <p>{msg.text}</p>
                             </div>
                           )}
-                          {msg.status === 'completed' && (
+                          {msg.status === 'completed' && msg.report && (
                             <ReportDashboard
                               report={msg.report}
                               duration={msg.duration}
@@ -1415,6 +1483,11 @@ export default function HomePage() {
                               toolTrace={msg.toolTrace}
                               urlAnalysisData={msg.urlAnalysisData}
                             />
+                          )}
+                          {msg.status === 'completed' && !msg.report && msg.text && (
+                            <div className="p-4 rounded-2xl bg-white dark:bg-[#252525] border border-gray-200 dark:border-gray-700/80 text-gray-800 dark:text-gray-100 text-[14.5px] leading-relaxed shadow-sm max-w-[85%] whitespace-pre-wrap">
+                              {msg.text}
+                            </div>
                           )}
                         </div>
                         <MessageActionBar msg={msg} onRescan={handleRescanMessage} isLoadingGlobal={isLoading} />
@@ -1584,6 +1657,12 @@ export default function HomePage() {
       <SearchChat
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}
+        isDarkMode={isDarkMode}
+      />
+
+      <ScreenshotsGalleryModal
+        isOpen={isScreenshotsOpen}
+        onClose={() => setIsScreenshotsOpen(false)}
         isDarkMode={isDarkMode}
       />
 

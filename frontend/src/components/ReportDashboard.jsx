@@ -23,6 +23,7 @@ import {
   XCircle,
   MapPin,
   Calendar,
+  AlertTriangle,
 } from 'lucide-react';
 import gsap from 'gsap';
 import { AnimatedCircularProgressBar } from './ui/animated-circular-progress-bar';
@@ -270,11 +271,18 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
 
   if (!report) return null;
 
-  const score = report.risk_score ?? 0;
-  const analyzedUrl = getUrlFromSummary(report.summary);
+  const score = report?.risk_score ?? 0;
+  const riskLevel = String(report?.risk_level || 'UNKNOWN').toUpperCase();
+  const summaryText = report?.summary || 'Phishing analysis report completed.';
+  const analyzedUrl = getUrlFromSummary(summaryText);
 
-  const hasBrand = report.brand_impersonation && report.brand_impersonation.detected;
-  const findingsCount = report.findings ? report.findings.length : 0;
+  const hasBrand = Boolean(report?.brand_impersonation && report.brand_impersonation.detected);
+  const brandName = report?.brand_impersonation?.brand || 'Unknown Brand';
+  const brandConfidence = typeof report?.brand_impersonation?.confidence === 'number'
+    ? Math.round(report.brand_impersonation.confidence * 100)
+    : 0;
+  const findingsList = Array.isArray(report?.findings) ? report.findings : [];
+  const findingsCount = findingsList.length;
   const findingsStartStep = hasBrand ? 2 : 1;
   const safetyStartStep = findingsStartStep + findingsCount;
 
@@ -325,7 +333,7 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
               Analysis Verdict
             </h4>
             <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight mt-1 text-gray-900 dark:text-white">
-              VERDICT: {report.risk_level.toUpperCase()}
+              VERDICT: {riskLevel}
             </h2>
             <p className="text-[16px] md:text-[17.5px] font-bold text-gray-500 dark:text-gray-400">
               Risk Score: {score}% | Duration: {duration}s
@@ -348,7 +356,7 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
           </h3>
           <p className="text-[16.5px] md:text-[18px] leading-relaxed text-gray-700 dark:text-gray-200 font-medium">
             <WordTypingText 
-              text={report.summary} 
+              text={summaryText} 
               speed={35} 
               trigger={activeStep >= 0}
               onComplete={() => setActiveStep(hasBrand ? 1 : findingsStartStep)}
@@ -472,7 +480,7 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
             </h3>
             <p className="text-[16.5px] md:text-[18px] leading-relaxed text-gray-700 dark:text-gray-200 font-bold">
               <WordTypingText 
-                text={`Target Mimics: ${report.brand_impersonation.brand} (Confidence: ${Math.round(report.brand_impersonation.confidence * 100)}%)`} 
+                text={`Target Mimics: ${brandName} (Confidence: ${brandConfidence}%)`} 
                 speed={35}
                 trigger={activeStep >= 1}
                 onComplete={() => setActiveStep(findingsStartStep)}
@@ -482,19 +490,20 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
         )}
 
         {/* Key Findings */}
-        {report.findings && report.findings.length > 0 && activeStep >= findingsStartStep && (
+        {findingsList.length > 0 && activeStep >= findingsStartStep && (
           <div className="flex flex-col gap-3.5 mt-2 transition-opacity duration-500">
             <h3 className="text-[18px] md:text-[20px] font-black tracking-tight text-gray-900 dark:text-white uppercase">
               Key Findings
             </h3>
             <div className="flex flex-col gap-3">
-              {report.findings.map((f, idx) => {
-                const severity = f.severity ? ` [Severity: ${f.severity.toUpperCase()}]` : '';
+              {findingsList.map((f, idx) => {
+                const category = f?.category || 'General';
+                const severity = f?.severity ? ` [Severity: ${String(f.severity).toUpperCase()}]` : '';
                 const stepTrigger = activeStep >= (findingsStartStep + idx);
                 const typingCompleteTrigger = activeStep > (findingsStartStep + idx);
-                const isVisualML = f.category.toLowerCase().includes('visual');
-                const severityLower = (f.severity || '').toLowerCase();
-                const detailLower = (f.detail || '').toLowerCase();
+                const isVisualML = (category || '').toLowerCase().includes('visual');
+                const severityLower = (f?.severity || '').toLowerCase();
+                const detailLower = (f?.detail || '').toLowerCase();
                 const isPhishing = severityLower === 'high' || 
                                    severityLower === 'critical' || 
                                    (detailLower.includes('phishing') && !detailLower.includes('legitimate') && !detailLower.includes('below the 0.60'));
@@ -504,11 +513,11 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
                   <div key={idx} className={`flex gap-2 transition-all duration-300 ${stepTrigger ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'}`}>
                     <span className="font-bold text-indigo-500 shrink-0 select-none">•</span>
                     <p className="text-[16.5px] md:text-[18px] leading-relaxed text-gray-700 dark:text-gray-200 font-medium relative">
-                      <span className="font-black text-gray-900 dark:text-white">{f.category}{severity}: </span>
+                      <span className="font-black text-gray-900 dark:text-white">{category}{severity}: </span>
                       {isVisualML ? (
                         <Highlight color={highlightColor} trigger={typingCompleteTrigger} duration={0.9} delay={0.1}>
                           <WordTypingText 
-                            text={f.detail} 
+                            text={f?.detail || ''} 
                             speed={35}
                             trigger={stepTrigger}
                             onComplete={() => setActiveStep(findingsStartStep + idx + 1)}
@@ -516,7 +525,7 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
                         </Highlight>
                       ) : (
                         <WordTypingText 
-                          text={f.detail} 
+                          text={f?.detail || ''} 
                           speed={35}
                           trigger={stepTrigger}
                           onComplete={() => setActiveStep(findingsStartStep + idx + 1)}
@@ -531,7 +540,7 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
         )}
 
         {/* Safety Advice */}
-        {report.safety_advice && activeStep >= safetyStartStep && (
+        {report?.safety_advice && activeStep >= safetyStartStep && (
           <div className="flex flex-col gap-2 mt-2 transition-opacity duration-500">
             <h3 className="text-[18px] md:text-[20px] font-black tracking-tight text-gray-900 dark:text-white uppercase">
               Safety Advice & Recommendations
@@ -543,6 +552,38 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
                 trigger={activeStep >= safetyStartStep}
               />
             </p>
+          </div>
+        )}
+
+        {/* LLM Error Detail Banner — shown when fallback synthesis was used */}
+        {report?.llm_error && (
+          <div className="mt-4 border border-amber-300/60 dark:border-amber-700/40 rounded-2xl overflow-hidden bg-amber-50/80 dark:bg-amber-950/20 backdrop-blur-md">
+            <div className="px-5 py-4 flex flex-col gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
+                  <AlertTriangle size={16} />
+                </div>
+                <div className="flex flex-col">
+                  <h4 className="text-[11px] uppercase tracking-[0.12em] font-black text-amber-600 dark:text-amber-400">
+                    LLM Provider Error — Deterministic Fallback Used
+                  </h4>
+                  <p className="text-[12px] text-amber-700/80 dark:text-amber-300/60 font-medium mt-0.5">
+                    The AI synthesis model returned an error. The report above was generated using deterministic multi-agent analysis instead.
+                  </p>
+                </div>
+              </div>
+              <div className="bg-amber-100/60 dark:bg-amber-950/40 rounded-xl px-4 py-3 border border-amber-200/50 dark:border-amber-800/30">
+                <p className="text-[12px] font-mono text-amber-800 dark:text-amber-200/80 break-all whitespace-pre-wrap leading-relaxed">
+                  {report.llm_error}
+                </p>
+              </div>
+              {report?.synthesis_method && (
+                <p className="text-[11px] font-semibold text-amber-600/70 dark:text-amber-400/50 flex items-center gap-1.5">
+                  <Activity size={12} />
+                  Synthesis method: <span className="font-mono font-bold">{report.synthesis_method}</span>
+                </p>
+              )}
+            </div>
           </div>
         )}
 

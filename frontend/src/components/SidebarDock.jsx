@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback, useState, useLayoutEffect, useMemo } from 'react';
 import gsap from 'gsap';
 import Lottie from 'lottie-react';
+import { useAuth } from '../context/AuthContext';
 
 // ─── Tuning constants ─────────────────────────────────────────────────────────
 const ITEM_BASE   = 50;   // px – resting icon cell size
@@ -201,21 +202,77 @@ function DockDivider({ isDarkMode }) {
   );
 }
 
-// ─── ChatHistoryPanel Subcomponent ───────────────────────────────────────────
-function ChatHistoryPanel({ isExpanded, isDarkMode, onSelectChat }) {
-  const containerRef = useRef(null);
-  const [search, setSearch] = useState('');
-  
-  // Dummy chat history data
-  const chatHistory = [
-    { id: 1, title: 'Analysis on suspicious email link', date: '2 hours ago' },
-    { id: 2, title: 'What is spear phishing?', date: 'Yesterday' },
-    { id: 3, title: 'Scan results for domain.com', date: 'May 18, 2026' },
-  ];
+function formatRelativeTime(dateStr) {
+  if (!dateStr) return '';
+  try {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHours = Math.floor(diffMin / 60);
+    const diffDays = Math.floor(diffHours / 24);
 
-  const filteredHistory = chatHistory.filter((chat) =>
-    chat.title.toLowerCase().includes(search.toLowerCase())
-  );
+    if (diffSec < 60) return 'Just now';
+    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  } catch {
+    return dateStr;
+  }
+}
+
+// ─── ChatHistoryPanel Subcomponent (Real PostgreSQL History) ────────────────
+function ChatHistoryPanel({ isExpanded, isDarkMode, onSelectChat, activeChatId, refreshKey }) {
+  const containerRef = useRef(null);
+  const { token } = useAuth();
+  const [search, setSearch] = useState('');
+  const [chats, setChats] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const fetchChats = useCallback(async (query = '') => {
+    setIsLoading(true);
+    try {
+      const headers = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`http://localhost:8000/api/chats/?q=${encodeURIComponent(query)}`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setChats(data.chats || []);
+      }
+    } catch (err) {
+      console.error('Error fetching chat history in sidebar:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (isExpanded) {
+      fetchChats(search);
+    }
+  }, [isExpanded, search, refreshKey, fetchChats]);
+
+  const handleDeleteChat = async (e, chatId) => {
+    e.stopPropagation();
+    try {
+      const headers = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`http://localhost:8000/api/chats/${chatId}/`, {
+        method: 'DELETE',
+        headers,
+      });
+      if (res.ok) {
+        setChats((prev) => prev.filter((c) => c.id !== chatId));
+      }
+    } catch (err) {
+      console.error('Error deleting chat from sidebar:', err);
+    }
+  };
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -244,8 +301,13 @@ function ChatHistoryPanel({ isExpanded, isDarkMode, onSelectChat }) {
     >
       {/* Header */}
       <div className="flex items-center justify-between mb-3.5">
-        <h3 className="text-sm font-bold tracking-wide text-gray-800 dark:text-gray-200">
-          Chat History
+        <h3 className="text-sm font-bold tracking-wide text-gray-800 dark:text-gray-200 flex items-center gap-2">
+          <span>Chat History</span>
+          {chats.length > 0 && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400">
+              {chats.length}
+            </span>
+          )}
         </h3>
       </div>
 
@@ -276,27 +338,77 @@ function ChatHistoryPanel({ isExpanded, isDarkMode, onSelectChat }) {
 
       {/* Chat List */}
       <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col gap-1.5 pb-2">
-        {filteredHistory.map((chat) => (
-          <div
-            key={chat.id}
-            className="group p-2.5 rounded-xl text-left cursor-pointer transition-all duration-300 bg-gray-50/50 dark:bg-white/2 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 border border-gray-200/40 dark:border-white/2 hover:border-indigo-500/20 active:scale-[0.98]"
-            onClick={() => {
-              if (onSelectChat) {
-                onSelectChat(chat.id);
-              }
-            }}
-          >
-            <div className="text-[12px] font-semibold text-gray-700 dark:text-gray-300 truncate mb-0.5 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
-              {chat.title}
-            </div>
-            <div className="text-[10px] text-gray-400 font-medium">
-              {chat.date}
-            </div>
+        {isLoading && chats.length === 0 ? (
+          <div className="text-[11px] text-gray-400 text-center py-6 flex items-center justify-center gap-1.5">
+            <div className="w-3.5 h-3.5 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
+            <span>Loading history...</span>
           </div>
-        ))}
-        {filteredHistory.length === 0 && (
+        ) : chats.map((chat) => {
+          const isActive = String(chat.id) === String(activeChatId);
+          const riskLevel = chat.last_message?.risk_level;
+          const riskScore = chat.last_message?.risk_score;
+
+          let badgeColor = 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400';
+          if (riskScore !== null && riskScore !== undefined) {
+            if (riskScore >= 61) badgeColor = 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200/50 dark:border-rose-800/40';
+            else if (riskScore >= 41) badgeColor = 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200/50 dark:border-amber-800/40';
+            else badgeColor = 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/40';
+          }
+
+          return (
+            <div
+              key={chat.id}
+              className={`group relative p-2.5 rounded-xl text-left cursor-pointer transition-all duration-200 border ${
+                isActive
+                  ? 'bg-indigo-50/90 dark:bg-indigo-950/40 border-indigo-500/30 text-indigo-900 dark:text-indigo-200 shadow-sm'
+                  : 'bg-gray-50/50 dark:bg-white/2 hover:bg-indigo-50/60 dark:hover:bg-indigo-500/10 border-gray-200/40 dark:border-white/2 hover:border-indigo-500/20 active:scale-[0.98]'
+              }`}
+              onClick={() => {
+                if (onSelectChat) {
+                  onSelectChat(chat.id);
+                }
+              }}
+            >
+              <div className="flex items-center justify-between gap-1.5 mb-1">
+                <span className={`text-[12px] font-semibold truncate flex-1 ${
+                  isActive
+                    ? 'text-indigo-600 dark:text-indigo-400'
+                    : 'text-gray-700 dark:text-gray-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400'
+                }`}>
+                  {chat.title}
+                </span>
+
+                {riskLevel && (
+                  <span className={`text-[9px] font-bold px-1.2 py-0.2 rounded shrink-0 ${badgeColor}`}>
+                    {riskScore !== null ? `${riskScore}%` : riskLevel}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between text-[10px] text-gray-400 font-medium">
+                <span className="truncate">
+                  {formatRelativeTime(chat.updated_at || chat.created_at)}
+                </span>
+
+                {/* Hover Delete Action */}
+                <button
+                  type="button"
+                  className="opacity-0 group-hover:opacity-100 hover:text-rose-500 p-0.5 rounded transition-all duration-150 cursor-pointer"
+                  title="Delete chat"
+                  onClick={(e) => handleDeleteChat(e, chat.id)}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.8" stroke="currentColor" className="w-3.5 h-3.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          );
+        })}
+
+        {!isLoading && chats.length === 0 && (
           <div className="text-[11px] text-gray-400 text-center py-6">
-            No chats found
+            {search ? `No chats match "${search}"` : 'No previous chats'}
           </div>
         )}
       </div>
@@ -306,12 +418,14 @@ function ChatHistoryPanel({ isExpanded, isDarkMode, onSelectChat }) {
 
 // ─── Main SidebarDock ─────────────────────────────────────────────────────────
 export default function SidebarDock({
-  items       = [],
-  bottomItems = [],
-  isDarkMode  = true,
+  items        = [],
+  bottomItems  = [],
+  isDarkMode   = true,
   activeItemId = null,
-  isExpanded  = false,
+  isExpanded   = false,
   onSelectChat = null,
+  activeChatId = null,
+  refreshKey   = 0,
 }) {
   const dockRef    = useRef(null);
   const pillRef    = useRef(null);           // the background pill element
@@ -575,11 +689,13 @@ export default function SidebarDock({
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Chat History Panel */}
+        {/* RIGHT COLUMN: Chat History Panel (Real PostgreSQL History) */}
         <ChatHistoryPanel
           isExpanded={isExpanded}
           isDarkMode={isDarkMode}
           onSelectChat={onSelectChat}
+          activeChatId={activeChatId}
+          refreshKey={refreshKey}
         />
       </div>
     </div>

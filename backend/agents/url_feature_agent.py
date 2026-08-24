@@ -312,9 +312,40 @@ def analyze_url_features(url: str) -> str:
         if whois_data.get("domain_age_days") is not None and whois_data["domain_age_days"] < 30:
             risk_indicators.append(f"Very young domain -- registered only {whois_data['domain_age_days']} days ago")
 
+        # Compute standardized 12-dimensional URL Feature Vector
+        domain_age_val = whois_data.get("domain_age_days")
+        if domain_age_val is not None:
+            age_risk = 1.0 if domain_age_val < 30 else (0.5 if domain_age_val < 180 else 0.0)
+        else:
+            age_risk = 0.5 # Unknown/anonymized WHOIS slight risk
+
+        url_vector = [
+            round(min(1.0, url_length / 150.0), 4),                                # 1. url_length_norm
+            round(min(1.0, len(hostname) / 60.0), 4),                               # 2. hostname_length_norm
+            round(min(1.0, dot_count / 5.0), 4),                                   # 3. dot_count_norm
+            round(min(1.0, hyphen_count / 4.0), 4),                                # 4. hyphen_count_norm
+            1.0 if has_ip else 0.0,                                                # 5. is_ip_address_flag
+            round(min(1.0, entropy / 5.0), 4),                                     # 6. domain_entropy_norm
+            1.0 if at_sign else 0.0,                                                # 7. at_sign_flag
+            round(min(1.0, subdomain_depth / 4.0), 4),                             # 8. subdomain_depth_norm
+            round(min(1.0, len(url_suspicious_keywords) / 3.0), 4),                # 9. suspicious_keywords_norm
+            1.0 if len(typosquatting_matches) > 0 else 0.0,                        # 10. typosquatting_flag
+            1.0 if ssl_certificate.get("valid") else 0.0,                          # 11. ssl_valid_flag
+            round(age_risk, 4),                                                     # 12. domain_age_risk_norm
+        ]
+
+        url_feature_names = [
+            "url_length_norm", "hostname_length_norm", "dot_count_norm",
+            "hyphen_count_norm", "is_ip_address_flag", "domain_entropy_norm",
+            "at_sign_flag", "subdomain_depth_norm", "suspicious_keywords_norm",
+            "typosquatting_flag", "ssl_valid_flag", "domain_age_risk_norm"
+        ]
+
         result = {
             "status": "success",
             "url": url,
+            "url_feature_vector": url_vector,
+            "url_feature_names": url_feature_names,
             "lexical_features": {
                 "url_length": url_length,
                 "hostname": hostname,

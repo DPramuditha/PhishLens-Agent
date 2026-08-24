@@ -1,6 +1,5 @@
 """
-PhishLens Agent — Backward Compatibility Layer for Middleware.
-Re-exports from backend.core.middleware.
+PhishLens Agent — Core Middleware Layer.
 """
 
 from backend.core.middleware.jwt_auth import (
@@ -14,9 +13,9 @@ from backend.core.middleware.request_logging import RequestLoggingMiddleware
 
 __all__ = [
     "JWTAuthenticationMiddleware",
+    "jwt_required",
+    "optional_jwt",
     "CORSMiddleware",
     "RateLimitMiddleware",
     "RequestLoggingMiddleware",
-    "jwt_required",
-    "optional_jwt",
 ]
