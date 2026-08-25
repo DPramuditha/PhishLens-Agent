@@ -306,9 +306,40 @@ class LongTermMemoryManager:
         prefs[key] = value
         self.put(("user_preferences",), str(user_id), prefs)
 
+    GLOBAL_TRUSTED_DOMAINS = {
+        # Authentic Sri Lankan State & Commercial Banking Domains
+        "boc.lk", "peoplesbank.lk", "combank.lk", "commercialbank.lk", "combankdigital.com",
+        "sampath.lk", "hnb.net", "hnb.lk", "ndbbank.com", "seylan.lk", "nationstrust.com",
+        "frimi.lk", "dfcc.lk", "nsb.lk", "panasia.lk", "unionb.com", "amanabank.lk",
+        "cargillsbank.com", "cbsl.gov.lk", "sdb.lk", "rdb.lk", "mbslbank.com",
+        # Authentic Sri Lankan Telecom, Fintech & Public Utilities
+        "dialog.lk", "slt.lk", "mobitel.lk", "ezcash.lk", "mcash.lk", "lankapay.net",
+        "lankaclear.com", "airtel.lk", "hutch.lk", "ceb.lk", "waterboard.lk",
+        # Authentic Sri Lankan Government & Regulatory Portals
+        "gov.lk", "cert.gov.lk", "police.lk", "police.gov.lk", "slpost.gov.lk",
+        "customs.gov.lk", "ird.gov.lk", "dmt.gov.lk", "gic.gov.lk", "news.lk",
+        # Authentic Sri Lankan E-Commerce
+        "daraz.lk", "ikman.lk", "kapruka.com", "pickme.lk",
+        # Top Global Trusted Services
+        "google.com", "google.lk", "microsoft.com", "apple.com", "paypal.com",
+        "amazon.com", "github.com", "wikipedia.org", "netflix.com", "linkedin.com",
+        "facebook.com", "instagram.com", "twitter.com", "x.com", "youtube.com",
+    }
+
     def is_whitelisted(self, domain: str, user_id: Optional[str] = None) -> bool:
         """Checks if a domain is trusted either in the user's whitelist or global trusted list."""
         clean_domain = domain.strip().lower()
+        # Remove www. prefix for clean matching
+        if clean_domain.startswith("www."):
+            clean_domain = clean_domain[4:]
+
+        # Check built-in verified domains
+        if clean_domain in self.GLOBAL_TRUSTED_DOMAINS:
+            return True
+        for trusted in self.GLOBAL_TRUSTED_DOMAINS:
+            if clean_domain.endswith("." + trusted):
+                return True
+
         if user_id:
             user_wl = self.get(("user_whitelist", str(user_id)), clean_domain)
             if user_wl:

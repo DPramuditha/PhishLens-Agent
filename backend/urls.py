@@ -28,6 +28,7 @@ from backend.agents.views import (
     chat_memory_view,
     user_screenshots_view,
     scan_logs_view,
+    user_pdf_reports_view,
     export_pdf_view,
     export_chat_pdf_view,
     analytics_dashboard_view,
@@ -46,6 +47,7 @@ urlpatterns = [
     path('api/chats/<uuid:chat_id>/memory/', chat_memory_view, name='chat_memory'),
     path('api/screenshots/', user_screenshots_view, name='user_screenshots'),
     path('api/scan-logs/', scan_logs_view, name='scan_logs'),
+    path('api/pdf-reports/', user_pdf_reports_view, name='user_pdf_reports'),
     path('api/analytics/', analytics_dashboard_view, name='analytics_dashboard'),
     # Modular Authentication Endpoints
     path('api/auth/', include('backend.apps.authentication.urls')),
