@@ -40,6 +40,7 @@ from backend.agents.tools import (
 )
 from backend.agents.html_dom_agent import extract_html_features
 from backend.agents.url_feature_agent import analyze_url_features
+from backend.agents.web_search_agent import search_web_threat_intel
 from backend.agents.report_generator import (
     SYSTEM_PROMPT,
     parse_report,
@@ -88,6 +89,8 @@ class PhishLensState(TypedDict):
     dom_feature_vector: Optional[List[float]]
     url_features: Optional[Dict[str, Any]]
     url_feature_vector: Optional[List[float]]
+    web_search_results: Optional[Dict[str, Any]]
+    web_search_summary: Optional[str]
     report: Optional[Dict[str, Any]]
     raw_llm_response: Optional[str]
     error: Optional[str]
@@ -137,6 +140,7 @@ class OrchestratorAgent:
         workflow.add_node("siamese_network", self._siamese_network_node)
         workflow.add_node("html_dom_agent", self._html_dom_agent_node)
         workflow.add_node("url_feature_agent", self._url_feature_agent_node)
+        workflow.add_node("web_search_agent", self._web_search_agent_node)
         workflow.add_node("report_generation", self._report_generation_node)
 
         # Set up connections
@@ -146,6 +150,7 @@ class OrchestratorAgent:
         workflow.add_edge("orchestrator", "web_scraping_agent")
         workflow.add_edge("orchestrator", "html_dom_agent")
         workflow.add_edge("orchestrator", "url_feature_agent")
+        workflow.add_edge("orchestrator", "web_search_agent")
 
         # Web scraping -> Siamese Network
         workflow.add_edge("web_scraping_agent", "siamese_network")
@@ -154,6 +159,7 @@ class OrchestratorAgent:
         workflow.add_edge("siamese_network", "report_generation")
         workflow.add_edge("html_dom_agent", "report_generation")
         workflow.add_edge("url_feature_agent", "report_generation")
+        workflow.add_edge("web_search_agent", "report_generation")
 
         workflow.add_edge("report_generation", END)
 
@@ -369,6 +375,40 @@ class OrchestratorAgent:
                 "tool_trace": [trace_call, trace_res]
             }
 
+    def _web_search_agent_node(self, state: PhishLensState) -> Dict[str, Any]:
+        """Performs live OSINT web threat intelligence search via Tavily Search Platform."""
+        url = state["url"]
+        trace_call = {
+            "step": "tool_call",
+            "tool": "search_web_threat_intel",
+            "args": {"url": url}
+        }
+        try:
+            res_str = search_web_threat_intel.invoke({"url": url})
+            res = json.loads(res_str) if isinstance(res_str, str) else res_str
+            summary_preview = res.get("summary") or str(res)[:200]
+            trace_res = {
+                "step": "tool_result",
+                "tool": "search_web_threat_intel",
+                "content_preview": summary_preview[:250] + ("..." if len(summary_preview) > 250 else "")
+            }
+            return {
+                "web_search_results": res,
+                "web_search_summary": res.get("summary"),
+                "tool_trace": [trace_call, trace_res]
+            }
+        except Exception as e:
+            trace_res = {
+                "step": "tool_result",
+                "tool": "search_web_threat_intel",
+                "content_preview": f"Error: {str(e)}"
+            }
+            return {
+                "web_search_results": {"status": "error", "error": str(e)},
+                "web_search_summary": None,
+                "tool_trace": [trace_call, trace_res]
+            }
+
     def _report_generation_node(self, state: PhishLensState) -> Dict[str, Any]:
         """Synthesizes all findings and long-term memory into the final report."""
         url = state["url"]
@@ -376,6 +416,7 @@ class OrchestratorAgent:
         url_features = state.get("url_features") or {}
         html_features = state.get("html_features") or {}
         visual_model_output = state.get("visual_model_output") or {}
+        web_search_results = state.get("web_search_results") or {}
         domain_intel = state.get("domain_intel") or long_term_memory.get_domain_history(domain) or {}
 
         # ── Strip base64 image data from payloads before sending to LLM ──
@@ -404,6 +445,7 @@ class OrchestratorAgent:
         visual_for_llm = _sanitize_for_llm(visual_model_output)
         html_for_llm = _sanitize_for_llm(html_features)
         url_for_llm = _sanitize_for_llm(url_features)
+        web_search_for_llm = _sanitize_for_llm(web_search_results)
 
         # Format long-term memory section
         memory_section = "No prior scan history in long-term memory."
@@ -421,7 +463,8 @@ class OrchestratorAgent:
             url_features=url_features,
             html_features=html_features,
             visual_model_output=visual_model_output,
-            domain_intel=domain_intel
+            domain_intel=domain_intel,
+            web_search_results=web_search_results
         )
 
         report_prompt = f"""You are PhishLens, an expert cybersecurity analyst specializing in phishing website detection.
@@ -443,7 +486,10 @@ Here are the detailed extraction outputs from our specialized analysis component
 4. Visual Screenshot Analysis (Visual ML Model Classifier):
 {json.dumps(visual_for_llm, indent=2)}
 
-Synthesize ALL findings across visual ML, HTML/DOM structure, URL lexical/WHOIS, and threat memory to calculate the final risk score (0-100) and risk level.
+5. Live Web & OSINT Threat Intelligence (Tavily Search):
+{json.dumps(web_search_for_llm, indent=2)}
+
+Synthesize ALL findings across visual ML, HTML/DOM structure, URL lexical/WHOIS, live web OSINT search, and threat memory to calculate the final risk score (0-100) and risk level.
 DO NOT simply copy historical scores from memory. Compute the fresh risk score based on the extracted evidence.
 
 ## Final Report Format
@@ -456,7 +502,7 @@ You MUST output your final answer as a JSON object with this exact structure:
   "risk_level": "<SAFE | LOW | MEDIUM | HIGH | CRITICAL>",
   "findings": [
     {{
-      "category": "<URL Analysis | HTML Structure | Visual Analysis | Screenshot Analysis | Long-Term Memory>",
+      "category": "<URL Analysis | HTML Structure | Visual Analysis | Screenshot Analysis | Web Intelligence | Long-Term Memory>",
       "detail": "<specific finding>",
       "severity": "<low | medium | high | critical>"
     }}
@@ -542,12 +588,13 @@ Be thorough, precise, and evidence-based.
         url_features: Dict[str, Any],
         html_features: Dict[str, Any],
         visual_model_output: Dict[str, Any],
-        domain_intel: Dict[str, Any]
+        domain_intel: Dict[str, Any],
+        web_search_results: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Deterministic multi-agent threat synthesis engine that computes an accurate,
         evidence-based risk score directly from Visual ML, DOM structure, Lexical/WHOIS,
-        and Long-Term Memory signals.
+        Live Web Threat Search (Tavily), and Long-Term Memory signals.
         """
         findings = []
         risk_score = 0
@@ -556,6 +603,7 @@ Be thorough, precise, and evidence-based.
         html_features = html_features or {}
         visual_model_output = visual_model_output or {}
         domain_intel = domain_intel or {}
+        web_search_results = web_search_results or {}
 
         # -------------------------------------------------------------------
         # 1. VISUAL COMPUTER VISION ML MODEL SIGNALS (Weight: 0 to 45 pts)
@@ -877,7 +925,45 @@ Be thorough, precise, and evidence-based.
                 })
 
         # -------------------------------------------------------------------
-        # 5. FINAL SCORE NORMALIZATION & VERDICT
+        # 5. LIVE WEB & OSINT THREAT INTELLIGENCE SIGNALS (Weight: -10 to +35 pts)
+        # -------------------------------------------------------------------
+        if web_search_results and web_search_results.get("status") == "success":
+            threat_indicators = web_search_results.get("threat_indicators") or []
+            legitimacy_indicators = web_search_results.get("legitimacy_indicators") or []
+            risk_signal = web_search_results.get("risk_signal", "NEUTRAL")
+            summary_text = web_search_results.get("summary")
+
+            if risk_signal == "CRITICAL" or len(threat_indicators) >= 3:
+                risk_score += 35
+                findings.append({
+                    "category": "Web Intelligence",
+                    "detail": f"Live web search flagged domain '{domain}' in multiple phishing/scam reports and security advisories.",
+                    "severity": "critical"
+                })
+            elif risk_signal == "HIGH" or len(threat_indicators) >= 1:
+                risk_score += 20
+                for ti in threat_indicators[:2]:
+                    findings.append({
+                        "category": "Web Intelligence",
+                        "detail": f"Online threat report: {ti.get('source_title', 'Security Alert')} (Keywords: {', '.join(ti.get('keywords_matched', []))}).",
+                        "severity": "high"
+                    })
+            elif risk_signal == "SAFE" and len(legitimacy_indicators) >= 2 and not threat_indicators:
+                risk_score = max(0, risk_score - 10)
+                findings.append({
+                    "category": "Web Intelligence",
+                    "detail": f"Live web search confirmed established enterprise/brand presence for '{domain}'.",
+                    "severity": "low"
+                })
+            elif summary_text and not threat_indicators:
+                findings.append({
+                    "category": "Web Intelligence",
+                    "detail": f"OSINT research summary: {summary_text[:180]}",
+                    "severity": "low"
+                })
+
+        # -------------------------------------------------------------------
+        # 6. FINAL SCORE NORMALIZATION & VERDICT
         # -------------------------------------------------------------------
         final_score = max(0, min(100, risk_score))
 
@@ -1005,6 +1091,8 @@ Be thorough, precise, and evidence-based.
             dom_feature_vector = result.get("dom_feature_vector")
             url_feature_vector = result.get("url_feature_vector")
             visual_model_output = result.get("visual_model_output")
+            web_search_results = result.get("web_search_results")
+            web_search_summary = result.get("web_search_summary")
 
             url_features = result.get("url_features") or {}
             url_analysis_data = None
@@ -1056,6 +1144,8 @@ Be thorough, precise, and evidence-based.
                 "dom_feature_vector": dom_feature_vector,
                 "url_feature_vector": url_feature_vector,
                 "visual_model_output": visual_model_output,
+                "web_search_results": web_search_results,
+                "web_search_summary": web_search_summary,
                 "url_analysis_data": url_analysis_data,
                 "tool_trace": tool_trace,
                 "raw_llm_response": raw_content,

@@ -209,8 +209,19 @@ class PDFReportAgent:
 
         if screenshot_stream:
             try:
-                # 540 width standard printable width
-                img_flowable = RLImage(screenshot_stream, width=540, height=270)
+                # Determine image aspect ratio using PIL
+                from PIL import Image as PILImage
+                screenshot_stream.seek(0)
+                pil_img = PILImage.open(screenshot_stream)
+                w_orig, h_orig = pil_img.size
+                screenshot_stream.seek(0)
+
+                target_w = 540
+                aspect = h_orig / max(1, w_orig)
+                # Keep height bounded so full-page screenshot does not overwhelm single page in PDF
+                target_h = max(180, min(340, target_w * aspect))
+
+                img_flowable = RLImage(screenshot_stream, width=target_w, height=target_h)
                 
                 # Wrap inside framed table
                 frame_table = Table([[img_flowable]], colWidths=[540])

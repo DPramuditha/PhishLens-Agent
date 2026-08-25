@@ -19,6 +19,7 @@ from typing import Optional, Dict, Any, List
 from langchain_core.tools import tool
 from playwright.async_api import async_playwright
 from backend.agents.visual_model import predict_screenshot
+from backend.agents.web_search_agent import search_web_threat_intel
 
 # Disable Playwright waiting for font load to prevent screenshot hangs/timeouts
 os.environ["PW_TEST_SCREENSHOT_NO_FONTS_READY"] = "1"
@@ -130,10 +131,10 @@ def capture_screenshot(url: str) -> str:
 
             # Wait for dynamic JS, hydration, and fonts to render
             try:
-                await page.wait_for_timeout(2500)
-                # Dismiss splash preloaders/spinners if present and trigger lazy-load
+                await page.wait_for_timeout(2000)
+                # Dismiss splash preloaders/spinners if present and trigger lazy-load across full page
                 await page.evaluate("""
-                    () => {
+                    async () => {
                         const loaders = document.querySelectorAll(
                             '.preloader, #preloader, .loader, #loader, .spinner, .splash-screen, .loading-overlay, #loading'
                         );
@@ -142,11 +143,18 @@ def capture_screenshot(url: str) -> str:
                             el.style.opacity = '0';
                             el.style.visibility = 'hidden';
                         });
-                        window.scrollBy(0, 150);
-                        window.scrollTo(0, 0);
+                        try {
+                            const scrollHeight = document.body.scrollHeight || document.documentElement.scrollHeight;
+                            const step = Math.max(400, Math.floor(scrollHeight / 5));
+                            for (let y = 0; y < Math.min(scrollHeight, 4500); y += step) {
+                                window.scrollTo(0, y);
+                                await new Promise(r => setTimeout(r, 80));
+                            }
+                            window.scrollTo(0, 0);
+                        } catch (e) {}
                     }
                 """)
-                await page.wait_for_timeout(1000)
+                await page.wait_for_timeout(800)
                 title = await page.title() or "Untitled Page"
             except Exception:
                 try:
@@ -154,16 +162,24 @@ def capture_screenshot(url: str) -> str:
                 except Exception:
                     pass
 
-            # Capture viewport screenshot in memory
+            # Capture full website screenshot in memory (with viewport fallback)
             screenshot_bytes = None
             try:
                 screenshot_bytes = await page.screenshot(
-                    full_page=False,
+                    full_page=True,
                     animations="disabled",
-                    timeout=10000
+                    timeout=15000
                 )
-            except Exception as ss_ex:
-                err_msg = f"Screenshot capture error: {str(ss_ex)}"
+            except Exception as full_ex:
+                # Fallback to viewport screenshot if full-page capture encounters an issue
+                try:
+                    screenshot_bytes = await page.screenshot(
+                        full_page=False,
+                        animations="disabled",
+                        timeout=8000
+                    )
+                except Exception as ss_ex:
+                    err_msg = f"Screenshot capture error: {str(ss_ex)}"
 
             has_valid_ss = bool(screenshot_bytes and len(screenshot_bytes) > 500)
             if has_valid_ss:

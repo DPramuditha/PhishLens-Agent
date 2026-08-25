@@ -308,23 +308,34 @@ def extract_logo_candidate_regions(screenshot: Image.Image) -> List[Tuple[str, I
     w, h = screenshot.size
     candidates: List[Tuple[str, Image.Image]] = []
 
-    # 1. Top-Left Header crop (0% to 40% width, 0% to 25% height)
-    crop_tl = screenshot.crop((0, 0, int(w * 0.40), int(h * 0.25)))
+    # Calculate effective top header and navbar heights (bounded for tall full-page captures)
+    header_max_h = min(int(h * 0.25), 350)
+    navbar_max_h = min(int(h * 0.18), 220)
+    auth_top = min(int(h * 0.15), 180)
+    auth_bot = min(int(h * 0.65), 750)
+
+    # 1. Top-Left Header crop (0% to 40% width, top header height)
+    crop_tl = screenshot.crop((0, 0, int(w * 0.40), header_max_h))
     candidates.append(("top_left_header", crop_tl))
 
-    # 2. Top-Center Header crop (25% to 75% width, 0% to 25% height)
-    crop_tc = screenshot.crop((int(w * 0.25), 0, int(w * 0.75), int(h * 0.25)))
+    # 2. Top-Center Header crop (25% to 75% width, top header height)
+    crop_tc = screenshot.crop((int(w * 0.25), 0, int(w * 0.75), header_max_h))
     candidates.append(("top_center_header", crop_tc))
 
-    # 3. Center Login/Authentication Box crop (20% to 80% width, 15% to 65% height)
-    crop_center = screenshot.crop((int(w * 0.20), int(h * 0.15), int(w * 0.80), int(h * 0.65)))
+    # 3. Center Login/Authentication Box crop (20% to 80% width, auth region height)
+    crop_center = screenshot.crop((int(w * 0.20), auth_top, int(w * 0.80), max(auth_top + 100, auth_bot)))
     candidates.append(("center_auth_box", crop_center))
 
-    # 4. Top Navigation Bar strip (Full width, top 18% height)
-    crop_nav = screenshot.crop((0, 0, w, int(h * 0.18)))
+    # 4. Top Navigation Bar strip (Full width, top navbar height)
+    crop_nav = screenshot.crop((0, 0, w, navbar_max_h))
     candidates.append(("top_navbar", crop_nav))
 
-    # 5. Full screenshot
+    # 5. Top-of-fold viewport crop (top 850px)
+    if h > 850:
+        crop_fold = screenshot.crop((0, 0, w, 850))
+        candidates.append(("top_fold_viewport", crop_fold))
+
+    # 6. Full screenshot
     candidates.append(("full_page", screenshot))
 
     return candidates
@@ -444,17 +455,24 @@ def generate_annotated_screenshot(
         brand_name = brand_impersonation.get("brand")
 
         if is_phishing:
-            # Determine bounding box based on detected region
+            # Determine bounding box based on detected region (bounded for tall full-page captures)
+            header_max_h = min(int(h * 0.25), 350)
+            navbar_max_h = min(int(h * 0.18), 220)
+            auth_top = min(int(h * 0.15), 180)
+            auth_bot = min(int(h * 0.65), 750)
+
             if best_region == "top_left_header":
-                box = (10, 10, int(w * 0.40), int(h * 0.25))
+                box = (10, 10, int(w * 0.40), header_max_h)
             elif best_region == "top_center_header":
-                box = (int(w * 0.25), 10, int(w * 0.75), int(h * 0.25))
+                box = (int(w * 0.25), 10, int(w * 0.75), header_max_h)
             elif best_region == "center_auth_box":
-                box = (int(w * 0.20), int(h * 0.15), int(w * 0.80), int(h * 0.65))
+                box = (int(w * 0.20), auth_top, int(w * 0.80), max(auth_top + 100, auth_bot))
             elif best_region == "top_navbar":
-                box = (10, 10, w - 10, int(h * 0.18))
+                box = (10, 10, w - 10, navbar_max_h)
+            elif best_region == "top_fold_viewport":
+                box = (10, 10, w - 10, min(h, 850))
             else:
-                box = (10, 10, int(w * 0.45), int(h * 0.28))
+                box = (10, 10, int(w * 0.45), header_max_h)
 
             if brand_name:
                 color = (220, 38, 38, 255)  # Crimson red
