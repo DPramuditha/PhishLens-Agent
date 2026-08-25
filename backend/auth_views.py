@@ -12,6 +12,7 @@ from backend.core.security.jwt_utils import (
 )
 from backend.core.security.oauth import (
     verify_google_id_token,
+    verify_google_access_token,
     get_or_create_google_user,
 )
 from backend.core.security.password_validation import (
@@ -41,6 +42,7 @@ __all__ = [
     "generate_jwt_token",
     "decode_jwt_token",
     "verify_google_id_token",
+    "verify_google_access_token",
     "get_or_create_google_user",
     "validate_password_strength",
     "validate_email_address",

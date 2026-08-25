@@ -19,17 +19,49 @@ from langchain_core.tools import tool
 # ---------------------------------------------------------------------------
 
 SUSPICIOUS_KEYWORDS = [
+    # General Phishing & Auth
     "login", "verify", "secure", "account", "update", "bank", "confirm",
     "password", "signin", "sign-in", "webscr", "ebayisapi", "suspend",
     "billing", "paypal", "apple", "icloud", "recover", "unlock",
     "authenticate", "credential", "wallet", "alert", "notification",
+    "security question", "enter your password", "enter pin", "verify identity",
+    # Sri Lankan Banking & Financial Terms
+    "bank of ceylon", "boc", "smartpay", "boc online", "peoples bank",
+    "peoples wave", "peoples web", "commercial bank", "combank", "combank digital",
+    "sampath", "sampath bank", "vishwa", "sampath vishwa", "hatton national bank",
+    "hnb", "hnb solo", "ndb", "ndb neos", "seylan", "seylan online",
+    "nations trust", "frimi", "dfcc", "nsb", "pan asia bank", "union bank",
+    "amana bank", "cargills bank", "central bank of sri lanka", "cbsl",
+    # Sri Lankan Mobile Money, Telco & Utilities
+    "dialog", "mydialog", "ez cash", "ezcash", "slt", "mobitel", "mcash",
+    "lankapay", "lankaqr", "justpay", "ceb", "ceb care", "cebcare",
+    "water board", "nwsdb", "sri lanka post", "sl post", "parcel delivery",
+    # Sri Lankan Identity & Credential Harvesting
+    "national identity card", "nic number", "nic", "identity card",
+    "cif number", "account number", "debit card number", "atm pin", "cvv",
+    "one time password", "otp", "sms code", "security code",
+    "police fine", "traffic fine", "customs fee", "electricity bill payment"
 ]
 
 KNOWN_BRANDS = [
+    # Sri Lankan State & Commercial Banks
+    "boc", "bank of ceylon", "peoples bank", "peoplesbank", "commercial bank",
+    "combank", "sampath", "sampath bank", "vishwa", "hnb", "hatton national bank",
+    "ndb", "seylan", "nations trust", "frimi", "dfcc", "nsb", "pan asia",
+    "union bank", "amana bank", "cargills bank", "cbsl", "sdb", "rdb",
+    # Sri Lankan Telcos & Fintech
+    "dialog", "slt", "mobitel", "ez cash", "mcash", "lankapay", "lankaqr", "justpay",
+    # Sri Lankan Utilities & Government
+    "ceb", "ceb care", "water board", "nwsdb", "sri lanka post", "slpost",
+    "sri lanka police", "customs", "ird", "cert.gov.lk",
+    # Sri Lankan E-Commerce
+    "daraz", "ikman", "kapruka", "pickme",
+    # Major Global Brands
     "google", "facebook", "apple", "microsoft", "amazon", "netflix",
     "paypal", "instagram", "twitter", "linkedin", "dropbox", "yahoo",
     "outlook", "chase", "wellsfargo", "bankofamerica", "citibank",
     "whatsapp", "telegram", "spotify", "adobe", "github", "steam",
+    "binance", "coinbase", "docusign"
 ]
 
 

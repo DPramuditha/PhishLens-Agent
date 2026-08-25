@@ -2,19 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useGoogleLogin } from '@react-oauth/google';
 import gsap from 'gsap';
-import { ShieldCheck, ChevronDown, Check, Mail, User, Lock, Eye, EyeOff, ArrowRight, ArrowLeft } from 'lucide-react';
+import { ShieldCheck, Mail, User, Lock, Eye, EyeOff, ArrowRight, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/ToastContext';
+import registerSideImage from '../assets/register-side-image.png';
 
 const EMAIL_REGEX = /^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$/;
-
-/* ───────── Progress items for right panel ───────── */
-const PROGRESS_ITEMS = [
-  'Scan inbox for phishing emails',
-  'Analyze suspicious URLs & links',
-  'Detect social-engineering patterns',
-  'Generate threat-intel report',
-];
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -28,8 +21,7 @@ export default function RegisterPage() {
   const rightRef = useRef(null);
   const headingRef = useRef(null);
   const formRef = useRef(null);
-  const cardRef = useRef(null);
-  const itemsRef = useRef([]);
+  const imageRef = useRef(null);
   const inputRef = useRef(null);
 
   /* state */
@@ -39,7 +31,6 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [progressOpen, setProgressOpen] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // If already authenticated, redirect to /chat
@@ -73,28 +64,17 @@ export default function RegisterPage() {
 
       gsap.fromTo(
         rightRef.current,
-        { opacity: 0, x: 60 },
-        { opacity: 1, x: 0, duration: 0.9, ease: 'power3.out', delay: 0.4 },
+        { opacity: 0 },
+        { opacity: 1, duration: 0.8, ease: 'power2.out', delay: 0.3 },
       );
 
-      gsap.fromTo(
-        cardRef.current,
-        { y: 30, opacity: 0, scale: 0.96 },
-        { y: 0, opacity: 1, scale: 1, duration: 0.7, ease: 'back.out(1.4)', delay: 0.8 },
-      );
-
-      gsap.fromTo(
-        itemsRef.current,
-        { x: -16, opacity: 0 },
-        {
-          x: 0,
-          opacity: 1,
-          duration: 0.5,
-          stagger: 0.12,
-          ease: 'power2.out',
-          delay: 1.1,
-        },
-      );
+      if (imageRef.current) {
+        gsap.fromTo(
+          imageRef.current,
+          { opacity: 0, scale: 1.03 },
+          { opacity: 1, scale: 1, duration: 1.1, ease: 'power2.out', delay: 0.4 },
+        );
+      }
     }, pageRef);
 
     return () => ctx.revert();
@@ -247,10 +227,6 @@ export default function RegisterPage() {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const addItemRef = (el) => {
-    if (el && !itemsRef.current.includes(el)) itemsRef.current.push(el);
   };
 
   const firstName = name.trim().split(' ')[0] || 'there';
@@ -512,54 +488,14 @@ export default function RegisterPage() {
       {/* ====== RIGHT PANEL ====== */}
       <div
         ref={rightRef}
-        className="flex-1 flex items-center justify-center bg-stone-100 relative px-8 py-10 overflow-hidden max-md:px-6 max-md:py-12"
+        className="hidden md:block flex-1 relative overflow-hidden bg-[#07070b] select-none"
       >
-        {/* subtle radial gradient overlays */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(192,132,252,0.06)_0%,transparent_50%),radial-gradient(circle_at_70%_80%,rgba(168,85,247,0.04)_0%,transparent_50%)] pointer-events-none" />
-
-        <div className="relative z-[2] w-full max-w-[400px]">
-
-          {/* progress card */}
-          <div
-            ref={cardRef}
-            className="bg-white rounded-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.06),0_8px_32px_rgba(0,0,0,0.06)] overflow-hidden"
-          >
-            <button
-              type="button"
-              className="flex items-center justify-between w-full py-6 px-7 bg-transparent border-none cursor-pointer font-[inherit] border-b border-b-stone-100"
-              onClick={() => setProgressOpen((o) => !o)}
-            >
-              <span className="text-lg font-semibold text-stone-900 -tracking-wide">
-                Progress
-              </span>
-              <ChevronDown
-                size={20}
-                className={`text-stone-400 transition-transform duration-300 ${
-                  progressOpen ? '' : '-rotate-90'
-                }`}
-              />
-            </button>
-
-            {progressOpen && (
-              <ul className="list-none m-0 px-7 pt-3 pb-6 flex flex-col gap-1">
-                {PROGRESS_ITEMS.map((text, i) => (
-                  <li
-                    key={i}
-                    ref={addItemRef}
-                    className="flex items-center gap-3.5 py-3 border-b border-stone-50 last:border-b-0"
-                  >
-                    <span className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white shrink-0 shadow-[0_2px_8px_rgba(59,130,246,0.3)]">
-                      <Check size={16} strokeWidth={3} />
-                    </span>
-                    <span className="text-[15px] text-stone-500 line-through decoration-stone-300">
-                      {text}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
+        <img
+          ref={imageRef}
+          src={registerSideImage}
+          alt="PhishLens Security Platform"
+          className="w-full h-full object-cover object-left pointer-events-none"
+        />
       </div>
     </div>
   );

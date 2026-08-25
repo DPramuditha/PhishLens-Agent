@@ -1,7 +1,10 @@
 import { useRef, useEffect, useCallback, useState, useLayoutEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
 import Lottie from 'lottie-react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from './ToastContext';
+import DeleteChatModal from './DeleteChatModal';
 
 // ─── Tuning constants ─────────────────────────────────────────────────────────
 const ITEM_BASE   = 50;   // px – resting icon cell size
@@ -224,27 +227,45 @@ function formatRelativeTime(dateStr) {
   }
 }
 
-// ─── ChatHistoryPanel Subcomponent (Real PostgreSQL History) ────────────────
+function ScanRadarIcon({ className = "w-4 h-4" }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M11 2.75C6.44365 2.75 2.75 6.44365 2.75 11C2.75 15.5563 6.44365 19.25 11 19.25C15.5563 19.25 19.25 15.5563 19.25 11C19.25 6.44365 15.5563 2.75 11 2.75ZM1.25 11C1.25 5.61522 5.61522 1.25 11 1.25C16.3848 1.25 20.75 5.61522 20.75 11C20.75 16.3848 16.3848 20.75 11 20.75C5.61522 20.75 1.25 16.3848 1.25 11ZM8.04893 7.68594C8.73546 6.81164 9.80214 6.25 11 6.25C12.1979 6.25 13.2645 6.81164 13.9511 7.68594L14.6646 7.32918C15.0351 7.14394 15.4856 7.29411 15.6708 7.66459C15.8561 8.03507 15.7059 8.48558 15.3354 8.67082L14.6226 9.02723C14.7057 9.33746 14.75 9.66356 14.75 10V10.25H15.5C15.9142 10.25 16.25 10.5858 16.25 11C16.25 11.4142 15.9142 11.75 15.5 11.75H14.75V12C14.75 12.3364 14.7057 12.6625 14.6226 12.9728L15.3354 13.3292C15.7059 13.5144 15.8561 13.9649 15.6708 14.3354C15.4856 14.7059 15.0351 14.8561 14.6646 14.6708L13.9511 14.3141C13.2645 15.1884 12.1979 15.75 11 15.75C9.80214 15.75 8.73546 15.1884 8.04893 14.3141L7.33541 14.6708C6.96493 14.8561 6.51442 14.7059 6.32918 14.3354C6.14394 13.9649 6.29411 13.5144 6.66459 13.3292L7.3774 12.9728C7.29431 12.6625 7.25 12.3364 7.25 12V11.75H6.5C6.08579 11.75 5.75 11.4142 5.75 11C5.75 10.5858 6.08579 10.25 6.5 10.25H7.25V10C7.25 9.66356 7.29431 9.33746 7.3774 9.02723L6.66459 8.67082C6.29411 8.48558 6.14394 8.03507 6.32918 7.66459C6.51442 7.29411 6.96493 7.14394 7.33541 7.32918L8.04893 7.68594ZM8.75 10.75V12C8.75 12.9797 9.37611 13.8131 10.25 14.122V10.75H8.75ZM11.75 10.75V14.122C12.6239 13.8131 13.25 12.9797 13.25 12V10.75H11.75ZM13.122 9.25H8.87803C9.18691 8.37611 10.0203 7.75 11 7.75C11.9797 7.75 12.8131 8.37611 13.122 9.25ZM20.1579 19.7511C19.9264 19.7335 19.7335 19.9264 19.7511 20.1579C19.7514 20.1592 19.7553 20.1848 19.7746 20.2573C19.7974 20.3424 19.8312 20.4554 19.8828 20.6277C19.9301 20.7857 19.9609 20.8881 19.9862 20.9641C20.0121 21.0419 20.021 21.0568 20.0171 21.0496C20.1225 21.2465 20.3745 21.31 20.5607 21.1867C20.5538 21.1912 20.5688 21.1824 20.6284 21.1261C20.6868 21.0712 20.7624 20.9957 20.8791 20.8791C20.9957 20.7624 21.0712 20.6868 21.1261 20.6284C21.1727 20.579 21.1868 20.5602 21.1877 20.5592C21.3093 20.3736 21.2463 20.1236 21.0511 20.018C21.0499 20.0175 21.0287 20.0077 20.9641 19.9862C20.8881 19.9609 20.7857 19.9301 20.6277 19.8828C20.4554 19.8312 20.3424 19.7974 20.2573 19.7746C20.1848 19.7553 20.1591 19.7514 20.1579 19.7511ZM18.2564 20.2833C18.1612 19.1267 19.1267 18.1612 20.2833 18.2564C20.4833 18.2728 20.7251 18.3457 20.9862 18.4242C21.0101 18.4314 21.0341 18.4387 21.0583 18.4459C21.0801 18.4524 21.1018 18.4589 21.1234 18.4654C21.3632 18.5369 21.5881 18.604 21.7576 18.6948C22.7335 19.2173 23.0485 20.4659 22.4373 21.3889C22.3312 21.5492 22.165 21.715 21.9878 21.8917C21.9719 21.9076 21.9558 21.9236 21.9397 21.9397C21.9236 21.9558 21.9076 21.9719 21.8917 21.9878C21.7149 22.165 21.5492 22.3312 21.3889 22.4373C20.4659 23.0485 19.2173 22.7335 18.6948 21.7576C18.604 21.5881 18.5369 21.3632 18.4654 21.1234C18.4589 21.1018 18.4524 21.0801 18.4459 21.0583C18.4387 21.0341 18.4314 21.0101 18.4242 20.9862C18.3457 20.7252 18.2728 20.4833 18.2564 20.2833Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+// ─── Chat History Flyout Panel ────────────────────────────────────────────────
 function ChatHistoryPanel({ isExpanded, isDarkMode, onSelectChat, activeChatId, refreshKey }) {
-  const containerRef = useRef(null);
-  const { token } = useAuth();
-  const [search, setSearch] = useState('');
   const [chats, setChats] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [chatToDelete, setChatToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const containerRef = useRef(null);
+  const { token } = useAuth();
+  const { addToast } = useToast();
+  const navigate = useNavigate();
 
   const fetchChats = useCallback(async (query = '') => {
     setIsLoading(true);
     try {
-      const headers = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const res = await fetch(`http://localhost:8000/api/chats/?q=${encodeURIComponent(query)}`, { headers });
+      const url = query
+        ? `http://localhost:8000/api/chats/?q=${encodeURIComponent(query)}`
+        : 'http://localhost:8000/api/chats/';
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch(url, { headers });
       if (res.ok) {
         const data = await res.json();
         setChats(data.chats || []);
       }
-    } catch (err) {
-      console.error('Error fetching chat history in sidebar:', err);
+    } catch {
+      // ignore
     } finally {
       setIsLoading(false);
     }
@@ -254,29 +275,52 @@ function ChatHistoryPanel({ isExpanded, isDarkMode, onSelectChat, activeChatId, 
     if (isExpanded) {
       fetchChats(search);
     }
-  }, [isExpanded, search, refreshKey, fetchChats]);
+  }, [isExpanded, refreshKey, fetchChats]);
 
-  const handleDeleteChat = async (e, chatId) => {
+  // Debounced search
+  useEffect(() => {
+    if (!isExpanded) return;
+    const timer = setTimeout(() => {
+      fetchChats(search);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [search, isExpanded, fetchChats]);
+
+  // Delete chat request handler (opens confirmation modal)
+  const handleRequestDelete = (e, chat) => {
     e.stopPropagation();
-    try {
-      const headers = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
+    setChatToDelete(chat);
+  };
 
-      const res = await fetch(`http://localhost:8000/api/chats/${chatId}/`, {
+  // Confirm delete chat handler
+  const handleConfirmDelete = async () => {
+    if (!chatToDelete) return;
+    setIsDeleting(true);
+    try {
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch(`http://localhost:8000/api/chats/${chatToDelete.id}/`, {
         method: 'DELETE',
         headers,
       });
       if (res.ok) {
-        setChats((prev) => prev.filter((c) => c.id !== chatId));
+        const deletedId = chatToDelete.id;
+        setChats((prev) => prev.filter((c) => c.id !== deletedId));
+        addToast({ type: 'success', title: 'Deleted', message: 'Chat session removed.' });
+        if (String(activeChatId) === String(deletedId)) {
+          navigate('/chat');
+        }
       }
     } catch (err) {
-      console.error('Error deleting chat from sidebar:', err);
+      console.error('Error deleting chat:', err);
+    } finally {
+      setIsDeleting(false);
+      setChatToDelete(null);
     }
   };
 
+  // Entrance animation
   useEffect(() => {
     if (!containerRef.current) return;
-    gsap.killTweensOf(containerRef.current);
     if (isExpanded) {
       gsap.fromTo(
         containerRef.current,
@@ -293,10 +337,11 @@ function ChatHistoryPanel({ isExpanded, isDarkMode, onSelectChat, activeChatId, 
   return (
     <div
       ref={containerRef}
-      className="flex-1 flex flex-col pl-4 border-l overflow-hidden"
+      className="flex-1 flex flex-col pl-4 border-l overflow-hidden history-scope font-inter"
       style={{
         borderColor: isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-        width: 228,
+        width: 236,
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
       }}
     >
       {/* Header */}
@@ -304,7 +349,7 @@ function ChatHistoryPanel({ isExpanded, isDarkMode, onSelectChat, activeChatId, 
         <h3 className="text-sm font-bold tracking-wide text-gray-800 dark:text-gray-200 flex items-center gap-2">
           <span>Chat History</span>
           {chats.length > 0 && (
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400">
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400">
               {chats.length}
             </span>
           )}
@@ -332,7 +377,7 @@ function ChatHistoryPanel({ isExpanded, isDarkMode, onSelectChat, activeChatId, 
           placeholder="Search chats..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-8 pr-2.5 py-1.5 rounded-lg text-xs bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/5 outline-none text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:border-indigo-500/50 transition-colors"
+          className="w-full pl-8 pr-2.5 py-1.5 rounded-xl text-xs bg-gray-100 dark:bg-white/5 border border-gray-200/80 dark:border-white/5 outline-none text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:border-indigo-500/50 transition-colors"
         />
       </div>
 
@@ -348,20 +393,20 @@ function ChatHistoryPanel({ isExpanded, isDarkMode, onSelectChat, activeChatId, 
           const riskLevel = chat.last_message?.risk_level;
           const riskScore = chat.last_message?.risk_score;
 
-          let badgeColor = 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400';
+          let badgeColor = 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 border border-gray-200 dark:border-gray-700';
           if (riskScore !== null && riskScore !== undefined) {
-            if (riskScore >= 61) badgeColor = 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200/50 dark:border-rose-800/40';
-            else if (riskScore >= 41) badgeColor = 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200/50 dark:border-amber-800/40';
-            else badgeColor = 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/40';
+            if (riskScore >= 61) badgeColor = 'bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border border-rose-200 dark:border-rose-800/40';
+            else if (riskScore >= 41) badgeColor = 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800/40';
+            else badgeColor = 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40';
           }
 
           return (
             <div
               key={chat.id}
-              className={`group relative p-2.5 rounded-xl text-left cursor-pointer transition-all duration-200 border ${
+              className={`group relative px-2.5 py-2 rounded-xl text-left cursor-pointer transition-all duration-150 border flex items-center justify-between gap-2 ${
                 isActive
-                  ? 'bg-indigo-50/90 dark:bg-indigo-950/40 border-indigo-500/30 text-indigo-900 dark:text-indigo-200 shadow-sm'
-                  : 'bg-gray-50/50 dark:bg-white/2 hover:bg-indigo-50/60 dark:hover:bg-indigo-500/10 border-gray-200/40 dark:border-white/2 hover:border-indigo-500/20 active:scale-[0.98]'
+                  ? 'bg-indigo-50/90 dark:bg-indigo-950/50 border-indigo-500/40 text-indigo-950 dark:text-indigo-100 shadow-xs ring-1 ring-indigo-500/20'
+                  : 'bg-white/80 dark:bg-[#18181b]/70 hover:bg-indigo-50/60 dark:hover:bg-[#232328]/90 border-gray-200/70 dark:border-white/5 hover:border-indigo-500/30 shadow-[0_1px_4px_rgba(0,0,0,0.02)] dark:shadow-none hover:shadow-xs'
               }`}
               onClick={() => {
                 if (onSelectChat) {
@@ -369,33 +414,45 @@ function ChatHistoryPanel({ isExpanded, isDarkMode, onSelectChat, activeChatId, 
                 }
               }}
             >
-              <div className="flex items-center justify-between gap-1.5 mb-1">
-                <span className={`text-[12px] font-semibold truncate flex-1 ${
-                  isActive
-                    ? 'text-indigo-600 dark:text-indigo-400'
-                    : 'text-gray-700 dark:text-gray-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400'
-                }`}>
-                  {chat.title}
-                </span>
+              {/* Left Side: Icon + Title & Time stacked tightly */}
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                {/* Compact Scan Radar Icon */}
+                <div className="w-6 h-6 rounded-lg bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 border border-indigo-200/50 dark:border-indigo-500/20 shadow-xs">
+                  <ScanRadarIcon className="w-3.5 h-3.5" />
+                </div>
 
+                <div className="flex flex-col min-w-0 flex-1 leading-tight">
+                  <span
+                    className={`text-[12px] font-semibold truncate tracking-tight ${
+                      isActive
+                        ? 'text-indigo-600 dark:text-indigo-300'
+                        : 'text-gray-800 dark:text-gray-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400'
+                    }`}
+                    title={chat.title}
+                  >
+                    {chat.title}
+                  </span>
+                  <span className="text-[10px] text-gray-400 dark:text-gray-500 font-medium truncate mt-0.5">
+                    {formatRelativeTime(chat.updated_at || chat.created_at)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Right Side: Risk Score Badge & Hover Delete Button */}
+              <div className="flex items-center gap-1 shrink-0">
+                {/* Dynamic Risk Score Badge */}
                 {riskLevel && (
-                  <span className={`text-[9px] font-bold px-1.2 py-0.2 rounded shrink-0 ${badgeColor}`}>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md shrink-0 tabular-nums ${badgeColor} transition-all`}>
                     {riskScore !== null ? `${riskScore}%` : riskLevel}
                   </span>
                 )}
-              </div>
 
-              <div className="flex items-center justify-between text-[10px] text-gray-400 font-medium">
-                <span className="truncate">
-                  {formatRelativeTime(chat.updated_at || chat.created_at)}
-                </span>
-
-                {/* Hover Delete Action */}
+                {/* Compact Delete Button */}
                 <button
                   type="button"
-                  className="opacity-0 group-hover:opacity-100 hover:text-rose-500 p-0.5 rounded transition-all duration-150 cursor-pointer"
+                  className="opacity-0 group-hover:opacity-100 hover:text-rose-500 p-0.5 rounded-md hover:bg-rose-50 dark:hover:bg-rose-950/40 text-gray-400 transition-all duration-150 cursor-pointer"
                   title="Delete chat"
-                  onClick={(e) => handleDeleteChat(e, chat.id)}
+                  onClick={(e) => handleRequestDelete(e, chat)}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.8" stroke="currentColor" className="w-3.5 h-3.5">
                     <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
@@ -412,6 +469,18 @@ function ChatHistoryPanel({ isExpanded, isDarkMode, onSelectChat, activeChatId, 
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Popup Modal */}
+      <DeleteChatModal
+        isOpen={Boolean(chatToDelete)}
+        onClose={() => {
+          if (!isDeleting) setChatToDelete(null);
+        }}
+        onConfirm={handleConfirmDelete}
+        chatTitle={chatToDelete?.title || ''}
+        isDeleting={isDeleting}
+        isDarkMode={isDarkMode}
+      />
     </div>
   );
 }

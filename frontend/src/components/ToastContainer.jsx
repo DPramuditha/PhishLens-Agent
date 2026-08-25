@@ -66,6 +66,7 @@ export default function ToastContainer() {
 
   return (
     <div
+      className="popup-title-scope font-inter"
       style={{
         position: 'fixed',
         top: 20,
@@ -78,6 +79,7 @@ export default function ToastContainer() {
         pointerEvents: 'none',
         maxHeight: 'calc(100vh - 40px)',
         overflow: 'visible',
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
       }}
     >
       {visibleToasts.map((toast) => (

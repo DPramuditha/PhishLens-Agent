@@ -19,6 +19,7 @@ from typing import Optional, Dict, Any, List
 from langchain_core.tools import tool
 from playwright.async_api import async_playwright
 from backend.agents.visual_model import predict_screenshot
+from backend.agents.web_search_agent import search_web_threat_intel
 
 # Disable Playwright waiting for font load to prevent screenshot hangs/timeouts
 os.environ["PW_TEST_SCREENSHOT_NO_FONTS_READY"] = "1"
@@ -93,12 +94,16 @@ def capture_screenshot(url: str) -> str:
                 bypass_csp=True,
                 device_scale_factor=1,
             )
-            # Anti-bot detection stealth
+            # Anti-bot detection stealth & font loading unblocker
             await context.add_init_script("""
                 Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
                 Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
                 Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
                 window.chrome = { runtime: {} };
+                try {
+                    Object.defineProperty(document.fonts, 'ready', { get: () => Promise.resolve() });
+                    Object.defineProperty(document.fonts, 'status', { get: () => 'loaded' });
+                } catch (e) {}
             """)
 
             # Set realistic headers
@@ -119,7 +124,7 @@ def capture_screenshot(url: str) -> str:
 
             try:
                 # Navigate with domcontentloaded (fast & reliable)
-                await page.goto(url, wait_until="domcontentloaded", timeout=18000)
+                await page.goto(url, wait_until="domcontentloaded", timeout=20000)
                 final_url = page.url
             except Exception as nav_ex:
                 err_msg = f"Page load warning/timeout: {str(nav_ex)}"
@@ -128,25 +133,109 @@ def capture_screenshot(url: str) -> str:
                 except Exception:
                     pass
 
-            # Wait for dynamic JS, hydration, and fonts to render
+            # Inject comprehensive DOM unblocking, animations override, modal hiding, and lazyload resolution
             try:
-                await page.wait_for_timeout(2500)
-                # Dismiss splash preloaders/spinners if present and trigger lazy-load
+                await page.wait_for_timeout(1500)
                 await page.evaluate("""
                     () => {
-                        const loaders = document.querySelectorAll(
-                            '.preloader, #preloader, .loader, #loader, .spinner, .splash-screen, .loading-overlay, #loading'
-                        );
-                        loaders.forEach(el => {
-                            el.style.display = 'none';
-                            el.style.opacity = '0';
-                            el.style.visibility = 'hidden';
+                        // Force font readiness
+                        try {
+                            Object.defineProperty(document.fonts, 'ready', { get: () => Promise.resolve() });
+                            Object.defineProperty(document.fonts, 'status', { get: () => 'loaded' });
+                        } catch (e) {}
+
+                        // 1. Inject global CSS overrides for animations, modals, loaders, and overflow
+                        const style = document.createElement('style');
+                        style.id = 'phishlens-screenshot-enhancements';
+                        style.innerHTML = `
+                            *, *::before, *::after {
+                                transition: none !important;
+                                transition-duration: 0s !important;
+                                animation: none !important;
+                                animation-duration: 0s !important;
+                                animation-delay: 0s !important;
+                            }
+                            [data-aos], .aos-init, .aos-animate {
+                                opacity: 1 !important;
+                                transform: none !important;
+                                visibility: visible !important;
+                                transition: none !important;
+                            }
+                            .wow {
+                                visibility: visible !important;
+                                opacity: 1 !important;
+                                animation: none !important;
+                            }
+                            [data-sal], [data-scroll], .fade-in, .animated {
+                                opacity: 1 !important;
+                                transform: none !important;
+                                visibility: visible !important;
+                            }
+                            html, body {
+                                overflow: visible !important;
+                                height: auto !important;
+                                min-height: 100% !important;
+                                max-height: none !important;
+                            }
+                            /* Hide obstructive popups, modals, overlays, cookie banners, loaders */
+                            #popup-container, .home-pop-up, #overlay, .modal-backdrop, .modal,
+                            [class*="popup"]:not([class*="nav"]):not([class*="menu"]),
+                            [id*="popup"]:not([id*="nav"]):not([id*="menu"]),
+                            [class*="cookie"], [id*="cookie"],
+                            .splash-screen, #splash-screen,
+                            .preloader, #preloader, .loader, #loader, .spinner, .loading-overlay, #loading {
+                                display: none !important;
+                                opacity: 0 !important;
+                                visibility: hidden !important;
+                                pointer-events: none !important;
+                                z-index: -9999 !important;
+                            }
+                        `;
+                        document.head.appendChild(style);
+
+                        // 2. Add aos-animate class and inline visibility to all animated elements
+                        document.querySelectorAll('[data-aos], .aos-init, .wow, [data-sal]').forEach(el => {
+                            el.classList.add('aos-animate');
+                            el.style.opacity = '1';
+                            el.style.visibility = 'visible';
+                            el.style.transform = 'none';
                         });
-                        window.scrollBy(0, 150);
-                        window.scrollTo(0, 0);
+
+                        // 3. Force lazy-loaded images to eager and set src/srcset
+                        document.querySelectorAll('img').forEach(img => {
+                            img.loading = 'eager';
+                            if (img.dataset.src) img.src = img.dataset.src;
+                            if (img.dataset.srcset) img.srcset = img.dataset.srcset;
+                            if (img.dataset.original) img.src = img.dataset.original;
+                            if (img.dataset.lazySrc) img.src = img.dataset.lazySrc;
+                            img.style.opacity = '1';
+                            img.style.visibility = 'visible';
+                        });
+
+                        // 4. Force background images on elements with data-bg or data-background
+                        document.querySelectorAll('[data-bg], [data-background], [data-bg-src]').forEach(el => {
+                            const bg = el.dataset.bg || el.dataset.background || el.dataset.bgSrc;
+                            if (bg) el.style.backgroundImage = `url("${bg}")`;
+                        });
                     }
                 """)
-                await page.wait_for_timeout(1000)
+
+                # Step-by-step scroll across full page height to trigger IntersectionObservers & lazy loaders
+                await page.evaluate("""
+                    async () => {
+                        const scrollHeight = document.documentElement.scrollHeight || document.body.scrollHeight;
+                        const step = 800;
+                        for (let y = 0; y < scrollHeight; y += step) {
+                            window.scrollTo(0, y);
+                            window.dispatchEvent(new Event('scroll'));
+                            await new Promise(r => setTimeout(r, 50));
+                        }
+                        window.scrollTo(0, 0);
+                        window.dispatchEvent(new Event('scroll'));
+                        window.dispatchEvent(new Event('resize'));
+                    }
+                """)
+                await page.wait_for_timeout(800)
                 title = await page.title() or "Untitled Page"
             except Exception:
                 try:
@@ -154,19 +243,27 @@ def capture_screenshot(url: str) -> str:
                 except Exception:
                     pass
 
-            # Capture viewport screenshot in memory
+            # Capture full website screenshot in memory (with viewport fallback)
             screenshot_bytes = None
             try:
                 screenshot_bytes = await page.screenshot(
-                    full_page=False,
+                    full_page=True,
                     animations="disabled",
-                    timeout=10000
+                    timeout=15000
                 )
-            except Exception as ss_ex:
-                err_msg = f"Screenshot capture error: {str(ss_ex)}"
+            except Exception as full_ex:
+                # Fallback to viewport screenshot if full-page capture encounters an issue
+                try:
+                    screenshot_bytes = await page.screenshot(
+                        full_page=False,
+                        animations="disabled",
+                        timeout=8000
+                    )
+                except Exception as ss_ex:
+                    err_msg = f"Screenshot capture error: {str(ss_ex)}"
 
-            # Encode screenshot directly to Base64 Data URI in memory
-            if screenshot_bytes and len(screenshot_bytes) > 500:
+            has_valid_ss = bool(screenshot_bytes and len(screenshot_bytes) > 500)
+            if has_valid_ss:
                 b64_str = base64.b64encode(screenshot_bytes).decode("utf-8")
                 screenshot_data = f"data:image/png;base64,{b64_str}"
             else:
@@ -195,6 +292,7 @@ def capture_screenshot(url: str) -> str:
                 "screenshot_data": screenshot_data,
                 "screenshot_url": screenshot_data,
                 "screenshot_path": None,
+                "has_valid_screenshot": has_valid_ss,
                 "page_title": title,
                 "final_url": final_url,
                 "status": status,

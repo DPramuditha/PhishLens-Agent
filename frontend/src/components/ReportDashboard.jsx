@@ -24,14 +24,18 @@ import {
   MapPin,
   Calendar,
   AlertTriangle,
+  ScanEye,
+  Image,
 } from 'lucide-react';
 import gsap from 'gsap';
 import { AnimatedCircularProgressBar } from './ui/animated-circular-progress-bar';
 import { Highlight } from './ui/highlighter';
+import FileDownloadCard from './FileDownloadCard';
+import PDFBuildingAnimation from './PDFBuildingAnimation';
 
-// Helper component to type out text word by word sequentially
-function WordTypingText({ text, speed = 30, onComplete, trigger = false }) {
-  const [displayText, setDisplayText] = useState('');
+// Helper component to type out text word by word sequentially (or immediately for history)
+function WordTypingText({ text, speed = 30, onComplete, trigger = false, animate = true }) {
+  const [displayText, setDisplayText] = useState(animate ? '' : (text || ''));
   const onCompleteRef = useRef(onComplete);
 
   // Keep ref up to date
@@ -40,6 +44,11 @@ function WordTypingText({ text, speed = 30, onComplete, trigger = false }) {
   }, [onComplete]);
 
   useEffect(() => {
+    if (!animate) {
+      setDisplayText(text || '');
+      return;
+    }
+
     if (!trigger || !text) {
       setDisplayText('');
       return;
@@ -69,11 +78,11 @@ function WordTypingText({ text, speed = 30, onComplete, trigger = false }) {
     }, speed);
 
     return () => clearInterval(interval);
-  }, [text, speed, trigger]);
+  }, [text, speed, trigger, animate]);
 
   if (!trigger) return null;
 
-  return <span>{displayText}</span>;
+  return <span>{!animate ? text : displayText}</span>;
 }
 
 // Subcomponent for displaying execution trace logs with smooth height animation
@@ -190,14 +199,29 @@ function InfoRow({ label, value, fullWidth = false, valueColor }) {
 }
 
 // Subcomponent for rendering the beautiful, complete scan report dashboard
-export default function ReportDashboard({ report, duration, screenshotUrl, toolTrace, urlAnalysisData }) {
+export default function ReportDashboard({
+  report,
+  duration,
+  screenshotUrl,
+  annotatedScreenshotUrl,
+  toolTrace,
+  urlAnalysisData,
+  url,
+  chatId,
+  isLive = false,
+}) {
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const containerRef = useRef(null);
-  const [activeStep, setActiveStep] = useState(0);
+  const [activeStep, setActiveStep] = useState(isLive ? 0 : 9999);
+  const [isPdfReady, setIsPdfReady] = useState(!isLive);
+  // Toggle between 'original' and 'annotated' screenshot views
+  const [screenshotView, setScreenshotView] = useState(annotatedScreenshotUrl ? 'annotated' : 'original');
+  const activeScreenshotUrl = screenshotView === 'annotated' && annotatedScreenshotUrl ? annotatedScreenshotUrl : screenshotUrl;
 
   useEffect(() => {
-    setActiveStep(0);
-  }, [report]);
+    setActiveStep(isLive ? 0 : 9999);
+    setIsPdfReady(!isLive);
+  }, [report, isLive]);
 
   // Helper to extract clean URL from summary text
   const getUrlFromSummary = (summaryText) => {
@@ -205,24 +229,32 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
     return match ? match[0] : 'https://secure-login-update-bank.com';
   };
 
+  const analyzedUrl = url || getUrlFromSummary(report?.summary);
+
   // Entrance animations using GSAP
   useEffect(() => {
     if (!containerRef.current || !report) return;
 
     const ctx = gsap.context(() => {
-      gsap.set('.animate-left', { x: -30, opacity: 0 });
-      gsap.set('.animate-report', { x: 30, opacity: 0 });
-      gsap.set('.animate-footer', { opacity: 0 });
+      if (isLive) {
+        gsap.set('.animate-left', { x: -30, opacity: 0 });
+        gsap.set('.animate-report', { x: 30, opacity: 0 });
+        gsap.set('.animate-footer', { opacity: 0 });
 
-      const tl = gsap.timeline({ defaults: { ease: 'power4.out', duration: 0.9 } });
+        const tl = gsap.timeline({ defaults: { ease: 'power4.out', duration: 0.9 } });
 
-      tl.to('.animate-left', { x: 0, opacity: 1, duration: 1.2 })
-        .to('.animate-report', { x: 0, opacity: 1, duration: 1.0 }, '-=0.9')
-        .to('.animate-footer', { opacity: 1, duration: 0.6 }, '-=0.5');
+        tl.to('.animate-left', { x: 0, opacity: 1, duration: 1.2 })
+          .to('.animate-report', { x: 0, opacity: 1, duration: 1.0 }, '-=0.9')
+          .to('.animate-footer', { opacity: 1, duration: 0.6 }, '-=0.5');
+      } else {
+        gsap.set('.animate-left', { x: 0, opacity: 1 });
+        gsap.set('.animate-report', { x: 0, opacity: 1 });
+        gsap.set('.animate-footer', { opacity: 1 });
+      }
     }, containerRef);
 
     return () => ctx.revert();
-  }, [report]);
+  }, [report, isLive]);
 
   // Lightbox slide panel animation
   useEffect(() => {
@@ -274,7 +306,6 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
   const score = report?.risk_score ?? 0;
   const riskLevel = String(report?.risk_level || 'UNKNOWN').toUpperCase();
   const summaryText = report?.summary || 'Phishing analysis report completed.';
-  const analyzedUrl = getUrlFromSummary(summaryText);
 
   const hasBrand = Boolean(report?.brand_impersonation && report.brand_impersonation.detected);
   const brandName = report?.brand_impersonation?.brand || 'Unknown Brand';
@@ -285,24 +316,59 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
   const findingsCount = findingsList.length;
   const findingsStartStep = hasBrand ? 2 : 1;
   const safetyStartStep = findingsStartStep + findingsCount;
+  const pdfBuildStartStep = safetyStartStep + (report?.safety_advice ? 1 : 0);
 
   return (
     <div
       ref={containerRef}
-      className="w-full flex flex-col gap-6 text-gray-800 dark:text-gray-100"
+      className="w-full flex flex-col gap-6 text-gray-800 dark:text-gray-100 font-inter"
     >
       {/* ─── TOP SECTION: Webpage Screenshot ─── */}
       <div className="animate-left flex flex-col gap-2.5 w-full max-w-2xl mx-auto">
-        <h3 className="text-[10px] uppercase tracking-widest font-black text-gray-400 dark:text-gray-500 ml-1 text-left">
-          Visual Screenshot
-        </h3>
+        <div className="flex items-center justify-between ml-1 mr-1">
+          <h3 className="text-[10px] uppercase tracking-widest font-black text-gray-400 dark:text-gray-500 text-left">
+            Visual Screenshot
+          </h3>
+
+          {/* Original / AI Analysis Toggle — only shown when annotated screenshot exists */}
+          {annotatedScreenshotUrl && (
+            <div className="flex items-center bg-gray-100 dark:bg-[#1a1a1a] rounded-lg p-0.5 border border-gray-200/60 dark:border-gray-700/50 shadow-sm">
+              <button
+                onClick={() => setScreenshotView('original')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                  screenshotView === 'original'
+                    ? 'bg-white dark:bg-[#2a2a2a] text-gray-800 dark:text-gray-100 shadow-sm'
+                    : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
+                }`}
+              >
+                <Image size={11} />
+                Original
+              </button>
+              <button
+                onClick={() => setScreenshotView('annotated')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                  screenshotView === 'annotated'
+                    ? 'bg-rose-500/10 dark:bg-rose-500/15 text-rose-600 dark:text-rose-400 shadow-sm border border-rose-500/20'
+                    : 'text-gray-400 dark:text-gray-500 hover:text-rose-500 dark:hover:text-rose-400'
+                }`}
+              >
+                <ScanEye size={11} />
+                AI Analysis
+              </button>
+            </div>
+          )}
+        </div>
         
-        <div className="overflow-hidden rounded-xl border border-gray-200/60 dark:border-gray-800/60 bg-white dark:bg-[#121212] shadow-lg">
-          {screenshotUrl ? (
+        <div className={`overflow-hidden rounded-xl border bg-white dark:bg-[#121212] shadow-lg transition-colors duration-300 ${
+          screenshotView === 'annotated' && annotatedScreenshotUrl
+            ? 'border-rose-500/40 dark:border-rose-500/30'
+            : 'border-gray-200/60 dark:border-gray-800/60'
+        }`}>
+          {activeScreenshotUrl ? (
             <div onClick={() => setIsLightboxOpen(true)} className="relative cursor-zoom-in">
               <img
-                src={screenshotUrl}
-                alt="Captured Webpage"
+                src={activeScreenshotUrl}
+                alt={screenshotView === 'annotated' ? 'AI-Analyzed Screenshot with Logo Detection' : 'Captured Webpage'}
                 className="w-full h-auto object-contain transition-transform duration-500 hover:scale-[1.01]"
               />
               
@@ -313,6 +379,14 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
                   View Fullscreen
                 </div>
               </div>
+
+              {/* AI Analysis badge overlay */}
+              {screenshotView === 'annotated' && annotatedScreenshotUrl && (
+                <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-rose-600/90 backdrop-blur-sm text-white px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider shadow-lg">
+                  <ScanEye size={11} />
+                  Logo Detection Active
+                </div>
+              )}
             </div>
           ) : (
             <div className="h-[200px] flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 p-6 text-center select-none">
@@ -323,8 +397,8 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
         </div>
       </div>
 
-      {/* ─── BOTTOM SECTION: Security Report Details (Structured Plain Text with Typing) ─── */}
-      <div className="animate-report flex flex-col gap-6 w-full max-w-2xl mx-auto text-left">
+      {/* ─── BOTTOM SECTION: Security Report Details (Structured Plain Text with Typing in Inter Font) ─── */}
+      <div className="animate-report font-inter flex flex-col gap-6 w-full max-w-2xl mx-auto text-left">
         
         {/* Verdict & Circular Progress Bar Row */}
         <div className="flex items-center justify-between gap-6 border-b border-gray-200/50 dark:border-gray-850/40 pb-5">
@@ -359,6 +433,7 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
               text={summaryText} 
               speed={35} 
               trigger={activeStep >= 0}
+              animate={isLive}
               onComplete={() => setActiveStep(hasBrand ? 1 : findingsStartStep)}
             />
           </p>
@@ -483,6 +558,7 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
                 text={`Target Mimics: ${brandName} (Confidence: ${brandConfidence}%)`} 
                 speed={35}
                 trigger={activeStep >= 1}
+                animate={isLive}
                 onComplete={() => setActiveStep(findingsStartStep)}
               />
             </p>
@@ -515,11 +591,12 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
                     <p className="text-[16.5px] md:text-[18px] leading-relaxed text-gray-700 dark:text-gray-200 font-medium relative">
                       <span className="font-black text-gray-900 dark:text-white">{category}{severity}: </span>
                       {isVisualML ? (
-                        <Highlight color={highlightColor} trigger={typingCompleteTrigger} duration={0.9} delay={0.1}>
+                        <Highlight color={highlightColor} trigger={!isLive || typingCompleteTrigger} duration={isLive ? 0.9 : 0} delay={isLive ? 0.1 : 0}>
                           <WordTypingText 
                             text={f?.detail || ''} 
                             speed={35}
                             trigger={stepTrigger}
+                            animate={isLive}
                             onComplete={() => setActiveStep(findingsStartStep + idx + 1)}
                           />
                         </Highlight>
@@ -528,6 +605,7 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
                           text={f?.detail || ''} 
                           speed={35}
                           trigger={stepTrigger}
+                          animate={isLive}
                           onComplete={() => setActiveStep(findingsStartStep + idx + 1)}
                         />
                       )}
@@ -550,6 +628,8 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
                 text={report.safety_advice} 
                 speed={35}
                 trigger={activeStep >= safetyStartStep}
+                animate={isLive}
+                onComplete={() => setActiveStep(pdfBuildStartStep)}
               />
             </p>
           </div>
@@ -587,6 +667,30 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
           </div>
         )}
 
+        {/* ─── PDF Building Animation (triggers after all writing steps complete on live scans only) ─── */}
+        {isLive && activeStep >= pdfBuildStartStep && !isPdfReady && (
+          <div className="mt-3">
+            <PDFBuildingAnimation
+              onSettled={() => setIsPdfReady(true)}
+              hasScreenshot={Boolean(screenshotUrl)}
+            />
+          </div>
+        )}
+
+        {/* ─── PDF Report Download Card (revealed once building animation settles or immediately in history view) ─── */}
+        {isPdfReady && (
+          <div className="mt-2 transition-all duration-500 animate-fadeIn">
+            <FileDownloadCard
+              url={analyzedUrl}
+              report={report}
+              screenshotUrl={screenshotUrl}
+              urlAnalysisData={urlAnalysisData}
+              duration={duration}
+              chatId={chatId}
+            />
+          </div>
+        )}
+
         {/* Trace Logs */}
         <div className="animate-footer mt-4">
           <TraceStepList steps={toolTrace} />
@@ -594,7 +698,7 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
       </div>
 
       {/* ─── RIGHT-SIDE SLIDE PANEL FOR SCREENSHOT ─── */}
-      {isLightboxOpen && screenshotUrl && createPortal(
+      {isLightboxOpen && activeScreenshotUrl && createPortal(
         <div
           style={{ position: 'fixed', inset: 0, zIndex: 99999 }}
           className="select-none"
@@ -634,22 +738,54 @@ export default function ReportDashboard({ report, duration, screenshotUrl, toolT
                 <span className="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0" />
                 <span className="text-[13px] font-semibold text-white/90 font-mono truncate">{analyzedUrl}</span>
               </div>
-              <button
-                onClick={closeLightbox}
-                className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
-              >
-                <X size={18} />
-              </button>
+
+              <div className="flex items-center gap-2 shrink-0">
+                {/* Lightbox toggle */}
+                {annotatedScreenshotUrl && (
+                  <div className="flex items-center bg-white/5 rounded-lg p-0.5 border border-white/8">
+                    <button
+                      onClick={() => setScreenshotView('original')}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                        screenshotView === 'original'
+                          ? 'bg-white/10 text-white shadow-sm'
+                          : 'text-gray-500 hover:text-gray-300'
+                      }`}
+                    >
+                      <Image size={10} />
+                      Original
+                    </button>
+                    <button
+                      onClick={() => setScreenshotView('annotated')}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                        screenshotView === 'annotated'
+                          ? 'bg-rose-500/15 text-rose-400 shadow-sm border border-rose-500/20'
+                          : 'text-gray-500 hover:text-rose-400'
+                      }`}
+                    >
+                      <ScanEye size={10} />
+                      AI Analysis
+                    </button>
+                  </div>
+                )}
+                <button
+                  onClick={closeLightbox}
+                  className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             {/* Image Container */}
             <div className="flex-1 overflow-y-auto no-scrollbar p-5 flex flex-col items-center justify-start bg-[#111113]">
               <img
-                src={screenshotUrl}
-                alt="Webpage Full Screenshot"
+                src={activeScreenshotUrl}
+                alt={screenshotView === 'annotated' ? 'AI-Analyzed Screenshot with Logo Detection' : 'Webpage Full Screenshot'}
                 className="w-full h-auto object-contain rounded-xl border border-white/5 shadow-lg"
               />
-              <p className="mt-3 text-[11px] font-medium text-gray-500 tracking-wide uppercase">Captured Webpage Screenshot</p>
+              <p className="mt-3 text-[11px] font-medium text-gray-500 tracking-wide uppercase">
+                {screenshotView === 'annotated' ? 'AI-Analyzed Screenshot — Logo Region Highlighted' : 'Captured Webpage Screenshot'}
+              </p>
             </div>
           </div>
         </div>,

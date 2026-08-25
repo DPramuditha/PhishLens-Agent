@@ -10,6 +10,7 @@ from django.contrib.auth.models import User
 from backend.core.security import (
     generate_jwt_token,
     verify_google_id_token,
+    verify_google_access_token,
     get_or_create_google_user,
     validate_password_strength,
     validate_email_address,
@@ -19,7 +20,7 @@ from backend.core.security import (
 class AuthService:
     """
     Encapsulates all authentication workflows:
-    - Google OAuth ID token verification & user provisioning
+    - Google OAuth ID token & access token verification & user provisioning
     - Email & Password registration with strict validation
     - Email & Password login
     - User profile update
@@ -27,11 +28,19 @@ class AuthService:
     """
 
     @staticmethod
-    def handle_google_login(credential: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
-        """Verifies Google token and returns JWT payload & user dict."""
-        claims = verify_google_id_token(credential)
+    def handle_google_login(
+        credential: Optional[str] = None,
+        access_token: Optional[str] = None,
+    ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """Verifies Google token (ID token or access token) and returns JWT payload & user dict."""
+        claims = None
+        if credential:
+            claims = verify_google_id_token(credential)
+        if not claims and access_token:
+            claims = verify_google_access_token(access_token)
+
         if not claims:
-            return None, "Google ID token verification failed. Token is invalid or expired."
+            return None, "Google token verification failed. Token is invalid or expired."
 
         user = get_or_create_google_user(claims)
         if not user:

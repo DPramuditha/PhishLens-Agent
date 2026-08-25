@@ -152,19 +152,108 @@ body, p, div, button, input, select, textarea, a, li, .font-outfit {
 .index-page-scope button,
 .index-page-scope div,
 .index-page-scope input {
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
   font-optical-sizing: auto;
 }
 
-/* Hide scrollbar for Chrome, Safari and Opera */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
+/* ── Log Scan Typography: Inter ── */
+.scan-logs-scope,
+.scan-logs-scope *,
+.scan-logs-scope h1,
+.scan-logs-scope h2,
+.scan-logs-scope h3,
+.scan-logs-scope h4,
+.scan-logs-scope h5,
+.scan-logs-scope h6,
+.scan-logs-scope p,
+.scan-logs-scope span,
+.scan-logs-scope a,
+.scan-logs-scope button,
+.scan-logs-scope div,
+.scan-logs-scope input,
+.scan-logs-scope select,
+.scan-logs-scope textarea {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  font-optical-sizing: auto;
+}
+
+/* ── History & Chat Search Typography: Inter ── */
+.history-scope,
+.history-scope *,
+.history-scope h1,
+.history-scope h2,
+.history-scope h3,
+.history-scope h4,
+.history-scope h5,
+.history-scope h6,
+.history-scope p,
+.history-scope span,
+.history-scope a,
+.history-scope button,
+.history-scope div,
+.history-scope input,
+.history-scope li {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  font-optical-sizing: auto;
+}
+
+/* ── Screenshots Gallery & Screenshot Titles Typography: Inter ── */
+.screenshots-scope,
+.screenshots-scope *,
+.screenshots-scope h1,
+.screenshots-scope h2,
+.screenshots-scope h3,
+.screenshots-scope h4,
+.screenshots-scope h5,
+.screenshots-scope h6,
+.screenshots-scope p,
+.screenshots-scope span,
+.screenshots-scope a,
+.screenshots-scope button,
+.screenshots-scope div,
+.screenshots-scope input {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  font-optical-sizing: auto;
+}
+
+/* ── Popup Message Title & Notification Typography: Inter ── */
+.popup-title-scope,
+.popup-title-scope *,
+.popup-scope,
+.popup-scope *,
+.t-pill-notification,
+.t-pill-title,
+.t-pill-desc,
+.t-notification-pill,
+.t-notification-title,
+.t-notification-desc,
+.toast-notification,
+.toast-notification * {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  font-optical-sizing: auto;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera across all containers */
+.no-scrollbar::-webkit-scrollbar,
+.custom-scrollbar::-webkit-scrollbar,
+.scan-logs-scope::-webkit-scrollbar,
+.screenshots-scope::-webkit-scrollbar,
+.history-scope::-webkit-scrollbar,
+.popup-scope::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 /* Hide scrollbar for IE, Edge and Firefox */
-.no-scrollbar {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+.no-scrollbar,
+.custom-scrollbar,
+.scan-logs-scope,
+.screenshots-scope,
+.history-scope,
+.popup-scope {
+  -ms-overflow-style: none !important;  /* IE and Edge */
+  scrollbar-width: none !important;  /* Firefox */
 }
 
 /* ── Login page keyframe animations ── */

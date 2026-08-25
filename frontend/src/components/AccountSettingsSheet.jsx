@@ -303,10 +303,10 @@ export default function AccountSettingsSheet({
           </button>
         </div>
 
-        {/* Tab Content Body (Scrollable with Apple Green Scrollbar) */}
+        {/* Tab Content Body (Scrollable without visible scrollbar) */}
         <div
           ref={contentRef}
-          className="flex-1 overflow-y-auto pr-1.5 space-y-4 max-h-[58vh] apple-green-scrollbar font-inter"
+          className="flex-1 overflow-y-auto pr-1.5 space-y-4 max-h-[58vh] no-scrollbar font-inter"
         >
           {/* ═══════════ TAB 1: PROFILE ═══════════ */}
           {activeTab === 'profile' && (

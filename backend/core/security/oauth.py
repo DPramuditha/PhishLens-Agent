@@ -67,6 +67,30 @@ def verify_google_id_token(credential: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def verify_google_access_token(access_token: str) -> Optional[Dict[str, Any]]:
+    """
+    Verifies a Google OAuth2 access token by querying Google's userinfo endpoint.
+    Returns dict of user claims if valid, or None if invalid.
+    """
+    if not access_token:
+        return None
+
+    try:
+        resp = requests.get(
+            "https://www.googleapis.com/oauth2/v3/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("email"):
+                return data
+    except Exception:
+        pass
+
+    return None
+
+
 def get_or_create_google_user(claims: Dict[str, Any]) -> Optional[User]:
     """
     Retrieves or creates a Django User given verified Google claims.
@@ -80,6 +104,9 @@ def get_or_create_google_user(claims: Dict[str, Any]) -> Optional[User]:
     family_name = claims.get("family_name", "").strip()
     username = email
 
+    first = given_name or (name.split(" ")[0] if name else "")
+    last = family_name or (" ".join(name.split(" ")[1:]) if name and len(name.split(" ")) > 1 else "")
+
     user = User.objects.filter(email=email).first()
     if not user:
         user = User.objects.filter(username=username).first()
@@ -88,19 +115,19 @@ def get_or_create_google_user(claims: Dict[str, Any]) -> Optional[User]:
         user = User.objects.create_user(
             username=username,
             email=email,
-            first_name=given_name or (name.split(" ")[0] if name else ""),
-            last_name=family_name or (" ".join(name.split(" ")[1:]) if name and len(name.split(" ")) > 1 else ""),
+            first_name=first,
+            last_name=last,
         )
         user.set_unusable_password()
         user.save()
     else:
-        # Update names if empty
+        # Sync latest name from Google profile if available
         updated = False
-        if not user.first_name and (given_name or name):
-            user.first_name = given_name or (name.split(" ")[0] if name else "")
+        if first and user.first_name != first:
+            user.first_name = first
             updated = True
-        if not user.last_name and family_name:
-            user.last_name = family_name
+        if last and user.last_name != last:
+            user.last_name = last
             updated = True
         if updated:
             user.save()

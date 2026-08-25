@@ -30,18 +30,21 @@ from backend.apps.authentication.services import AuthService
 def google_auth_view(request: HttpRequest) -> HttpResponse:
     """
     POST /api/auth/google/
-    Body: {"credential": "<google_id_token>"}
+    Body: {"credential": "<google_id_token>"} or {"access_token": "<google_access_token>"}
     """
     try:
         data = json.loads(request.body)
-        credential = data.get("credential", "").strip()
+        raw_credential = data.get("credential")
+        raw_access_token = data.get("access_token")
+        credential = raw_credential.strip() if isinstance(raw_credential, str) else ""
+        access_token = raw_access_token.strip() if isinstance(raw_access_token, str) else ""
     except (json.JSONDecodeError, AttributeError):
-        return api_error("Invalid JSON body. Expected: {\"credential\": \"...\"}", status=400)
+        return api_error("Invalid JSON body. Expected: {\"credential\": \"...\"} or {\"access_token\": \"...\"}", status=400)
 
-    if not credential:
-        return api_error("Missing 'credential' parameter in request body.", status=400)
+    if not credential and not access_token:
+        return api_error("Missing 'credential' or 'access_token' parameter in request body.", status=400)
 
-    res, err = AuthService.handle_google_login(credential)
+    res, err = AuthService.handle_google_login(credential=credential, access_token=access_token)
     if err:
         return api_unauthorized(err)
 
