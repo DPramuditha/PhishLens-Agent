@@ -24,6 +24,8 @@ import {
   MapPin,
   Calendar,
   AlertTriangle,
+  ScanEye,
+  Image,
 } from 'lucide-react';
 import gsap from 'gsap';
 import { AnimatedCircularProgressBar } from './ui/animated-circular-progress-bar';
@@ -201,6 +203,7 @@ export default function ReportDashboard({
   report,
   duration,
   screenshotUrl,
+  annotatedScreenshotUrl,
   toolTrace,
   urlAnalysisData,
   url,
@@ -211,6 +214,9 @@ export default function ReportDashboard({
   const containerRef = useRef(null);
   const [activeStep, setActiveStep] = useState(isLive ? 0 : 9999);
   const [isPdfReady, setIsPdfReady] = useState(!isLive);
+  // Toggle between 'original' and 'annotated' screenshot views
+  const [screenshotView, setScreenshotView] = useState(annotatedScreenshotUrl ? 'annotated' : 'original');
+  const activeScreenshotUrl = screenshotView === 'annotated' && annotatedScreenshotUrl ? annotatedScreenshotUrl : screenshotUrl;
 
   useEffect(() => {
     setActiveStep(isLive ? 0 : 9999);
@@ -319,16 +325,50 @@ export default function ReportDashboard({
     >
       {/* ─── TOP SECTION: Webpage Screenshot ─── */}
       <div className="animate-left flex flex-col gap-2.5 w-full max-w-2xl mx-auto">
-        <h3 className="text-[10px] uppercase tracking-widest font-black text-gray-400 dark:text-gray-500 ml-1 text-left">
-          Visual Screenshot
-        </h3>
+        <div className="flex items-center justify-between ml-1 mr-1">
+          <h3 className="text-[10px] uppercase tracking-widest font-black text-gray-400 dark:text-gray-500 text-left">
+            Visual Screenshot
+          </h3>
+
+          {/* Original / AI Analysis Toggle — only shown when annotated screenshot exists */}
+          {annotatedScreenshotUrl && (
+            <div className="flex items-center bg-gray-100 dark:bg-[#1a1a1a] rounded-lg p-0.5 border border-gray-200/60 dark:border-gray-700/50 shadow-sm">
+              <button
+                onClick={() => setScreenshotView('original')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                  screenshotView === 'original'
+                    ? 'bg-white dark:bg-[#2a2a2a] text-gray-800 dark:text-gray-100 shadow-sm'
+                    : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
+                }`}
+              >
+                <Image size={11} />
+                Original
+              </button>
+              <button
+                onClick={() => setScreenshotView('annotated')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                  screenshotView === 'annotated'
+                    ? 'bg-rose-500/10 dark:bg-rose-500/15 text-rose-600 dark:text-rose-400 shadow-sm border border-rose-500/20'
+                    : 'text-gray-400 dark:text-gray-500 hover:text-rose-500 dark:hover:text-rose-400'
+                }`}
+              >
+                <ScanEye size={11} />
+                AI Analysis
+              </button>
+            </div>
+          )}
+        </div>
         
-        <div className="overflow-hidden rounded-xl border border-gray-200/60 dark:border-gray-800/60 bg-white dark:bg-[#121212] shadow-lg">
-          {screenshotUrl ? (
+        <div className={`overflow-hidden rounded-xl border bg-white dark:bg-[#121212] shadow-lg transition-colors duration-300 ${
+          screenshotView === 'annotated' && annotatedScreenshotUrl
+            ? 'border-rose-500/40 dark:border-rose-500/30'
+            : 'border-gray-200/60 dark:border-gray-800/60'
+        }`}>
+          {activeScreenshotUrl ? (
             <div onClick={() => setIsLightboxOpen(true)} className="relative cursor-zoom-in">
               <img
-                src={screenshotUrl}
-                alt="Captured Webpage"
+                src={activeScreenshotUrl}
+                alt={screenshotView === 'annotated' ? 'AI-Analyzed Screenshot with Logo Detection' : 'Captured Webpage'}
                 className="w-full h-auto object-contain transition-transform duration-500 hover:scale-[1.01]"
               />
               
@@ -339,6 +379,14 @@ export default function ReportDashboard({
                   View Fullscreen
                 </div>
               </div>
+
+              {/* AI Analysis badge overlay */}
+              {screenshotView === 'annotated' && annotatedScreenshotUrl && (
+                <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-rose-600/90 backdrop-blur-sm text-white px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider shadow-lg">
+                  <ScanEye size={11} />
+                  Logo Detection Active
+                </div>
+              )}
             </div>
           ) : (
             <div className="h-[200px] flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 p-6 text-center select-none">
@@ -650,7 +698,7 @@ export default function ReportDashboard({
       </div>
 
       {/* ─── RIGHT-SIDE SLIDE PANEL FOR SCREENSHOT ─── */}
-      {isLightboxOpen && screenshotUrl && createPortal(
+      {isLightboxOpen && activeScreenshotUrl && createPortal(
         <div
           style={{ position: 'fixed', inset: 0, zIndex: 99999 }}
           className="select-none"
@@ -690,22 +738,54 @@ export default function ReportDashboard({
                 <span className="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0" />
                 <span className="text-[13px] font-semibold text-white/90 font-mono truncate">{analyzedUrl}</span>
               </div>
-              <button
-                onClick={closeLightbox}
-                className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
-              >
-                <X size={18} />
-              </button>
+
+              <div className="flex items-center gap-2 shrink-0">
+                {/* Lightbox toggle */}
+                {annotatedScreenshotUrl && (
+                  <div className="flex items-center bg-white/5 rounded-lg p-0.5 border border-white/8">
+                    <button
+                      onClick={() => setScreenshotView('original')}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                        screenshotView === 'original'
+                          ? 'bg-white/10 text-white shadow-sm'
+                          : 'text-gray-500 hover:text-gray-300'
+                      }`}
+                    >
+                      <Image size={10} />
+                      Original
+                    </button>
+                    <button
+                      onClick={() => setScreenshotView('annotated')}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                        screenshotView === 'annotated'
+                          ? 'bg-rose-500/15 text-rose-400 shadow-sm border border-rose-500/20'
+                          : 'text-gray-500 hover:text-rose-400'
+                      }`}
+                    >
+                      <ScanEye size={10} />
+                      AI Analysis
+                    </button>
+                  </div>
+                )}
+                <button
+                  onClick={closeLightbox}
+                  className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             {/* Image Container */}
             <div className="flex-1 overflow-y-auto no-scrollbar p-5 flex flex-col items-center justify-start bg-[#111113]">
               <img
-                src={screenshotUrl}
-                alt="Webpage Full Screenshot"
+                src={activeScreenshotUrl}
+                alt={screenshotView === 'annotated' ? 'AI-Analyzed Screenshot with Logo Detection' : 'Webpage Full Screenshot'}
                 className="w-full h-auto object-contain rounded-xl border border-white/5 shadow-lg"
               />
-              <p className="mt-3 text-[11px] font-medium text-gray-500 tracking-wide uppercase">Captured Webpage Screenshot</p>
+              <p className="mt-3 text-[11px] font-medium text-gray-500 tracking-wide uppercase">
+                {screenshotView === 'annotated' ? 'AI-Analyzed Screenshot — Logo Region Highlighted' : 'Captured Webpage Screenshot'}
+              </p>
             </div>
           </div>
         </div>,

@@ -4,6 +4,7 @@ import {
   Code, 
   Camera, 
   Cpu, 
+  Search,
   Brain, 
   CheckCircle2,
   ChevronDown
@@ -44,6 +45,14 @@ const AGENT_STEPS = [
     description: 'Evaluating logo placements, color palettes, and visual similarity comparison against trusted brands.',
     activeMsg: 'Comparing layout against brand datasets...',
     doneMsg: 'Visual brand similarity analyzed.'
+  },
+  {
+    id: 'web_search',
+    name: 'Web Search Agent',
+    icon: Search,
+    description: 'Performing live Tavily OSINT research for phishing reports, scam advisories, and brand verification.',
+    activeMsg: 'Querying Tavily for live threat intelligence...',
+    doneMsg: 'Web threat intelligence gathered.'
   },
   {
     id: 'orchestrator',

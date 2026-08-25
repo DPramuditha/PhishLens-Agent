@@ -1,7 +1,10 @@
 import { useRef, useEffect, useCallback, useState, useLayoutEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
 import Lottie from 'lottie-react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from './ToastContext';
+import DeleteChatModal from './DeleteChatModal';
 
 // ─── Tuning constants ─────────────────────────────────────────────────────────
 const ITEM_BASE   = 50;   // px – resting icon cell size
@@ -242,8 +245,12 @@ function ChatHistoryPanel({ isExpanded, isDarkMode, onSelectChat, activeChatId, 
   const [chats, setChats] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [chatToDelete, setChatToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const containerRef = useRef(null);
   const { token } = useAuth();
+  const { addToast } = useToast();
+  const navigate = useNavigate();
 
   const fetchChats = useCallback(async (query = '') => {
     setIsLoading(true);
@@ -279,20 +286,35 @@ function ChatHistoryPanel({ isExpanded, isDarkMode, onSelectChat, activeChatId, 
     return () => clearTimeout(timer);
   }, [search, isExpanded, fetchChats]);
 
-  // Delete chat handler
-  const handleDeleteChat = async (e, chatId) => {
+  // Delete chat request handler (opens confirmation modal)
+  const handleRequestDelete = (e, chat) => {
     e.stopPropagation();
+    setChatToDelete(chat);
+  };
+
+  // Confirm delete chat handler
+  const handleConfirmDelete = async () => {
+    if (!chatToDelete) return;
+    setIsDeleting(true);
     try {
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const res = await fetch(`http://localhost:8000/api/chats/${chatId}/`, {
+      const res = await fetch(`http://localhost:8000/api/chats/${chatToDelete.id}/`, {
         method: 'DELETE',
         headers,
       });
       if (res.ok) {
-        setChats((prev) => prev.filter((c) => c.id !== chatId));
+        const deletedId = chatToDelete.id;
+        setChats((prev) => prev.filter((c) => c.id !== deletedId));
+        addToast({ type: 'success', title: 'Deleted', message: 'Chat session removed.' });
+        if (String(activeChatId) === String(deletedId)) {
+          navigate('/chat');
+        }
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error('Error deleting chat:', err);
+    } finally {
+      setIsDeleting(false);
+      setChatToDelete(null);
     }
   };
 
@@ -315,10 +337,11 @@ function ChatHistoryPanel({ isExpanded, isDarkMode, onSelectChat, activeChatId, 
   return (
     <div
       ref={containerRef}
-      className="flex-1 flex flex-col pl-4 border-l overflow-hidden"
+      className="flex-1 flex flex-col pl-4 border-l overflow-hidden history-scope font-inter"
       style={{
         borderColor: isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
         width: 236,
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
       }}
     >
       {/* Header */}
@@ -359,7 +382,7 @@ function ChatHistoryPanel({ isExpanded, isDarkMode, onSelectChat, activeChatId, 
       </div>
 
       {/* Chat List */}
-      <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col gap-2 pb-2">
+      <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col gap-1.5 pb-2">
         {isLoading && chats.length === 0 ? (
           <div className="text-[11px] text-gray-400 text-center py-6 flex items-center justify-center gap-1.5">
             <div className="w-3.5 h-3.5 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
@@ -380,10 +403,10 @@ function ChatHistoryPanel({ isExpanded, isDarkMode, onSelectChat, activeChatId, 
           return (
             <div
               key={chat.id}
-              className={`group relative p-2.5 rounded-2xl text-left cursor-pointer transition-all duration-200 border flex flex-col gap-2 ${
+              className={`group relative px-2.5 py-2 rounded-xl text-left cursor-pointer transition-all duration-150 border flex items-center justify-between gap-2 ${
                 isActive
-                  ? 'bg-indigo-50/90 dark:bg-indigo-950/50 border-indigo-500/40 text-indigo-950 dark:text-indigo-100 shadow-sm ring-1 ring-indigo-500/20'
-                  : 'bg-white/80 dark:bg-[#18181b]/70 hover:bg-indigo-50/60 dark:hover:bg-[#232328]/90 border-gray-200/80 dark:border-white/5 hover:border-indigo-500/30 shadow-[0_2px_8px_rgba(0,0,0,0.02)] dark:shadow-none hover:shadow-md'
+                  ? 'bg-indigo-50/90 dark:bg-indigo-950/50 border-indigo-500/40 text-indigo-950 dark:text-indigo-100 shadow-xs ring-1 ring-indigo-500/20'
+                  : 'bg-white/80 dark:bg-[#18181b]/70 hover:bg-indigo-50/60 dark:hover:bg-[#232328]/90 border-gray-200/70 dark:border-white/5 hover:border-indigo-500/30 shadow-[0_1px_4px_rgba(0,0,0,0.02)] dark:shadow-none hover:shadow-xs'
               }`}
               onClick={() => {
                 if (onSelectChat) {
@@ -391,16 +414,16 @@ function ChatHistoryPanel({ isExpanded, isDarkMode, onSelectChat, activeChatId, 
                 }
               }}
             >
-              {/* Top Row: Icon + Title + Risk Badge */}
-              <div className="flex items-center justify-between gap-1.5 min-w-0">
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  {/* Redesigned Scan Radar Icon */}
-                  <div className="w-6 h-6 rounded-lg bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 border border-indigo-200/50 dark:border-indigo-500/20 shadow-xs">
-                    <ScanRadarIcon className="w-3.5 h-3.5" />
-                  </div>
+              {/* Left Side: Icon + Title & Time stacked tightly */}
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                {/* Compact Scan Radar Icon */}
+                <div className="w-6 h-6 rounded-lg bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 border border-indigo-200/50 dark:border-indigo-500/20 shadow-xs">
+                  <ScanRadarIcon className="w-3.5 h-3.5" />
+                </div>
 
+                <div className="flex flex-col min-w-0 flex-1 leading-tight">
                   <span
-                    className={`text-[12.5px] font-semibold truncate tracking-tight ${
+                    className={`text-[12px] font-semibold truncate tracking-tight ${
                       isActive
                         ? 'text-indigo-600 dark:text-indigo-300'
                         : 'text-gray-800 dark:text-gray-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400'
@@ -409,28 +432,27 @@ function ChatHistoryPanel({ isExpanded, isDarkMode, onSelectChat, activeChatId, 
                   >
                     {chat.title}
                   </span>
+                  <span className="text-[10px] text-gray-400 dark:text-gray-500 font-medium truncate mt-0.5">
+                    {formatRelativeTime(chat.updated_at || chat.created_at)}
+                  </span>
                 </div>
+              </div>
 
+              {/* Right Side: Risk Score Badge & Hover Delete Button */}
+              <div className="flex items-center gap-1 shrink-0">
                 {/* Dynamic Risk Score Badge */}
                 {riskLevel && (
-                  <span className={`text-[9.5px] font-bold px-2 py-0.5 rounded-full shrink-0 tabular-nums ${badgeColor}`}>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md shrink-0 tabular-nums ${badgeColor} transition-all`}>
                     {riskScore !== null ? `${riskScore}%` : riskLevel}
                   </span>
                 )}
-              </div>
 
-              {/* Bottom Row: Timestamp + Actions */}
-              <div className="flex items-center justify-between text-[10.5px] text-gray-400 dark:text-gray-500 font-medium pl-8">
-                <span className="truncate">
-                  {formatRelativeTime(chat.updated_at || chat.created_at)}
-                </span>
-
-                {/* Delete Button */}
+                {/* Compact Delete Button */}
                 <button
                   type="button"
-                  className="opacity-0 group-hover:opacity-100 hover:text-rose-500 p-1 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 text-gray-400 transition-all duration-150 cursor-pointer -mr-0.5"
+                  className="opacity-0 group-hover:opacity-100 hover:text-rose-500 p-0.5 rounded-md hover:bg-rose-50 dark:hover:bg-rose-950/40 text-gray-400 transition-all duration-150 cursor-pointer"
                   title="Delete chat"
-                  onClick={(e) => handleDeleteChat(e, chat.id)}
+                  onClick={(e) => handleRequestDelete(e, chat)}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.8" stroke="currentColor" className="w-3.5 h-3.5">
                     <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
@@ -447,6 +469,18 @@ function ChatHistoryPanel({ isExpanded, isDarkMode, onSelectChat, activeChatId, 
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Popup Modal */}
+      <DeleteChatModal
+        isOpen={Boolean(chatToDelete)}
+        onClose={() => {
+          if (!isDeleting) setChatToDelete(null);
+        }}
+        onConfirm={handleConfirmDelete}
+        chatTitle={chatToDelete?.title || ''}
+        isDeleting={isDeleting}
+        isDarkMode={isDarkMode}
+      />
     </div>
   );
 }

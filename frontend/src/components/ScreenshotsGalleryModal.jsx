@@ -25,9 +25,9 @@ function formatRelativeTime(dateStr) {
   }
 }
 
-const APPLE_FONT_STYLE = {
+const INTER_FONT_STYLE = {
   fontFamily:
-    '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "SF Pro", "Helvetica Neue", Helvetica, Arial, sans-serif',
+    "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
 };
 
 export default function ScreenshotsGalleryModal({ isOpen, onClose, isDarkMode = true }) {
@@ -139,11 +139,11 @@ export default function ScreenshotsGalleryModal({ isOpen, onClose, isDarkMode = 
   return (
     <div
       ref={modalRef}
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 md:p-8 select-none"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 md:p-8 select-none screenshots-scope font-inter"
       role="dialog"
       aria-modal="true"
       aria-label="Screenshots Gallery"
-      style={APPLE_FONT_STYLE}
+      style={INTER_FONT_STYLE}
     >
       {/* Translucent Backdrop */}
       <div
@@ -463,9 +463,9 @@ export default function ScreenshotsGalleryModal({ isOpen, onClose, isDarkMode = 
       {/* Full-Screen Lightbox Modal for Close Inspection */}
       {selectedScreenshot && (
         <div
-          className="fixed inset-0 z-[10000] bg-black/85 backdrop-blur-2xl flex flex-col p-4 md:p-6 select-none animate-fadeIn"
+          className="fixed inset-0 z-[10000] bg-black/85 backdrop-blur-2xl flex flex-col p-4 md:p-6 select-none animate-fadeIn screenshots-scope font-inter"
           onClick={() => setSelectedScreenshot(null)}
-          style={APPLE_FONT_STYLE}
+          style={INTER_FONT_STYLE}
         >
           {/* Lightbox Header */}
           <div

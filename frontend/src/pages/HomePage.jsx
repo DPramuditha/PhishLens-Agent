@@ -30,9 +30,13 @@ import lightExpandAnimData from '../sidebar_images/light-mode-expand.json';
 
 import SearchChat from './SearchChat';
 import ScreenshotsGalleryModal from '../components/ScreenshotsGalleryModal';
+import ScanLogsModal from '../components/ScanLogsModal';
+import PDFReportsModal from '../components/PDFReportsModal';
+import AnalyticsDashboardModal from '../components/AnalyticsDashboardModal';
 import ProfileBottomSheet from '../components/ProfileBottomSheet';
 import SidebarDock from '../components/SidebarDock';
 import ReportDashboard from '../components/ReportDashboard';
+import DeleteChatModal from '../components/DeleteChatModal';
 import { DotmSquare19 } from '../components/ui/dotm-square-19';
 import OrchestratorProgress from '../components/OrchestratorProgress';
 import { useToast } from '../components/ToastContext';
@@ -568,7 +572,12 @@ export default function HomePage() {
   const [showProfilePopup, setShowProfilePopup] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isScreenshotsOpen, setIsScreenshotsOpen] = useState(false);
+  const [isScanLogsOpen, setIsScanLogsOpen] = useState(false);
+  const [isPdfReportsOpen, setIsPdfReportsOpen] = useState(false);
+  const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
   const [isTitleMenuOpen, setIsTitleMenuOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeletingChat, setIsDeletingChat] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     try {
       const saved = localStorage.getItem('phishlens_theme');
@@ -585,6 +594,33 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showAgentTasks, setShowAgentTasks] = useState(false);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+
+  const handleDeleteCurrentChat = async () => {
+    const targetChatId = activeChatId || routeChatId;
+    if (!targetChatId) return;
+    setIsDeletingChat(true);
+    try {
+      const headers = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`http://localhost:8000/api/chats/${targetChatId}/`, {
+        method: 'DELETE',
+        headers,
+      });
+
+      if (res.ok) {
+        addToast({ type: 'success', title: 'Deleted', message: 'Chat session removed.' });
+        setHistoryRefreshKey((prev) => prev + 1);
+        setIsDeleteModalOpen(false);
+        setIsTitleMenuOpen(false);
+        navigate('/chat');
+      }
+    } catch (err) {
+      console.error('Error deleting current chat:', err);
+    } finally {
+      setIsDeletingChat(false);
+    }
+  };
 
   // ── Load Chat Session from PostgreSQL by unique ID (/chat/:id) ──
   useEffect(() => {
@@ -622,6 +658,7 @@ export default function HomePage() {
             status: msg.overall_status === 'FAILED' ? 'failed' : 'completed',
             report: msg.report,
             screenshotUrl: msg.screenshot_url,
+            annotatedScreenshotUrl: msg.annotated_screenshot_url || msg.annotated_screenshot_data || null,
             urlAnalysisData: msg.url_analysis_data,
             toolTrace: msg.tool_trace,
             overallStatus: msg.overall_status,
@@ -739,11 +776,47 @@ export default function HomePage() {
       hasDot: false,
     },
     {
-      id: 'chat',
-      label: 'AI Chat Assistant',
-      lottieData: isDarkMode ? chatAnimData : darkChatAnimData,
-      lottieRef: chatLottieRef,
-      onClick: () => { },
+      id: 'pdf-reports',
+      label: 'Scanned PDF Reports',
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '100%', height: '100%' }}>
+          <path
+            fillRule="evenodd"
+            clipRule="evenodd"
+            d="M8.25 18C8.25 17.5858 8.58579 17.25 9 17.25H15C15.4142 17.25 15.75 17.5858 15.75 18C15.75 18.4142 15.4142 18.75 15 18.75H9C8.58579 18.75 8.25 18.4142 8.25 18Z"
+            fill="currentColor"
+          />
+          <path
+            fillRule="evenodd"
+            clipRule="evenodd"
+            d="M8.69935 1.25001H15.3004C15.5203 1.24995 15.6888 1.2499 15.8362 1.26571C17.1903 1.41104 18.2268 2.52307 18.2897 3.87013C19.4805 4.22571 20.3289 5.3275 20.3443 6.59118C20.9453 6.77151 21.4637 7.05595 21.888 7.51432C22.54 8.21857 22.7421 9.08649 22.7498 10.1003C22.7572 11.075 22.5835 12.3067 22.3678 13.8363L21.9288 16.9499C21.7602 18.146 21.6232 19.1176 21.4101 19.879C21.1871 20.6756 20.8585 21.331 20.25 21.8349C19.6463 22.3347 18.9301 22.5502 18.0835 22.6518C17.265 22.75 16.2353 22.75 14.9532 22.75H9.04687C7.76478 22.75 6.73501 22.75 5.91647 22.6518C5.06993 22.5502 4.35372 22.3347 3.75003 21.8349C3.14152 21.331 2.81286 20.6756 2.58989 19.879C2.37676 19.1176 2.23979 18.146 2.07118 16.9499L1.63219 13.8363C1.41651 12.3067 1.24283 11.075 1.25023 10.1003C1.25792 9.08649 1.45997 8.21857 2.11196 7.51432C2.53621 7.05606 3.05445 6.77164 3.65528 6.5913C3.67058 5.3275 4.51917 4.22559 5.71005 3.87007C5.77295 2.52304 6.80943 1.41104 8.16359 1.26571C8.31094 1.2499 8.4795 1.24995 8.69935 1.25001ZM5.18902 6.32785C6.11481 6.24999 7.24973 6.25 8.61594 6.25001H15.384C16.75 6.25 17.8848 6.24999 18.8105 6.32781C18.6734 5.72018 18.1306 5.25001 17.4617 5.25001H6.53787C5.86896 5.25001 5.32618 5.72019 5.18902 6.32785ZM15.6761 2.75715C16.2263 2.8162 16.6611 3.22633 16.7677 3.75001H7.2321C7.33862 3.22633 7.77344 2.8162 8.32365 2.75715C8.37993 2.75111 8.46013 2.75001 8.74099 2.75001H15.2588C15.5396 2.75001 15.6198 2.75111 15.6761 2.75715ZM3.21267 8.53336C3.51557 8.20618 3.97106 7.98917 4.85612 7.87145C5.75726 7.75159 6.96357 7.75001 8.67239 7.75001H15.3276C17.0364 7.75001 18.2427 7.75159 19.1439 7.87145C20.0289 7.98917 20.4844 8.20618 20.7873 8.53336C21.0832 8.85293 21.2436 9.28782 21.2498 10.1117C21.2563 10.9618 21.1002 12.0828 20.8738 13.6883L20.4509 16.6883C20.2731 17.9491 20.1486 18.821 19.9656 19.4747C19.7894 20.1042 19.582 20.4405 19.2934 20.6795C18.9999 20.9225 18.6058 21.0784 17.9048 21.1625C17.1861 21.2488 16.2465 21.25 14.9046 21.25H9.09536C7.75347 21.25 6.81393 21.2488 6.09519 21.1625C5.39417 21.0784 5.00014 20.9225 4.70664 20.6795C4.41795 20.4405 4.21058 20.1042 4.03437 19.4747C3.8514 18.821 3.7269 17.9491 3.54913 16.6883L3.12616 13.6883C2.89981 12.0828 2.74373 10.9618 2.75018 10.1117C2.75644 8.28782 2.91681 8.85293 3.21267 8.53336Z"
+            fill="currentColor"
+          />
+        </svg>
+      ),
+      onClick: () => setIsPdfReportsOpen(true),
+      hasDot: false,
+    },
+    {
+      id: 'analytics',
+      label: 'Security Analytics & ML Performance',
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '100%', height: '100%' }}>
+          <path
+            d="M11.25 2C11.25 1.58579 11.5858 1.25 12 1.25C17.9371 1.25 22.75 6.06294 22.75 12C22.75 17.9371 17.9371 22.75 12 22.75C6.06294 22.75 1.25 17.9371 1.25 12C1.25 8.99296 2.48564 6.27316 4.47497 4.32299C4.77076 4.03302 5.24561 4.03774 5.53557 4.33353C5.82554 4.62932 5.82082 5.10417 5.52503 5.39414C3.81163 7.07382 2.75 9.41225 2.75 12C2.75 17.1086 6.89137 21.25 12 21.25C17.1086 21.25 21.25 17.1086 21.25 12C21.25 6.89137 17.1086 2.75 12 2.75C11.5858 2.75 11.25 2.41421 11.25 2Z"
+            fill="currentColor"
+          />
+          <path
+            d="M11.25 5C11.25 4.58579 11.5858 4.25 12 4.25C16.2802 4.25 19.75 7.71979 19.75 12C19.75 16.2802 16.2802 19.75 12 19.75C7.71979 19.75 4.25 16.2802 4.25 12C4.25 11.5858 4.58579 11.25 5 11.25C5.41421 11.25 5.75 11.5858 5.75 12C5.75 15.4518 8.54822 18.25 12 18.25C15.4518 18.25 18.25 15.4518 18.25 12C18.25 8.54822 15.4518 5.75 12 5.75C11.5858 5.75 11.25 5.41421 11.25 5Z"
+            fill="currentColor"
+          />
+          <path
+            d="M12 7.25C11.5858 7.25 11.25 7.58579 11.25 8C11.25 8.41421 11.5858 8.75 12 8.75C13.7949 8.75 15.25 10.2051 15.25 12C15.25 13.7949 13.7949 15.25 12 15.25C11.5858 15.25 11.25 15.5858 11.25 16C11.25 16.4142 11.5858 16.75 12 16.75C14.6234 16.75 16.75 14.6234 16.75 12C16.75 9.37665 14.6234 7.25 12 7.25Z"
+            fill="currentColor"
+          />
+        </svg>
+      ),
+      onClick: () => setIsAnalyticsOpen(true),
       hasDot: false,
     },
     {
@@ -751,7 +824,7 @@ export default function HomePage() {
       label: 'Scan Logs',
       lottieData: isDarkMode ? historyAnimData : darkHistoryAnimData,
       lottieRef: historyLottieRef,
-      onClick: () => { },
+      onClick: () => setIsScanLogsOpen(true),
       hasDot: false,
     },
     {
@@ -1087,6 +1160,14 @@ export default function HomePage() {
       }
 
       if (isUrl) {
+        // Fire real-time notification on scan start
+        addToast({
+          type: 'info',
+          title: 'Analyzing Target Endpoint',
+          message: `Multi-agent pipeline scanning ${processedUrl}...`,
+          duration: 3200,
+        });
+
         // Execute URL Scan with Short-Term & Long-Term Memory
         const response = await fetch('http://localhost:8000/api/scan/', {
           method: 'POST',
@@ -1120,6 +1201,9 @@ export default function HomePage() {
           }
         }
 
+        // Extract annotated screenshot (Stage 2 logo-highlighted version)
+        const resolvedAnnotatedUrl = data.annotated_screenshot_url || data.annotated_screenshot_data || null;
+
         // Update bot message with structured report details
         const isFailed = data.overall_status === 'FAILED';
         setMessages((prev) =>
@@ -1131,6 +1215,7 @@ export default function HomePage() {
                   status: isFailed ? 'failed' : 'completed',
                   report: data.report,
                   screenshotUrl: resolvedScreenshotUrl,
+                  annotatedScreenshotUrl: resolvedAnnotatedUrl,
                   urlAnalysisData: data.url_analysis_data,
                   toolTrace: data.tool_trace,
                   overallStatus: data.overall_status,
@@ -1142,17 +1227,25 @@ export default function HomePage() {
           )
         );
 
-        // Fire toast notification
+        // Fire real-time toast & notification
         if (isFailed) {
           addToast({ type: 'error', title: 'Scan Failed', message: data.error || 'Unknown error occurred during analysis.' });
         } else {
-          const riskLevel = data.report?.risk_level || 'Unknown';
+          const riskLevel = (data.report?.risk_level || 'Unknown').toUpperCase();
           const riskScore = data.report?.risk_score ?? 0;
-          const toastType = riskScore >= 61 ? 'warning' : riskScore >= 41 ? 'warning' : 'success';
+          const isPhishing = riskScore >= 61 || riskLevel === 'PHISHING';
+          const isSuspicious = !isPhishing && (riskScore >= 41 || riskLevel === 'SUSPICIOUS');
+          const toastType = isPhishing ? 'error' : isSuspicious ? 'warning' : 'success';
+          const toastTitle = isPhishing
+            ? `Threat Detected — ${riskLevel}`
+            : isSuspicious
+              ? `Suspicious Warning — ${riskLevel}`
+              : `Security Verified — ${riskLevel}`;
+
           addToast({
             type: toastType,
-            title: `Analysis Complete — ${riskLevel}`,
-            message: `Risk score: ${riskScore}% • Duration: ${data.total_duration_sec}s`,
+            title: toastTitle,
+            message: `${data.target_url || query} • Risk: ${riskScore}% • Duration: ${data.total_duration_sec}s`,
           });
         }
         setHistoryRefreshKey((k) => k + 1);
@@ -1243,6 +1336,14 @@ export default function HomePage() {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
+      // Fire real-time notification on scan start
+      addToast({
+        type: 'info',
+        title: 'Analyzing Target Endpoint',
+        message: `Multi-agent pipeline scanning ${urlToScan}...`,
+        duration: 3200,
+      });
+
       const response = await fetch('http://localhost:8000/api/scan/', {
         method: 'POST',
         headers,
@@ -1266,6 +1367,9 @@ export default function HomePage() {
         }
       }
 
+      // Extract annotated screenshot (Stage 2 logo-highlighted version)
+      const resolvedAnnotatedUrl = data.annotated_screenshot_url || data.annotated_screenshot_data || null;
+
       const isFailed = data.overall_status === 'FAILED';
       setMessages((prev) =>
         prev.map((msg) =>
@@ -1276,6 +1380,7 @@ export default function HomePage() {
               status: isFailed ? 'failed' : 'completed',
               report: data.report,
               screenshotUrl: resolvedScreenshotUrl,
+              annotatedScreenshotUrl: resolvedAnnotatedUrl,
               urlAnalysisData: data.url_analysis_data,
               toolTrace: data.tool_trace,
               overallStatus: data.overall_status,
@@ -1290,13 +1395,21 @@ export default function HomePage() {
       if (isFailed) {
         addToast({ type: 'error', title: 'Scan Failed', message: data.error || 'Unknown error occurred during analysis.' });
       } else {
-        const riskLevel = data.report?.risk_level || 'Unknown';
+        const riskLevel = (data.report?.risk_level || 'Unknown').toUpperCase();
         const riskScore = data.report?.risk_score ?? 0;
-        const toastType = riskScore >= 61 ? 'warning' : riskScore >= 41 ? 'warning' : 'success';
+        const isPhishing = riskScore >= 61 || riskLevel === 'PHISHING';
+        const isSuspicious = !isPhishing && (riskScore >= 41 || riskLevel === 'SUSPICIOUS');
+        const toastType = isPhishing ? 'error' : isSuspicious ? 'warning' : 'success';
+        const toastTitle = isPhishing
+          ? `Threat Detected — ${riskLevel}`
+          : isSuspicious
+            ? `Suspicious Warning — ${riskLevel}`
+            : `Security Verified — ${riskLevel}`;
+
         addToast({
           type: toastType,
-          title: `Analysis Complete — ${riskLevel}`,
-          message: `Risk score: ${riskScore}% • Duration: ${data.total_duration_sec}s`,
+          title: toastTitle,
+          message: `${data.target_url || urlToScan} • Risk: ${riskScore}% • Duration: ${data.total_duration_sec}s`,
         });
       }
     } catch (err) {
@@ -1435,7 +1548,11 @@ export default function HomePage() {
                     </button>
                     <button
                       type="button"
-                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-rose-600 transition hover:bg-rose-500/10 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                      onClick={() => {
+                        setIsTitleMenuOpen(false);
+                        setIsDeleteModalOpen(true);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-rose-600 transition hover:bg-rose-500/10 dark:text-rose-300 dark:hover:bg-rose-500/10 cursor-pointer"
                     >
                       <Trash2 size={14} />
                       Delete
@@ -1485,6 +1602,7 @@ export default function HomePage() {
                               report={msg.report}
                               duration={msg.duration}
                               screenshotUrl={msg.screenshotUrl}
+                              annotatedScreenshotUrl={msg.annotatedScreenshotUrl}
                               toolTrace={msg.toolTrace}
                               urlAnalysisData={msg.urlAnalysisData}
                               url={msg.url}
@@ -1671,6 +1789,37 @@ export default function HomePage() {
       <ScreenshotsGalleryModal
         isOpen={isScreenshotsOpen}
         onClose={() => setIsScreenshotsOpen(false)}
+        isDarkMode={isDarkMode}
+      />
+
+      <ScanLogsModal
+        isOpen={isScanLogsOpen}
+        onClose={() => setIsScanLogsOpen(false)}
+        isDarkMode={isDarkMode}
+        onSelectChat={handleSelectChat}
+      />
+
+      <PDFReportsModal
+        isOpen={isPdfReportsOpen}
+        onClose={() => setIsPdfReportsOpen(false)}
+        isDarkMode={isDarkMode}
+        onSelectChat={handleSelectChat}
+      />
+
+      <AnalyticsDashboardModal
+        isOpen={isAnalyticsOpen}
+        onClose={() => setIsAnalyticsOpen(false)}
+        isDarkMode={isDarkMode}
+      />
+
+      <DeleteChatModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          if (!isDeletingChat) setIsDeleteModalOpen(false);
+        }}
+        onConfirm={handleDeleteCurrentChat}
+        chatTitle={chatTitle}
+        isDeleting={isDeletingChat}
         isDarkMode={isDarkMode}
       />
 

@@ -23,6 +23,7 @@ const __PILL_NOTIFICATION_STYLES = `
 
 /* ── Compact Pill Notification Container (Subtle Minimal Shadow) ── */
 .t-pill-notification {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -146,6 +147,7 @@ const __PILL_NOTIFICATION_STYLES = `
 }
 
 .t-pill-title {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
   font-size: 13px;
   font-weight: 700;
   color: #0f172a;
@@ -155,6 +157,7 @@ const __PILL_NOTIFICATION_STYLES = `
 }
 
 .t-pill-desc {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
   font-size: 12.5px;
   font-weight: 400;
   color: #64748b;

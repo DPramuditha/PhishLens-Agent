@@ -60,6 +60,16 @@ export const DEFAULT_AGENT_TASKS = [
     ],
   },
   {
+    key: "web_search",
+    label: "Tavily Web Search & OSINT",
+    amount: "Tavily API",
+    details: [
+      { label: "Querying threat databases", meta: "scam/phish" },
+      { label: "Checking official brand presence", meta: "verified" },
+      { label: "Gathering community advisories", meta: "citations" },
+    ],
+  },
+  {
     key: "orchestrator",
     label: "ReAct Synthesis & Verdict",
     amount: "JSON spec",
