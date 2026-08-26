@@ -240,7 +240,7 @@ export default function RealtimeTodoList({
   return (
     <aside
       aria-label="Real-time agent execution tasks"
-      className="fixed bottom-22 right-5 z-40 w-[295px] max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border border-gray-200/90 bg-white/95 p-2.5 shadow-xl backdrop-blur-xl transition-all duration-300 dark:border-zinc-800/90 dark:bg-[#18181b]/95 font-sans select-none"
+      className="fixed bottom-22 right-5 z-40 w-[320px] max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border border-gray-200/90 bg-white/95 p-2.5 shadow-xl backdrop-blur-xl transition-all duration-300 dark:border-zinc-800/90 dark:bg-[#18181b]/95 font-sans select-none"
       style={{ animation: "fade-up 300ms cubic-bezier(0.23,1,0.32,1) both" }}
     >
       {/* ── Top Header ── */}
@@ -292,7 +292,7 @@ export default function RealtimeTodoList({
 
       {/* ── Tasks Container ── */}
       <div
-        className={`mt-2 flex flex-col max-h-[270px] overflow-y-auto no-scrollbar pr-0.5 ${
+        className={`mt-2 flex flex-col max-h-[380px] overflow-y-auto no-scrollbar pr-0.5 ${
           isList
             ? "gap-0 rounded-lg overflow-hidden border border-gray-200/80 dark:border-zinc-800"
             : "gap-1.5"
@@ -310,7 +310,7 @@ export default function RealtimeTodoList({
           return (
             <div
               key={task.key}
-              className={`self-stretch overflow-hidden transition-[border-radius,background-color,border-color] duration-200 ${
+              className={`shrink-0 self-stretch overflow-hidden transition-[border-radius,background-color,border-color] duration-200 ${
                 isList
                   ? "border-b border-gray-200/70 dark:border-zinc-800 last:border-0 hover:bg-gray-50/80 dark:hover:bg-zinc-800/40"
                   : open
@@ -328,7 +328,7 @@ export default function RealtimeTodoList({
                 onClick={() =>
                   setManualOpen((curr) => ({ ...curr, [task.key]: !open }))
                 }
-                className="flex h-8.5 w-full items-center gap-2 px-2 text-left cursor-pointer"
+                className="flex min-h-8.5 w-full items-center gap-2 px-2 py-1 text-left cursor-pointer"
               >
                 {/* Status Badge / Spinner */}
                 <span className="flex size-5 shrink-0 items-center justify-center">
@@ -410,7 +410,7 @@ export default function RealtimeTodoList({
                   opacity: open ? 1 : 0,
                 }}
               >
-                <div className="overflow-hidden">
+                <div className="overflow-hidden min-h-0">
                   <div className="mb-2 mt-0.5 grid grid-cols-[20px_1fr] gap-1.5 px-2">
                     <span
                       aria-hidden="true"

@@ -26,7 +26,7 @@ from django.views.decorators.http import require_http_methods
 from dotenv import load_dotenv
 
 from backend.auth_views import optional_jwt
-from backend.agents.models import ChatSession, ChatMessage, AgentMemoryRecord
+from backend.agents.models import ChatSession, ChatMessage, AgentMemoryRecord, UserFeedback
 from backend.agents.memory import long_term_memory
 from backend.agents.pdf_report_agent import PDFReportAgent
 
@@ -74,6 +74,184 @@ def _format_chat_message(request, msg: ChatMessage) -> dict:
     }
 
 
+def generate_hitl_questions(url: str = None, report: dict = None, reply_text: str = None, user_query: str = None) -> list:
+    """
+    Dynamically generates context-aware Human-in-the-Loop approval questions
+    tailored specifically to the target domain, brand impersonated, risk score,
+    security findings, or user dialogue topic.
+    """
+    domain = None
+    if url:
+        try:
+            domain = urlparse(url if url.startswith(("http://", "https://")) else f"https://{url}").netloc
+        except Exception:
+            domain = url
+    if not domain and user_query:
+        domain = "target inquiry"
+
+    report = report or {}
+    risk_score = report.get("risk_score")
+    risk_level = (report.get("risk_level") or "UNKNOWN").upper()
+    brand_info = report.get("brand_impersonation") if isinstance(report.get("brand_impersonation"), dict) else {}
+    brand = brand_info.get("brand") if brand_info.get("detected") else None
+
+    # Case 1: Phishing / High Threat
+    if risk_level in ["PHISHING", "CRITICAL", "HIGH"] or (isinstance(risk_score, (int, float)) and risk_score >= 60):
+        score_str = f"{risk_score}%" if risk_score is not None else "High"
+        target_display = f"{brand} ({domain})" if brand and domain else (brand or domain or "this website")
+        return [
+            {
+                "id": "threat_assessment_accuracy",
+                "q": f"The security scanner flagged {target_display} as dangerous ({score_str} risk). Do you agree with this result?",
+                "type": "radio",
+                "options": [
+                    f"Yes, it looks like a fake/scam site for {brand or domain}",
+                    "Suspicious, but could be a legitimate partner",
+                    "No, this is a real and safe website",
+                    "Not sure, need to check more",
+                ],
+            },
+            {
+                "id": "critical_signals",
+                "q": f"What suspicious warning on {domain or 'the website'} was most noticeable to you?",
+                "type": "check",
+                "options": [
+                    f"Imitated company logo or design ({brand})" if brand else "Lookalike website design & layout",
+                    "Fake login box asking for passwords or PINs",
+                    "Website address was registered very recently",
+                    "Suspicious link or security alert",
+                ],
+            },
+            {
+                "id": "mitigation_usefulness",
+                "q": "Was the safety advice easy to understand and helpful?",
+                "type": "radio",
+                "options": [
+                    "Very clear and helped me stay safe",
+                    "Helpful, but wanted more details",
+                    "A bit too complicated",
+                    "I want automatic link blocking",
+                ],
+            },
+        ]
+
+    # Case 2: Suspicious / Medium Risk
+    elif risk_level in ["SUSPICIOUS", "MEDIUM"] or (isinstance(risk_score, (int, float)) and 40 <= risk_score < 60):
+        score_str = f"{risk_score}%" if risk_score is not None else "Moderate"
+        return [
+            {
+                "id": "suspicious_evaluation",
+                "q": f"The scanner gave {domain or 'this website'} a caution warning ({score_str} risk). Does this seem right to you?",
+                "type": "radio",
+                "options": [
+                    "Yes, the site looks questionable",
+                    "No, this is a trusted company website",
+                    "It should have been marked as dangerous",
+                    "Not sure",
+                ],
+            },
+            {
+                "id": "investigation_priorities",
+                "q": "What information would be most helpful for you to see?",
+                "type": "check",
+                "options": [
+                    "Who registered the website and where it is located",
+                    "Side-by-side comparison with the real website",
+                    "Whether it asks for personal information or passwords",
+                    "Community safety reviews and warnings",
+                ],
+            },
+            {
+                "id": "report_clarity",
+                "q": "How easy was the security report to read and understand?",
+                "type": "radio",
+                "options": [
+                    "Very clear and easy to follow",
+                    "Good and informative",
+                    "A little confusing",
+                    "Needs simpler summary points",
+                ],
+            },
+        ]
+
+    # Case 3: Legitimate / Safe Verified
+    elif risk_level in ["LEGITIMATE", "SAFE", "LOW"] or (isinstance(risk_score, (int, float)) and risk_score < 40):
+        score_str = f"{risk_score}%" if risk_score is not None else "Safe"
+        return [
+            {
+                "id": "legitimacy_confirmation",
+                "q": f"The scanner verified {domain or 'this website'} as safe ({score_str} risk). Does this match what you expected?",
+                "type": "radio",
+                "options": [
+                    f"Yes, this is the official site for {brand or domain or 'this service'}",
+                    "No, I noticed something suspicious",
+                    "Expected more checks",
+                    "Result looks completely accurate",
+                ],
+            },
+            {
+                "id": "confidence_factors",
+                "q": "What gave you the most confidence that the website is safe?",
+                "type": "check",
+                "options": [
+                    "Trusted website name and valid security certificate",
+                    "Clean page with no deceptive login prompts",
+                    "Official brand logo and authentic content",
+                    "Good security reputation",
+                ],
+            },
+            {
+                "id": "agent_performance",
+                "q": "How fast and responsive was the scan?",
+                "type": "radio",
+                "options": [
+                    "Super fast and smooth",
+                    "Good speed",
+                    "A bit slow",
+                    "Acceptable",
+                ],
+            },
+        ]
+
+    # Case 4: Conversational Follow-up Dialogue
+    query_snippet = user_query[:42] + ("..." if len(user_query or "") > 42 else "") if user_query else "your question"
+    return [
+        {
+            "id": "dialogue_relevance",
+            "q": f"Did the assistant answer your question clearly regarding \"{query_snippet}\"?",
+            "type": "radio",
+            "options": [
+                "Yes, answered clearly and accurately",
+                "Partially answered my question",
+                "Missed what I was asking for",
+                "Needs simpler explanations",
+            ],
+        },
+        {
+            "id": "valuable_insights",
+            "q": "What was the most helpful part of the answer?",
+            "type": "check",
+            "options": [
+                "Clear explanation of the safety risks",
+                "Step-by-step advice on what to do next",
+                "Remembering our previous scan discussion",
+                "Short and easy to read format",
+            ],
+        },
+        {
+            "id": "assistant_rating",
+            "q": "How would you rate your overall conversation with the assistant?",
+            "type": "radio",
+            "options": [
+                "Very helpful and friendly",
+                "Good and informative",
+                "Average",
+                "Needs improvement",
+            ],
+        },
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Scan View
 # ---------------------------------------------------------------------------
@@ -116,6 +294,7 @@ def scan_url_view(request):
         # Add resolved screenshot URLs (prioritize Base64 in-memory data)
         result["screenshot_url"] = result.get("screenshot_data") or _resolve_screenshot_url(request, result.get("screenshot_path"))
         result["annotated_screenshot_url"] = result.get("annotated_screenshot_data") or _resolve_screenshot_url(request, result.get("annotated_screenshot_path"))
+        result["hitl_questions"] = generate_hitl_questions(url=url, report=result.get("report"))
 
         return JsonResponse(result, status=200, json_dumps_params={"indent": 2})
     except Exception as e:
@@ -249,11 +428,23 @@ def chat_detail_view(request, chat_id):
 
     if request.method == "GET":
         messages = [_format_chat_message(request, m) for m in chat.messages.all()]
+        has_feedback = chat.feedbacks.exists()
+        last_assistant = chat.messages.filter(sender="assistant").order_by("-created_at").first()
+        dynamic_questions = []
+        if last_assistant:
+            dynamic_questions = generate_hitl_questions(
+                url=last_assistant.target_url or chat.title,
+                report=last_assistant.report,
+                reply_text=last_assistant.text,
+            )
+
         return JsonResponse({
             "id": str(chat.id),
             "title": chat.title,
             "created_at": chat.created_at.isoformat(),
             "updated_at": chat.updated_at.isoformat(),
+            "has_feedback": has_feedback,
+            "hitl_questions": dynamic_questions,
             "messages": messages,
         }, status=200)
 
@@ -317,6 +508,7 @@ def chat_message_view(request, chat_id):
         )
         if result.get("screenshot_path"):
             result["screenshot_url"] = _resolve_screenshot_url(request, result["screenshot_path"])
+        result["hitl_questions"] = generate_hitl_questions(url=potential_url, report=result.get("report"))
         return JsonResponse(result, status=200)
 
     # Otherwise, execute follow-up conversation using short-term and long-term memory
@@ -324,6 +516,10 @@ def chat_message_view(request, chat_id):
         chat_id=str(session_uuid),
         user_message=message_text,
         user=getattr(request, "user", None),
+    )
+    followup_result["hitl_questions"] = generate_hitl_questions(
+        reply_text=followup_result.get("reply"),
+        user_query=message_text
     )
     return JsonResponse(followup_result, status=200)
 
@@ -1031,6 +1227,139 @@ def analytics_dashboard_view(request):
         "models_performance": models_performance,
         "user_feature_usage": user_feature_usage,
     }, status=200)
+
+
+# ---------------------------------------------------------------------------
+# Human-in-the-Loop (HITL) User Feedback Endpoint
+# ---------------------------------------------------------------------------
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+@optional_jwt
+def user_feedback_view(request):
+    """
+    POST /api/feedback/
+    Body: {
+        "chat_id": "<uuid>",
+        "message_id": "<uuid>",
+        "target_url": "https://example.com",
+        "llm_response_summary": { ... },
+        "feedback_type": "hitl_approval",
+        "responses": {
+            "0": { "question": "How accurate was the AI threat assessment?", "selected": ["Spot on & accurate"], "custom": "" },
+            ...
+        },
+        "rating": 5
+    }
+
+    GET /api/feedback/
+    Returns recent feedback history for the authenticated user or all sessions.
+    """
+    user = getattr(request, "user", None)
+    is_authenticated = user and getattr(user, "is_authenticated", False)
+
+    if request.method == "POST":
+        try:
+            body = json.loads(request.body) if request.body else {}
+        except (json.JSONDecodeError, AttributeError):
+            return JsonResponse({"error": "Invalid JSON body."}, status=400)
+
+        chat_id_str = body.get("chat_id")
+        message_id_str = body.get("message_id")
+        target_url = body.get("target_url") or ""
+        llm_response_summary = body.get("llm_response_summary") or {}
+        feedback_type = body.get("feedback_type", "hitl_approval")
+        responses = body.get("responses") or {}
+        rating = body.get("rating")
+
+        # Resolve ChatSession
+        chat_obj = None
+        if chat_id_str:
+            try:
+                chat_uuid = uuid.UUID(str(chat_id_str))
+                chat_obj = ChatSession.objects.filter(id=chat_uuid).first()
+            except (ValueError, TypeError):
+                pass
+
+        # Resolve ChatMessage
+        message_obj = None
+        if message_id_str:
+            try:
+                msg_uuid = uuid.UUID(str(message_id_str))
+                message_obj = ChatMessage.objects.filter(id=msg_uuid).first()
+            except (ValueError, TypeError):
+                pass
+
+        if not message_obj and chat_obj:
+            message_obj = chat_obj.messages.filter(sender="assistant").order_by("-created_at").first()
+
+        # Enforce only one feedback per chat session
+        if chat_obj and chat_obj.feedbacks.exists():
+            existing = chat_obj.feedbacks.order_by("-created_at").first()
+            return JsonResponse({
+                "status": "already_submitted",
+                "message": "Feedback has already been recorded for this scan session.",
+                "id": str(existing.id),
+                "created_at": existing.created_at.isoformat(),
+            }, status=200)
+
+        if not target_url:
+            if message_obj and message_obj.target_url:
+                target_url = message_obj.target_url
+            elif chat_obj and chat_obj.title:
+                target_url = chat_obj.title
+
+        if not llm_response_summary and message_obj:
+            if message_obj.report:
+                llm_response_summary = {
+                    "risk_score": message_obj.report.get("risk_score"),
+                    "risk_level": message_obj.report.get("risk_level"),
+                    "summary": message_obj.report.get("summary"),
+                    "brand_impersonation": message_obj.report.get("brand_impersonation"),
+                }
+            elif message_obj.text:
+                llm_response_summary = {"text": message_obj.text}
+
+        feedback = UserFeedback.objects.create(
+            user=user if is_authenticated else None,
+            chat=chat_obj,
+            message=message_obj,
+            target_url=target_url or "",
+            llm_response_summary=llm_response_summary if isinstance(llm_response_summary, dict) else {"summary": str(llm_response_summary)},
+            feedback_type=feedback_type,
+            responses=responses,
+            rating=int(rating) if rating is not None and str(rating).isdigit() else None,
+        )
+
+        return JsonResponse({
+            "status": "ok",
+            "message": "Feedback submitted and recorded successfully.",
+            "id": str(feedback.id),
+            "created_at": feedback.created_at.isoformat(),
+        }, status=201)
+
+    elif request.method == "GET":
+        if is_authenticated:
+            qs = UserFeedback.objects.filter(user=user)
+        else:
+            qs = UserFeedback.objects.filter(user__isnull=True)
+
+        items = []
+        for fb in qs.order_by("-created_at")[:50]:
+            items.append({
+                "id": str(fb.id),
+                "chat_id": str(fb.chat_id) if fb.chat_id else None,
+                "message_id": str(fb.message_id) if fb.message_id else None,
+                "target_url": fb.target_url,
+                "feedback_type": fb.feedback_type,
+                "responses": fb.responses,
+                "rating": fb.rating,
+                "llm_response_summary": fb.llm_response_summary,
+                "created_at": fb.created_at.isoformat() if fb.created_at else None,
+            })
+
+        return JsonResponse({"feedbacks": items, "count": len(items)}, status=200)
+
 
 
 

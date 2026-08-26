@@ -32,6 +32,7 @@ from backend.agents.views import (
     export_pdf_view,
     export_chat_pdf_view,
     analytics_dashboard_view,
+    user_feedback_view,
 )
 
 urlpatterns = [
@@ -39,6 +40,7 @@ urlpatterns = [
     path('api/scan/', scan_url_view, name='scan_url'),
     path('api/scan/pdf/', export_pdf_view, name='export_scan_pdf'),
     path('api/health/', health_check, name='health_check'),
+    path('api/feedback/', user_feedback_view, name='user_feedback'),
     # Chat & Agent Memory Endpoints
     path('api/chats/', chats_list_create_view, name='chats_list_create'),
     path('api/chats/<uuid:chat_id>/', chat_detail_view, name='chat_detail'),

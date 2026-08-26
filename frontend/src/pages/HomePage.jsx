@@ -44,6 +44,7 @@ import MessageActionBar from '../components/MessageActionBar';
 import RealtimeTodoList from '../components/RealtimeTodoList';
 import WelcomeCharacterAnimation from '../components/WelcomeCharacterAnimation';
 import AppleTopControls from '../components/AppleTopControls';
+import ApprovalCard from '../components/ApprovalCard';
 import { useAuth } from '../context/AuthContext';
 
 const PLACEHOLDERS = [
@@ -594,6 +595,9 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showAgentTasks, setShowAgentTasks] = useState(false);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [showApprovalCard, setShowApprovalCard] = useState(false);
+  const [approvalContext, setApprovalContext] = useState(null);
+  const [chatHasFeedback, setChatHasFeedback] = useState(false);
 
   const handleDeleteCurrentChat = async () => {
     const targetChatId = activeChatId || routeChatId;
@@ -630,6 +634,9 @@ export default function HomePage() {
       setHasSentMessage(false);
       setChatTitle('New Scan');
       setShowAgentTasks(false);
+      setChatHasFeedback(false);
+      setShowApprovalCard(false);
+      setApprovalContext(null);
       return;
     }
 
@@ -648,6 +655,7 @@ export default function HomePage() {
         if (isCancelled) return;
 
         if (data.title) setChatTitle(data.title);
+        setChatHasFeedback(Boolean(data.has_feedback));
 
         if (data.messages && data.messages.length > 0) {
           const formatted = data.messages.map((msg) => ({
@@ -670,6 +678,18 @@ export default function HomePage() {
           setMessages(formatted);
           setHasSentMessage(true);
           setShowAgentTasks(true);
+
+          const lastAssistant = formatted.filter((m) => !m.isUser).slice(-1)[0];
+          if (lastAssistant) {
+            setApprovalContext({
+              targetUrl: lastAssistant.url || data.title,
+              llmResponse: lastAssistant.report || { text: lastAssistant.text },
+              chatId: routeChatId,
+              messageId: lastAssistant.id,
+              questions: data.hitl_questions || null,
+            });
+            setShowApprovalCard(false);
+          }
         } else {
           setMessages([]);
           setHasSentMessage(false);
@@ -747,6 +767,9 @@ export default function HomePage() {
         setChatTitle('New Scan');
         setShowAgentTasks(false);
         setActiveChatId(null);
+        setChatHasFeedback(false);
+        setShowApprovalCard(false);
+        setApprovalContext(null);
         navigate('/chat');
       },
       hasDot: false,
@@ -1248,6 +1271,16 @@ export default function HomePage() {
             message: `${data.target_url || query} • Risk: ${riskScore}% • Duration: ${data.total_duration_sec}s`,
           });
         }
+        setApprovalContext({
+          targetUrl: data.target_url || processedUrl || query,
+          llmResponse: data.report || null,
+          chatId: data.chat_id || activeChatId,
+          messageId: botMsgId,
+          questions: data.hitl_questions || null,
+        });
+        if (!chatHasFeedback) {
+          setShowApprovalCard(true);
+        }
         setHistoryRefreshKey((k) => k + 1);
       } else {
         // Execute Conversational Follow-up Message using Short-Term & Long-Term Memory
@@ -1284,6 +1317,16 @@ export default function HomePage() {
               : msg
           )
         );
+        setApprovalContext({
+          targetUrl: query,
+          llmResponse: { text: data.reply },
+          chatId: data.chat_id || activeChatId,
+          messageId: botMsgId,
+          questions: data.hitl_questions || null,
+        });
+        if (!chatHasFeedback) {
+          setShowApprovalCard(true);
+        }
         setHistoryRefreshKey((k) => k + 1);
       }
     } catch (err) {
@@ -1711,6 +1754,22 @@ export default function HomePage() {
           }}
         >
           <div className="max-w-2xl w-full mx-auto relative pointer-events-auto" style={{ zIndex: 1 }}>
+            {/* Human-in-the-Loop Feedback Approval Card (Top of Input Bar) */}
+            {hasSentMessage && !chatHasFeedback && (
+              <ApprovalCard
+                isOpen={showApprovalCard}
+                onClose={() => setShowApprovalCard(false)}
+                onSubmitted={() => {
+                  setChatHasFeedback(true);
+                }}
+                chatId={approvalContext?.chatId || activeChatId || routeChatId}
+                messageId={approvalContext?.messageId}
+                targetUrl={approvalContext?.targetUrl || (messages.length > 0 ? messages[messages.length - 1]?.url : '')}
+                llmResponse={approvalContext?.llmResponse || (messages.length > 0 ? messages[messages.length - 1]?.report || messages[messages.length - 1]?.text : null)}
+                questions={approvalContext?.questions}
+              />
+            )}
+
             <form
               ref={inputFormRef}
               onSubmit={handleSend}

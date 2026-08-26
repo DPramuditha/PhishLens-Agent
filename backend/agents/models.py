@@ -121,3 +121,53 @@ class AgentMemoryRecord(models.Model):
 
     def __str__(self):
         return f"Memory [{self.namespace}] -> {self.key}"
+
+
+class UserFeedback(models.Model):
+    """
+    Human-in-the-Loop (HITL) User Feedback model.
+    Stores structured evaluation from the logged-in user on AI agent answers,
+    the application experience, along with the reviewed LLM response data.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="feedbacks",
+        help_text="The authenticated user submitting feedback (null for anonymous/guest sessions).",
+    )
+    chat = models.ForeignKey(
+        ChatSession,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="feedbacks",
+        help_text="Associated chat session if applicable.",
+    )
+    message = models.ForeignKey(
+        ChatMessage,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="feedbacks",
+        help_text="The specific chat message / LLM answer being evaluated.",
+    )
+    target_url = models.CharField(max_length=2048, blank=True, null=True, help_text="Target URL or domain evaluated")
+    llm_response_summary = models.JSONField(blank=True, null=True, default=dict, help_text="Snapshot of the LLM response / report")
+    feedback_type = models.CharField(max_length=50, default="hitl_approval", help_text="Type of feedback (e.g. hitl_approval, general)")
+    responses = models.JSONField(default=dict, help_text="Question-by-question user selections and custom feedback")
+    rating = models.IntegerField(blank=True, null=True, help_text="Overall numerical rating (if provided)")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "User Feedback"
+        verbose_name_plural = "User Feedbacks"
+
+    def __str__(self):
+        user_str = self.user.username if self.user else "Anonymous"
+        return f"Feedback from {user_str} on {self.target_url or 'General'} @ {self.created_at}"
+
