@@ -9,6 +9,8 @@ from backend.apps.authentication.views import (
     email_login_view,
     email_register_view,
     update_profile_view,
+    upload_avatar_view,
+    delete_avatar_view,
     change_password_view,
     logout_view,
 )
@@ -21,6 +23,9 @@ urlpatterns = [
     path("login/", email_login_view, name="email_login"),
     path("register/", email_register_view, name="email_register"),
     path("profile/update/", update_profile_view, name="update_profile"),
+    path("profile/avatar/", upload_avatar_view, name="upload_avatar"),
+    path("profile/avatar/delete/", delete_avatar_view, name="delete_avatar"),
     path("change-password/", change_password_view, name="change_password"),
     path("logout/", logout_view, name="logout"),
 ]
+

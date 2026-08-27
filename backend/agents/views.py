@@ -1186,10 +1186,16 @@ def analytics_dashboard_view(request):
             {"brand": "Google Accounts", "count": max(1, user_suspicious // 2) if user_total_scans > 0 else 2, "threat_type": "Brand Similarity Match"},
         ]
 
+    user_avatar = ""
+    if is_authenticated:
+        from backend.apps.authentication.services import AuthService
+        user_avatar = AuthService.get_user_picture(user, request=request)
+
     user_feature_usage = {
         "user_profile": {
             "name": (user.get_full_name() or user.username) if is_authenticated else "Guest User",
             "email": user.email if (is_authenticated and user.email) else (user.username if is_authenticated else "Guest Explorer"),
+            "picture": user_avatar,
             "is_authenticated": bool(is_authenticated),
             "member_since": user.date_joined.strftime("%B %Y") if (is_authenticated and hasattr(user, "date_joined") and user.date_joined) else "Active",
             "plan": "Enterprise Agent AI" if is_authenticated else "Guest Explorer",
@@ -1207,6 +1213,7 @@ def analytics_dashboard_view(request):
         "features_breakdown": features_breakdown,
         "top_impersonated_brands": top_brands,
     }
+
 
     return JsonResponse({
         "status": "ok",

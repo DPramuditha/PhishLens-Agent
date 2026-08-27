@@ -2,17 +2,19 @@
 PhishLens Agent — Authentication API Views.
 
 Endpoints:
-- POST /api/auth/google/ -> Exchange Google ID token for PhishLens JWT
-- GET  /api/auth/me/ -> Return current authenticated user profile
-- POST /api/auth/login/ -> Email & password login
-- POST /api/auth/register/ -> Email registration with strong password
-- POST /api/auth/profile/update/ -> Update user profile
-- POST /api/auth/change-password/ -> Change user password
-- POST /api/auth/logout/ -> Invalidate session / client logout
+- POST   /api/auth/google/ -> Exchange Google ID token for PhishLens JWT
+- GET    /api/auth/me/ -> Return current authenticated user profile
+- POST   /api/auth/login/ -> Email & password login
+- POST   /api/auth/register/ -> Email registration with strong password
+- POST   /api/auth/profile/update/ -> Update user profile
+- POST   /api/auth/profile/avatar/ -> Upload custom profile picture
+- DELETE /api/auth/profile/avatar/ -> Remove custom profile picture
+- POST   /api/auth/change-password/ -> Change user password
+- POST   /api/auth/logout/ -> Invalidate session / client logout
 """
 
 import json
-from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.http import HttpRequest, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
@@ -44,7 +46,7 @@ def google_auth_view(request: HttpRequest) -> HttpResponse:
     if not credential and not access_token:
         return api_error("Missing 'credential' or 'access_token' parameter in request body.", status=400)
 
-    res, err = AuthService.handle_google_login(credential=credential, access_token=access_token)
+    res, err = AuthService.handle_google_login(credential=credential, access_token=access_token, request=request)
     if err:
         return api_unauthorized(err)
 
@@ -66,7 +68,7 @@ def email_register_view(request: HttpRequest) -> HttpResponse:
     except (json.JSONDecodeError, AttributeError):
         return api_error("Invalid JSON payload.", status=400)
 
-    res, err, status_code = AuthService.register_email_user(name, email, password)
+    res, err, status_code = AuthService.register_email_user(name, email, password, request=request)
     if err:
         return api_error(err, status=status_code)
 
@@ -87,7 +89,7 @@ def email_login_view(request: HttpRequest) -> HttpResponse:
     except (json.JSONDecodeError, AttributeError):
         return api_error("Invalid JSON payload.", status=400)
 
-    res, err = AuthService.login_email_user(email, password)
+    res, err = AuthService.login_email_user(email, password, request=request)
     if err:
         return api_unauthorized(err)
 
@@ -100,11 +102,11 @@ def email_login_view(request: HttpRequest) -> HttpResponse:
 def current_user_view(request: HttpRequest) -> HttpResponse:
     """
     GET /api/auth/me/
-    Returns currently authenticated user profile from JWT claims.
+    Returns currently authenticated user profile from DB profile and JWT claims.
     """
     user = request.user
     token_payload = getattr(request, "token_payload", {}) or {}
-    picture = token_payload.get("picture", "")
+    picture = AuthService.get_user_picture(user, request=request) or token_payload.get("picture", "")
     name = f"{user.first_name} {user.last_name}".strip() or token_payload.get("name") or user.username
 
     return api_success(
@@ -135,11 +137,50 @@ def update_profile_view(request: HttpRequest) -> HttpResponse:
     except (json.JSONDecodeError, AttributeError):
         return api_error("Invalid JSON body.", status=400)
 
-    res, err = AuthService.update_user_profile(request.user, name)
+    res, err = AuthService.update_user_profile(request.user, name, request=request)
     if err:
         return api_error(err, status=400)
 
     return api_success(data=res, message="Profile updated successfully.", status=200)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@jwt_required
+def upload_avatar_view(request: HttpRequest) -> HttpResponse:
+    """
+    POST /api/auth/profile/avatar/
+    Multipart form data containing image file in 'avatar', 'picture', 'image', or 'file'.
+    """
+    image_file = (
+        request.FILES.get("avatar")
+        or request.FILES.get("picture")
+        or request.FILES.get("image")
+        or request.FILES.get("file")
+    )
+    if not image_file:
+        return api_error("No image file provided in request. Please upload using 'avatar' field.", status=400)
+
+    res, err = AuthService.upload_user_avatar(request.user, image_file, request=request)
+    if err:
+        return api_error(err, status=400)
+
+    return api_success(data=res, message="Profile picture updated successfully.", status=200)
+
+
+@csrf_exempt
+@require_http_methods(["DELETE", "POST"])
+@jwt_required
+def delete_avatar_view(request: HttpRequest) -> HttpResponse:
+    """
+    DELETE /api/auth/profile/avatar/ or POST /api/auth/profile/avatar/delete/
+    Removes the custom uploaded avatar.
+    """
+    res, err = AuthService.remove_user_avatar(request.user, request=request)
+    if err:
+        return api_error(err, status=400)
+
+    return api_success(data=res, message="Profile picture removed successfully.", status=200)
 
 
 @csrf_exempt
@@ -178,3 +219,4 @@ def logout_view(request: HttpRequest) -> HttpResponse:
     response.delete_cookie("jwt_token")
     response.delete_cookie("access_token")
     return response
+

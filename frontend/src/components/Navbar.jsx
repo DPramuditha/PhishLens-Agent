@@ -71,7 +71,7 @@ export default function Navbar({ brandName = "PhishLens", onActionClick }) {
               className="flex items-center gap-2 bg-white text-black font-semibold text-[13px] px-4 py-1.5 rounded-full hover:bg-zinc-100 active:scale-[0.97] transition-all duration-150 cursor-pointer"
             >
               {user?.picture && (
-                <img src={user.picture} alt="" className="w-4 h-4 rounded-full" />
+                <img src={user.picture} alt="" className="w-4 h-4 rounded-full object-cover shrink-0" />
               )}
               <span>Go to Chat</span>
             </button>
