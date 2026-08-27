@@ -2,11 +2,15 @@
 PhishLens Agent — Authentication Business Logic Services.
 """
 
+import os
+import uuid
 from typing import Any, Dict, Optional, Tuple
+from PIL import Image
 
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 
+from backend.apps.authentication.models import UserProfile
 from backend.core.security import (
     generate_jwt_token,
     verify_google_id_token,
@@ -25,12 +29,29 @@ class AuthService:
     - Email & Password login
     - User profile update
     - Password change
+    - Profile picture / avatar upload & removal
     """
+
+    @staticmethod
+    def get_user_picture(user: User, request=None) -> str:
+        """Retrieves active avatar URL from user profile if available."""
+        if not user or not user.is_authenticated:
+            return ""
+        try:
+            profile = getattr(user, "profile", None)
+            if not profile:
+                profile = UserProfile.objects.filter(user=user).first()
+            if profile:
+                return profile.get_avatar_url(request=request)
+        except Exception:
+            pass
+        return ""
 
     @staticmethod
     def handle_google_login(
         credential: Optional[str] = None,
         access_token: Optional[str] = None,
+        request=None,
     ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """Verifies Google token (ID token or access token) and returns JWT payload & user dict."""
         claims = None
@@ -46,7 +67,13 @@ class AuthService:
         if not user:
             return None, "Failed to retrieve or create user account for Google profile."
 
-        picture = claims.get("picture", "")
+        raw_picture = claims.get("picture", "")
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+        if not profile.avatar and raw_picture and not profile.avatar_url:
+            profile.avatar_url = raw_picture
+            profile.save(update_fields=["avatar_url"])
+
+        picture = profile.get_avatar_url(request=request) or raw_picture
         token = generate_jwt_token(user, picture=picture)
         name = f"{user.first_name} {user.last_name}".strip() or claims.get("name", user.username)
 
@@ -62,7 +89,7 @@ class AuthService:
 
     @staticmethod
     def register_email_user(
-        name: str, email: str, password: str
+        name: str, email: str, password: str, request=None
     ) -> Tuple[Optional[Dict[str, Any]], Optional[str], int]:
         """
         Validates credentials and registers a new Django user with PBKDF2 hashed password.
@@ -97,6 +124,8 @@ class AuthService:
             last_name=last_name,
         )
 
+        UserProfile.objects.get_or_create(user=user)
+
         token = generate_jwt_token(user)
         return {
             "token": token,
@@ -109,7 +138,7 @@ class AuthService:
         }, None, 201
 
     @staticmethod
-    def login_email_user(email: str, password: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    def login_email_user(email: str, password: str, request=None) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """Authenticates user via email and password."""
         email = (email or "").strip().lower()
         if not email or not password:
@@ -123,8 +152,11 @@ class AuthService:
         if not user or not user.is_active:
             return None, "Invalid email or password."
 
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+        picture = profile.get_avatar_url(request=request)
+
         name = f"{user.first_name} {user.last_name}".strip() or user.username
-        token = generate_jwt_token(user)
+        token = generate_jwt_token(user, picture=picture)
 
         return {
             "token": token,
@@ -132,12 +164,12 @@ class AuthService:
                 "id": user.id,
                 "email": user.email,
                 "name": name,
-                "picture": "",
+                "picture": picture,
             },
         }, None
 
     @staticmethod
-    def update_user_profile(user: User, name: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    def update_user_profile(user: User, name: str, request=None) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """Updates user display name and re-issues token."""
         name = (name or "").strip()
         if not name or len(name) < 2:
@@ -148,14 +180,123 @@ class AuthService:
         user.last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
         user.save()
 
-        token = generate_jwt_token(user)
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+        picture = profile.get_avatar_url(request=request)
+
+        token = generate_jwt_token(user, picture=picture)
         return {
             "token": token,
             "user": {
                 "id": user.id,
                 "email": user.email,
                 "name": name,
+                "picture": picture,
+            },
+        }, None
+
+    @staticmethod
+    def upload_user_avatar(
+        user: User,
+        image_file,
+        request=None,
+    ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """
+        Validates, processes, and stores an uploaded user profile image.
+        Returns (result_dict, error_message).
+        """
+        if not image_file:
+            return None, "No image file provided."
+
+        # Maximum file size: 5 MB
+        max_size_bytes = 5 * 1024 * 1024
+        if hasattr(image_file, "size") and image_file.size > max_size_bytes:
+            return None, "Profile picture exceeds maximum allowed size (5 MB)."
+
+        filename = getattr(image_file, "name", "") or ""
+        ext = os.path.splitext(filename)[1].lower()
+        allowed_extensions = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+        if ext and ext not in allowed_extensions:
+            return None, "Unsupported file format. Please upload a JPG, PNG, WEBP, or GIF image."
+
+        # Deep image content & integrity verification using Pillow
+        try:
+            image_file.seek(0)
+            img = Image.open(image_file)
+            img.verify()
+
+            # Re-open after verify to inspect format
+            image_file.seek(0)
+            img = Image.open(image_file)
+            format_name = (img.format or "").upper()
+            if format_name not in {"JPEG", "PNG", "WEBP", "GIF"}:
+                return None, f"Unsupported image format: {format_name}."
+        except Exception as e:
+            return None, f"Invalid or corrupted image file: {str(e)}"
+
+        # Prepare unique storage filename
+        out_ext = ".jpg" if format_name == "JPEG" else f".{format_name.lower()}"
+        unique_name = f"avatar_{user.id}_{uuid.uuid4().hex[:10]}{out_ext}"
+
+        # Fetch or create UserProfile
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+
+        # Safely remove old avatar file from disk if present
+        if profile.avatar and hasattr(profile.avatar, "path"):
+            try:
+                if os.path.isfile(profile.avatar.path):
+                    os.remove(profile.avatar.path)
+            except Exception:
+                pass
+
+        # Save new image file into avatar field
+        image_file.seek(0)
+        profile.avatar.save(unique_name, image_file, save=True)
+
+        picture_url = profile.get_avatar_url(request=request)
+        name = f"{user.first_name} {user.last_name}".strip() or user.username
+        token = generate_jwt_token(user, picture=picture_url)
+
+        return {
+            "token": token,
+            "user": {
+                "id": user.id,
+                "email": user.email or user.username,
+                "name": name,
+                "picture": picture_url,
+                "is_staff": user.is_staff,
+            },
+        }, None
+
+    @staticmethod
+    def remove_user_avatar(
+        user: User,
+        request=None,
+    ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """
+        Removes custom uploaded avatar and resets profile picture.
+        """
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+        if profile.avatar and hasattr(profile.avatar, "path"):
+            try:
+                if os.path.isfile(profile.avatar.path):
+                    os.remove(profile.avatar.path)
+            except Exception:
+                pass
+        profile.avatar = None
+        profile.avatar_url = ""
+        profile.save()
+
+        name = f"{user.first_name} {user.last_name}".strip() or user.username
+        token = generate_jwt_token(user, picture="")
+
+        return {
+            "token": token,
+            "user": {
+                "id": user.id,
+                "email": user.email or user.username,
+                "name": name,
                 "picture": "",
+                "is_staff": user.is_staff,
             },
         }, None
 
@@ -174,3 +315,4 @@ class AuthService:
         user.set_password(new_password)
         user.save()
         return True, None
+

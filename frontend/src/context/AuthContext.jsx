@@ -229,6 +229,72 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // Upload Custom Profile Picture / Avatar
+  const uploadAvatar = async (file) => {
+    try {
+      const formData = new FormData();
+      formData.append('avatar', file);
+
+      const activeToken = token || localStorage.getItem(STORAGE_TOKEN_KEY);
+      const headers = {};
+      if (activeToken) {
+        headers['Authorization'] = `Bearer ${activeToken}`;
+      }
+
+      const res = await fetch(`${API_BASE}/api/auth/profile/avatar/`, {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || data.detail || 'Failed to upload profile picture');
+      }
+
+      if (data.token) {
+        setToken(data.token);
+        localStorage.setItem(STORAGE_TOKEN_KEY, data.token);
+      }
+      if (data.user) {
+        setUser(data.user);
+        localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(data.user));
+      }
+      return { success: true, user: data.user, message: data.message };
+    } catch (err) {
+      console.error('Upload avatar error:', err);
+      return { success: false, error: err.message };
+    }
+  };
+
+  // Remove Custom Profile Picture / Avatar
+  const removeAvatar = async () => {
+    try {
+      const res = await authFetch(`${API_BASE}/api/auth/profile/avatar/delete/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || data.detail || 'Failed to remove profile picture');
+      }
+
+      if (data.token) {
+        setToken(data.token);
+        localStorage.setItem(STORAGE_TOKEN_KEY, data.token);
+      }
+      if (data.user) {
+        setUser(data.user);
+        localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(data.user));
+      }
+      return { success: true, user: data.user, message: data.message };
+    } catch (err) {
+      console.error('Remove avatar error:', err);
+      return { success: false, error: err.message };
+    }
+  };
+
   // Logout
   const logout = () => {
     try {
@@ -280,6 +346,8 @@ export function AuthProvider({ children }) {
     registerWithEmail,
     loginWithEmail,
     updateUserProfile,
+    uploadAvatar,
+    removeAvatar,
     changeUserPassword,
     logout,
     authFetch,
@@ -287,6 +355,7 @@ export function AuthProvider({ children }) {
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+
 }
 
 export function useAuth() {

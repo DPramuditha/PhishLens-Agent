@@ -11,4 +11,13 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './tests/setup.jsx',
+    include: ['tests/**/*.{test,spec}.{js,jsx,ts,tsx}'],
+    pool: 'threads',
+    testTimeout: 15000,
+    hookTimeout: 15000,
+  },
 })

@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
-import { LogOut, X, ChevronRight, Settings } from 'lucide-react';
+import { LogOut, X, ChevronRight, Settings, Camera } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from './ToastContext';
 import AccountSettingsSheet from './AccountSettingsSheet';
@@ -18,17 +18,26 @@ export default function ProfileBottomSheet({
   settingsHeightClass = 'max-h-[82vh]',
 }) {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const { addToast } = useToast();
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showAccountSettings, setShowAccountSettings] = useState(false);
+  const [imageLoadError, setImageLoadError] = useState(false);
 
   const sheetRef = useRef(null);
   const overlayRef = useRef(null);
   const modalRef = useRef(null);
 
-  const profileInitial = profileName?.trim().charAt(0).toUpperCase() ?? 'U';
+  const activeName = user?.name || profileName || 'User';
+  const activeEmail = user?.email || profileEmail || '';
+  const activePicture = user?.picture || profilePicture || '';
+  const profileInitial = activeName.trim().charAt(0).toUpperCase() || 'U';
+
+
+  useEffect(() => {
+    setImageLoadError(false);
+  }, [activePicture]);
 
   // Open animation for main profile sheet
   useEffect(() => {
@@ -37,6 +46,7 @@ export default function ProfileBottomSheet({
       gsap.fromTo(sheetRef.current, { y: '100%' }, { y: '0%', duration: 0.4, ease: 'power3.out' });
     }
   }, [isOpen, showAccountSettings]);
+
 
   // Reset internal states on open/close
   useEffect(() => {
@@ -136,27 +146,42 @@ export default function ProfileBottomSheet({
 
           {/* Avatar + info */}
           <div className="flex items-center gap-4 py-2">
-            {profilePicture ? (
-              <img
-                src={profilePicture}
-                alt={profileName}
-                className="w-16 h-16 rounded-2xl object-cover shadow-md shrink-0 border-2 border-[#C15B2B]"
-              />
-            ) : (
-              <div className="w-16 h-16 rounded-2xl bg-[#C15B2B] text-white flex items-center justify-center text-2xl font-bold shadow-md shrink-0 border-2 border-white/20">
-                {profileInitial}
+            <div
+              onClick={() => setShowAccountSettings(true)}
+              className="relative group cursor-pointer shrink-0"
+              title="Click to edit profile & avatar"
+            >
+              {activePicture && !imageLoadError ? (
+                <img
+                  src={activePicture}
+                  alt={profileName}
+                  onError={() => setImageLoadError(true)}
+                  className="w-16 h-16 rounded-2xl object-cover shadow-md shrink-0 border-2 border-[#C15B2B] group-hover:scale-105 transition-transform duration-200"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-2xl bg-[#C15B2B] text-white flex items-center justify-center text-2xl font-bold shadow-md shrink-0 border-2 border-white/20 group-hover:scale-105 transition-transform duration-200">
+                  {profileInitial}
+                </div>
+              )}
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 rounded-2xl flex items-center justify-center text-white transition-opacity duration-200">
+                <Camera className="w-4 h-4" />
               </div>
-            )}
-            <div className="min-w-0">
-              <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate">
-                {profileName}
+            </div>
+
+            <div className="min-w-0 flex-1 flex flex-col items-start text-left">
+              <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate text-left">
+                {activeName}
               </h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">{profileEmail}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 text-left truncate mt-0.5 select-all">
+                {activeEmail}
+              </p>
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#34C759] bg-[#34C759]/15 px-2 py-0.5 rounded-full mt-1.5">
                 Active Session
               </span>
             </div>
+
           </div>
+
 
           <div className="border-t border-gray-200/80 dark:border-white/10" />
 

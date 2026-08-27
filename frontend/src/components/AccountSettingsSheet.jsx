@@ -13,6 +13,9 @@ import {
   X,
   ChevronLeft,
   Save,
+  Camera,
+  UploadCloud,
+  Trash2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from './ToastContext';
@@ -40,7 +43,7 @@ export default function AccountSettingsSheet({
   heightClass = 'max-h-[82vh]',
   className = '',
 }) {
-  const { user, updateUserProfile, changeUserPassword } = useAuth();
+  const { user, updateUserProfile, uploadAvatar, removeAvatar, changeUserPassword } = useAuth();
   const { addToast } = useToast();
 
   const [activeTab, setActiveTab] = useState('profile'); // 'profile' | 'security'
@@ -49,6 +52,13 @@ export default function AccountSettingsSheet({
   // Profile Form State
   const [fullName, setFullName] = useState(profileName || user?.name || '');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  // Avatar Upload State
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [isRemovingAvatar, setIsRemovingAvatar] = useState(false);
+  const [avatarPreview, setAvatarPreview] = useState(null);
+  const [imageLoadError, setImageLoadError] = useState(false);
+  const fileInputRef = useRef(null);
 
   // Password Form State
   const [currentPassword, setCurrentPassword] = useState('');
@@ -69,10 +79,16 @@ export default function AccountSettingsSheet({
   const activeName = fullName || profileName || user?.name || 'User';
   const activeEmail = profileEmail || user?.email || '';
   const profileInitial = activeName.trim().charAt(0).toUpperCase() || 'U';
+  const activePicture = avatarPreview || user?.picture || profilePicture || '';
 
   useEffect(() => {
     if (profileName) setFullName(profileName);
   }, [profileName]);
+
+  useEffect(() => {
+    setImageLoadError(false);
+  }, [user?.picture, profilePicture, avatarPreview]);
+
 
   // Entrance animation
   useEffect(() => {
@@ -121,6 +137,98 @@ export default function AccountSettingsSheet({
     Boolean
   ).length;
 
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset file input so re-selecting the same file triggers onChange
+    e.target.value = '';
+
+    // Validate type
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!validTypes.includes(file.type) && !file.name.match(/\.(jpg|jpeg|png|webp|gif)$/i)) {
+      addToast({
+        title: 'Invalid File',
+        message: 'Please choose a valid JPG, PNG, WEBP, or GIF image.',
+        type: 'error',
+      });
+      return;
+    }
+
+    // Validate size (5MB max)
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      addToast({
+        title: 'File Too Large',
+        message: 'Profile picture must be less than 5 MB.',
+        type: 'warning',
+      });
+      return;
+    }
+
+    // Create optimistic local preview
+    const previewUrl = URL.createObjectURL(file);
+    setAvatarPreview(previewUrl);
+    setIsUploadingAvatar(true);
+
+    try {
+      const result = await uploadAvatar(file);
+      if (result.success) {
+        addToast({
+          title: 'Avatar Updated',
+          message: 'Your profile picture has been uploaded and saved.',
+          type: 'success',
+        });
+      } else {
+        setAvatarPreview(null);
+        addToast({
+          title: 'Upload Failed',
+          message: result.error || 'Failed to upload profile picture.',
+          type: 'error',
+        });
+      }
+    } catch {
+      setAvatarPreview(null);
+      addToast({
+        title: 'Upload Error',
+        message: 'An unexpected error occurred during image upload.',
+        type: 'error',
+      });
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    setIsRemovingAvatar(true);
+    try {
+      const result = await removeAvatar();
+      if (result.success) {
+        setAvatarPreview(null);
+        setImageLoadError(false);
+        addToast({
+          title: 'Avatar Removed',
+          message: 'Custom profile picture removed.',
+          type: 'info',
+        });
+      } else {
+        addToast({
+          title: 'Removal Failed',
+          message: result.error || 'Could not remove profile picture.',
+          type: 'error',
+        });
+      }
+    } catch {
+      addToast({
+        title: 'Error',
+        message: 'An unexpected error occurred while removing picture.',
+        type: 'error',
+      });
+    } finally {
+      setIsRemovingAvatar(false);
+    }
+  };
+
   const handleSaveProfile = async (e) => {
     e.preventDefault();
     if (!fullName.trim()) {
@@ -158,6 +266,7 @@ export default function AccountSettingsSheet({
       setIsSavingProfile(false);
     }
   };
+
 
   const handleSavePassword = async (e) => {
     e.preventDefault();
@@ -313,37 +422,105 @@ export default function AccountSettingsSheet({
             <form onSubmit={handleSaveProfile} className="space-y-4 font-inter">
               {/* Avatar & Account Banner */}
               <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 p-4 rounded-2xl bg-gray-50/80 dark:bg-white/[0.03] border border-gray-200/60 dark:border-white/[0.08]">
-                {profilePicture ? (
-                  <img
-                    src={profilePicture}
-                    alt={activeName}
-                    className="w-16 h-16 rounded-2xl object-cover shadow-md shrink-0 border-2 border-[#C15B2B]"
-                  />
-                ) : (
-                  <div
-                    className={`w-16 h-16 rounded-2xl ${selectedColor} text-white flex items-center justify-center text-2xl font-bold shadow-md shrink-0 border-2 border-white/20`}
-                  >
-                    {profileInitial}
-                  </div>
-                )}
+                {/* Hidden File Input */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
 
-                <div className="flex-1 text-center sm:text-left min-w-0">
-                  <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
-                    <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate">
+                {/* Avatar Display with Hover Overlay */}
+                <div className="relative group shrink-0">
+                  <div
+                    onClick={() => !isUploadingAvatar && fileInputRef.current?.click()}
+                    className="relative w-18 h-18 sm:w-20 sm:h-20 rounded-2xl overflow-hidden cursor-pointer shadow-md border-2 border-[#C15B2B]/60 group-hover:border-[#C15B2B] transition-all duration-200 group-hover:scale-105"
+                    title="Click to upload profile picture"
+                  >
+                    {activePicture && !imageLoadError ? (
+                      <img
+                        src={activePicture}
+                        alt={activeName}
+                        onError={() => setImageLoadError(true)}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div
+                        className={`w-full h-full ${selectedColor} text-white flex items-center justify-center text-2xl font-bold border-2 border-white/20`}
+                      >
+                        {profileInitial}
+                      </div>
+                    )}
+
+                    {/* Hover Overlay */}
+                    <div className="absolute inset-0 bg-black/55 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-opacity duration-200 backdrop-blur-[2px]">
+                      <Camera className="w-5 h-5 mb-0.5" />
+                      <span className="text-[10px] font-semibold">Change</span>
+                    </div>
+
+                    {/* Loading Overlay */}
+                    {(isUploadingAvatar || isRemovingAvatar) && (
+                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white backdrop-blur-sm">
+                        <RefreshCw className="w-6 h-6 animate-spin text-[#C15B2B]" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Camera Badge Icon */}
+                  <button
+                    type="button"
+                    disabled={isUploadingAvatar}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="absolute -bottom-1 -right-1 p-1.5 rounded-full bg-[#C15B2B] text-white shadow-md hover:bg-[#aa4e23] hover:scale-110 active:scale-95 transition-all cursor-pointer border-2 border-white dark:border-[#1e1e24]"
+                    title="Upload Photo"
+                  >
+                    <Camera className="w-3 h-3" />
+                  </button>
+                </div>
+
+                <div className="flex-1 text-left min-w-0">
+                  <div className="flex items-center justify-start gap-2 flex-wrap">
+                    <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate text-left">
                       {fullName || activeName}
                     </h3>
-                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#34C759] bg-[#34C759]/15 px-2 py-0.5 rounded-full">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#34C759] bg-[#34C759]/15 px-2 py-0.5 rounded-full shrink-0">
                       <CheckCircle2 className="w-3 h-3" />
                       Verified Analyst
                     </span>
                   </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 text-left truncate mt-0.5 select-all">
                     {activeEmail || 'Protected PhishLens Account'}
                   </p>
 
-                  {/* Avatar Color Picker */}
-                  {!profilePicture && (
-                    <div className="mt-2.5 flex items-center justify-center sm:justify-start gap-1.5">
+                  {/* Photo Action Buttons */}
+                  <div className="mt-2.5 flex items-center justify-start gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      disabled={isUploadingAvatar}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-white/[0.08] dark:hover:bg-white/[0.14] text-gray-700 dark:text-gray-200 text-xs font-semibold transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                    >
+                      <UploadCloud className="w-3.5 h-3.5 text-[#C15B2B]" />
+                      <span>{activePicture && !imageLoadError ? 'Replace Photo' : 'Upload Photo'}</span>
+                    </button>
+
+                    {activePicture && !imageLoadError && (
+                      <button
+                        type="button"
+                        disabled={isRemovingAvatar || isUploadingAvatar}
+                        onClick={handleRemoveAvatar}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 text-xs font-semibold transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Remove</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Avatar Theme Color Picker when no picture */}
+                  {(!activePicture || imageLoadError) && (
+                    <div className="mt-2.5 flex items-center justify-start gap-1.5">
                       <span className="text-[11px] text-gray-400 mr-1">Avatar Theme:</span>
                       {AVATAR_COLORS.map((c) => (
                         <button
@@ -360,7 +537,9 @@ export default function AccountSettingsSheet({
                     </div>
                   )}
                 </div>
+
               </div>
+
 
               {/* Editable Fields */}
               <div className="space-y-3">

@@ -555,10 +555,22 @@ export default function AnalyticsDashboardModal({ isOpen, onClose, isDarkMode = 
     },
   ];
 
+  const [avatarError, setAvatarError] = useState(false);
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [authUser?.picture, isOpen]);
+
   const userStats = userUsage.stats || {};
   const userProf = userUsage.user_profile || {};
   const featuresList = userUsage.features_breakdown || [];
   const topBrands = userUsage.top_impersonated_brands || [];
+
+  const activeName = authUser?.name || userProf.name || 'Security Analyst';
+  const activeEmail = authUser?.email || userProf.email || '';
+  const activePicture = authUser?.picture || userProf.picture || userProf.avatar_url || '';
+  const activeInitial = activeName.trim().charAt(0).toUpperCase() || 'U';
+
 
   return (
     <div
@@ -741,24 +753,34 @@ export default function AnalyticsDashboardModal({ isOpen, onClose, isDarkMode = 
                 }`}
               >
                 {/* Left: User Identity */}
-                <div className="flex items-center gap-3.5">
-                  <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white font-black text-lg flex items-center justify-center shadow-md shrink-0 border border-white/20">
-                    {(userProf.name || 'U').charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-base font-bold text-gray-900 dark:text-white">
-                        {userProf.name}
+                <div className="flex items-center gap-3.5 min-w-0">
+                  {activePicture && !avatarError ? (
+                    <img
+                      src={activePicture}
+                      alt={activeName}
+                      onError={() => setAvatarError(true)}
+                      className="w-12 h-12 rounded-2xl object-cover shadow-md shrink-0 border-2 border-indigo-500/40"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white font-black text-lg flex items-center justify-center shadow-md shrink-0 border border-white/20">
+                      {activeInitial}
+                    </div>
+                  )}
+                  <div className="flex flex-col items-start text-left min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap text-left">
+                      <h3 className="text-base font-bold text-gray-900 dark:text-white truncate text-left">
+                        {activeName}
                       </h3>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
-                        {userProf.plan}
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 shrink-0">
+                        {userProf.plan || 'Enterprise Agent AI'}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-0.5">
-                      {userProf.email}
+                    <p className="text-xs text-gray-500 dark:text-gray-400 text-left truncate mt-0.5 select-all">
+                      {activeEmail}
                     </p>
                   </div>
                 </div>
+
 
                 {/* Right: Security Health Index */}
                 <div className="flex items-center gap-4 shrink-0 bg-white/5 dark:bg-black/20 p-3 rounded-2xl border border-white/10">
