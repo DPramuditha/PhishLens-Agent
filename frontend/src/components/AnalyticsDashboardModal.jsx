@@ -386,6 +386,12 @@ export default function AnalyticsDashboardModal({ isOpen, onClose, isDarkMode = 
   const [isLiveStreaming, setIsLiveStreaming] = useState(true);
   const [data, setData] = useState(null);
 
+  const [avatarError, setAvatarError] = useState(false);
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [authUser?.picture, isOpen]);
+
   // Fetch telemetry from backend
   const fetchAnalytics = useCallback(async (tf = timeframe) => {
     setIsLoading(true);
@@ -461,8 +467,6 @@ export default function AnalyticsDashboardModal({ isOpen, onClose, isDarkMode = 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
 
   const summary = data?.summary || {
     total_scans: 348,
@@ -555,12 +559,6 @@ export default function AnalyticsDashboardModal({ isOpen, onClose, isDarkMode = 
     },
   ];
 
-  const [avatarError, setAvatarError] = useState(false);
-
-  useEffect(() => {
-    setAvatarError(false);
-  }, [authUser?.picture, isOpen]);
-
   const userStats = userUsage.stats || {};
   const userProf = userUsage.user_profile || {};
   const featuresList = userUsage.features_breakdown || [];
@@ -570,6 +568,8 @@ export default function AnalyticsDashboardModal({ isOpen, onClose, isDarkMode = 
   const activeEmail = authUser?.email || userProf.email || '';
   const activePicture = authUser?.picture || userProf.picture || userProf.avatar_url || '';
   const activeInitial = activeName.trim().charAt(0).toUpperCase() || 'U';
+
+  if (!isOpen) return null;
 
 
   return (

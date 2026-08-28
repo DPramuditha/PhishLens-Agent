@@ -52,9 +52,12 @@ export default function LandingPage() {
       clearTimeout(timer);
       ctx.revert();
       if (smoother) {
-        smoother.kill();
+        try {
+          smoother.kill();
+        } catch {
+          // ignore
+        }
       }
-      ScrollTrigger.refresh();
     };
   }, []);
 

@@ -46,7 +46,7 @@ export default function HeroSection({
   const badgeRef = useRef(null);
   const actionsRef = useRef(null);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const ctx = gsap.context(() => {
       // ── 1. SplitText Scrolling / Entrance Animation with Ignore Nested Elements ──
       if (headlineRef.current && subtitleRef.current) {

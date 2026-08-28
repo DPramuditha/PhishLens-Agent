@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import gsap from 'gsap';
@@ -34,7 +34,7 @@ export default function GetStartedSection({ onPrimaryAction, onSecondaryAction }
   const descRef = useRef(null);
   const cardsRef = useRef(null);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const ctx = gsap.context(() => {
       // 1. Text entrance animation on scroll with clearProps
       if (headingRef.current) {

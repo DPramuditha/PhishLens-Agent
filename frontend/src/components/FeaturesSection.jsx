@@ -124,138 +124,138 @@ export default function FeaturesSection() {
   const indicatorFillRef = useRef(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
-  useLayoutEffect(() => {
-    const ctx = gsap.context(() => {
-      // Set initial element states cleanly through GSAP
-      textItemRefs.current.forEach((el, idx) => {
-        if (el) {
-          gsap.set(el, {
-            opacity: idx === 0 ? 1 : 0,
-            y: idx === 0 ? 0 : 16,
-            pointerEvents: idx === 0 ? 'auto' : 'none',
-            visibility: 'visible',
-          });
+  useEffect(() => {
+    let ctx;
+    const rId = requestAnimationFrame(() => {
+      ctx = gsap.context(() => {
+        // Set initial element states cleanly through GSAP
+        textItemRefs.current.forEach((el, idx) => {
+          if (el) {
+            gsap.set(el, {
+              opacity: idx === 0 ? 1 : 0,
+              y: idx === 0 ? 0 : 16,
+              pointerEvents: idx === 0 ? 'auto' : 'none',
+              visibility: 'visible',
+            });
+          }
+        });
+
+        imageLayerRefs.current.forEach((el, idx) => {
+          if (el) {
+            gsap.set(el, {
+              opacity: idx === 0 ? 1 : 0,
+              scale: idx === 0 ? 1 : 0.96,
+              visibility: 'visible',
+            });
+          }
+        });
+
+        if (indicatorFillRef.current) {
+          gsap.set(indicatorFillRef.current, { scaleY: 0.05, transformOrigin: 'top center' });
         }
-      });
 
-      imageLayerRefs.current.forEach((el, idx) => {
-        if (el) {
-          gsap.set(el, {
-            opacity: idx === 0 ? 1 : 0,
-            scale: idx === 0 ? 1 : 0.96,
-            visibility: 'visible',
-          });
-        }
-      });
-
-      if (indicatorFillRef.current) {
-        gsap.set(indicatorFillRef.current, { scaleY: 0.05, transformOrigin: 'top center' });
-      }
-
-      // Create master pinned timeline with smooth scrub
-      const tl = gsap.timeline({
-        scrollTrigger: {
-          trigger: sectionRef.current,
-          start: 'top top',
-          end: '+=2400',
-          pin: true,
-          pinSpacing: true,
-          scrub: 0.8,
-          invalidateOnRefresh: true,
-          onUpdate: (self) => {
-            const p = self.progress;
-            let current = 0;
-            if (p >= 0.75) current = 3;
-            else if (p >= 0.50) current = 2;
-            else if (p >= 0.25) current = 1;
-            else current = 0;
-            setActiveIndex(current);
+        // Create master pinned timeline with smooth scrub
+        const tl = gsap.timeline({
+          scrollTrigger: {
+            trigger: sectionRef.current,
+            start: 'top top',
+            end: '+=2400',
+            pin: true,
+            pinSpacing: true,
+            scrub: 0.8,
+            invalidateOnRefresh: true,
+            onUpdate: (self) => {
+              const p = self.progress;
+              let current = 0;
+              if (p >= 0.75) current = 3;
+              else if (p >= 0.50) current = 2;
+              else if (p >= 0.25) current = 1;
+              else current = 0;
+              setActiveIndex(current);
+            },
           },
-        },
-      });
+        });
 
-      triggerRef.current = tl.scrollTrigger;
+        triggerRef.current = tl.scrollTrigger;
 
-      // Track fill progress across the entire timeline 0 -> 3.0
-      if (indicatorFillRef.current) {
+        // Track fill progress across the entire timeline 0 -> 3.0
+        if (indicatorFillRef.current) {
+          tl.to(
+            indicatorFillRef.current,
+            { scaleY: 1, ease: 'none', duration: 3 },
+            0
+          );
+        }
+
+        // ── Transition 0 -> 1 (occurs at t = 0.65 to t = 0.95)
         tl.to(
-          indicatorFillRef.current,
-          { scaleY: 1, ease: 'none', duration: 3 },
-          0
-        );
-      }
-
-      // ── Transition 0 -> 1 (occurs at t = 0.65 to t = 0.95)
-      tl.to(
-        textItemRefs.current[0],
-        { opacity: 0, y: -16, duration: 0.25, ease: 'power2.inOut', pointerEvents: 'none' },
-        0.65
-      )
-        .to(
-          imageLayerRefs.current[0],
-          { opacity: 0, scale: 0.96, duration: 0.25, ease: 'power2.inOut' },
+          textItemRefs.current[0],
+          { opacity: 0, y: -16, duration: 0.25, ease: 'power2.inOut', pointerEvents: 'none' },
           0.65
         )
-        .to(
-          textItemRefs.current[1],
-          { opacity: 1, y: 0, duration: 0.25, ease: 'power2.inOut', pointerEvents: 'auto' },
-          0.75
-        )
-        .to(
-          imageLayerRefs.current[1],
-          { opacity: 1, scale: 1, duration: 0.25, ease: 'power2.inOut' },
-          0.75
-        );
+          .to(
+            imageLayerRefs.current[0],
+            { opacity: 0, scale: 0.96, duration: 0.25, ease: 'power2.inOut' },
+            0.65
+          )
+          .to(
+            textItemRefs.current[1],
+            { opacity: 1, y: 0, duration: 0.25, ease: 'power2.inOut', pointerEvents: 'auto' },
+            0.75
+          )
+          .to(
+            imageLayerRefs.current[1],
+            { opacity: 1, scale: 1, duration: 0.25, ease: 'power2.inOut' },
+            0.75
+          );
 
-      // ── Transition 1 -> 2 (occurs at t = 1.40 to t = 1.70)
-      tl.to(
-        textItemRefs.current[1],
-        { opacity: 0, y: -16, duration: 0.25, ease: 'power2.inOut', pointerEvents: 'none' },
-        1.40
-      )
-        .to(
-          imageLayerRefs.current[1],
-          { opacity: 0, scale: 0.96, duration: 0.25, ease: 'power2.inOut' },
+        // ── Transition 1 -> 2 (occurs at t = 1.40 to t = 1.70)
+        tl.to(
+          textItemRefs.current[1],
+          { opacity: 0, y: -16, duration: 0.25, ease: 'power2.inOut', pointerEvents: 'none' },
           1.40
         )
-        .to(
-          textItemRefs.current[2],
-          { opacity: 1, y: 0, duration: 0.25, ease: 'power2.inOut', pointerEvents: 'auto' },
-          1.50
-        )
-        .to(
-          imageLayerRefs.current[2],
-          { opacity: 1, scale: 1, duration: 0.25, ease: 'power2.inOut' },
-          1.50
-        );
+          .to(
+            imageLayerRefs.current[1],
+            { opacity: 0, scale: 0.96, duration: 0.25, ease: 'power2.inOut' },
+            1.40
+          )
+          .to(
+            textItemRefs.current[2],
+            { opacity: 1, y: 0, duration: 0.25, ease: 'power2.inOut', pointerEvents: 'auto' },
+            1.50
+          )
+          .to(
+            imageLayerRefs.current[2],
+            { opacity: 1, scale: 1, duration: 0.25, ease: 'power2.inOut' },
+            1.50
+          );
 
-      // ── Transition 2 -> 3 (occurs at t = 2.15 to t = 2.45)
-      tl.to(
-        textItemRefs.current[2],
-        { opacity: 0, y: -16, duration: 0.25, ease: 'power2.inOut', pointerEvents: 'none' },
-        2.15
-      )
-        .to(
-          imageLayerRefs.current[2],
-          { opacity: 0, scale: 0.96, duration: 0.25, ease: 'power2.inOut' },
+        // ── Transition 2 -> 3 (occurs at t = 2.15 to t = 2.45)
+        tl.to(
+          textItemRefs.current[2],
+          { opacity: 0, y: -16, duration: 0.25, ease: 'power2.inOut', pointerEvents: 'none' },
           2.15
         )
-        .to(
-          textItemRefs.current[3],
-          { opacity: 1, y: 0, duration: 0.25, ease: 'power2.inOut', pointerEvents: 'auto' },
-          2.25
-        )
-        .to(
-          imageLayerRefs.current[3],
-          { opacity: 1, scale: 1, duration: 0.25, ease: 'power2.inOut' },
-          2.25
-        );
-    }, sectionRef);
+          .to(
+            imageLayerRefs.current[2],
+            { opacity: 0, scale: 0.96, duration: 0.25, ease: 'power2.inOut' },
+            2.15
+          )
+          .to(
+            textItemRefs.current[3],
+            { opacity: 1, y: 0, duration: 0.25, ease: 'power2.inOut', pointerEvents: 'auto' },
+            2.25
+          )
+          .to(
+            imageLayerRefs.current[3],
+            { opacity: 1, scale: 1, duration: 0.25, ease: 'power2.inOut' },
+            2.25
+          );
 
-    // Recalculate positions after DOM and images settle
-    const timer = setTimeout(() => {
-      ScrollTrigger.refresh();
-    }, 150);
+        ScrollTrigger.refresh();
+      }, sectionRef);
+    });
 
     const handleWindowLoad = () => {
       ScrollTrigger.refresh();
@@ -264,10 +264,12 @@ export default function FeaturesSection() {
     window.addEventListener('resize', handleWindowLoad);
 
     return () => {
-      clearTimeout(timer);
+      cancelAnimationFrame(rId);
       window.removeEventListener('load', handleWindowLoad);
       window.removeEventListener('resize', handleWindowLoad);
-      ctx.revert();
+      if (ctx) {
+        ctx.revert();
+      }
     };
   }, []);
 

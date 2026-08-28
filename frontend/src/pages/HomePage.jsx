@@ -343,7 +343,7 @@ const isValidUrl = (str) => {
 };
 
 /* ── Orb background that persists & floats in idle state ── */
-function BackgroundOrbs({ hasSentMessage }) {
+function BackgroundOrbs({ hasSentMessage, isDarkMode = true }) {
   const orb1Ref = useRef(null);
   const orb2Ref = useRef(null);
 
@@ -394,12 +394,12 @@ function BackgroundOrbs({ hasSentMessage }) {
           height: 520,
           background: '#422ea8',
           filter: 'blur(110px)',
-          opacity: 0.28,
+          opacity: isDarkMode ? 0.28 : 0.08,
           bottom: hasSentMessage ? '-80px' : '8%',
           left: hasSentMessage ? '-80px' : '15%',
           willChange: 'transform',
           transform: 'translate3d(0, 0, 0)',
-          transition: 'bottom 0.8s cubic-bezier(0.4,0,0.2,1), left 0.8s cubic-bezier(0.4,0,0.2,1)',
+          transition: 'bottom 0.8s cubic-bezier(0.4,0,0.2,1), left 0.8s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease',
         }}
       />
       {/* violet orb — right */}
@@ -411,12 +411,12 @@ function BackgroundOrbs({ hasSentMessage }) {
           height: 480,
           background: '#8a2be2',
           filter: 'blur(110px)',
-          opacity: 0.28,
+          opacity: isDarkMode ? 0.28 : 0.08,
           bottom: hasSentMessage ? '-60px' : '6%',
           right: hasSentMessage ? '-80px' : '10%',
           willChange: 'transform',
           transform: 'translate3d(0, 0, 0)',
-          transition: 'bottom 0.8s cubic-bezier(0.4,0,0.2,1), right 0.8s cubic-bezier(0.4,0,0.2,1)',
+          transition: 'bottom 0.8s cubic-bezier(0.4,0,0.2,1), right 0.8s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease',
         }}
       />
     </div>
@@ -1478,7 +1478,7 @@ export default function HomePage() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden font-sans text-gray-800 dark:text-gray-200">
+    <div className="flex h-screen overflow-hidden font-sans bg-white dark:bg-[#1a1a1a] text-gray-800 dark:text-gray-200 transition-colors duration-300">
       {/* ── macOS-Style Sidebar Dock (floating, centered left) ── */}
       <SidebarDock
         items={dockTopItems}
@@ -1515,7 +1515,7 @@ export default function HomePage() {
       >
 
         {/* ── Persistent floating background orbs ── */}
-        <BackgroundOrbs hasSentMessage={hasSentMessage} />
+        <BackgroundOrbs hasSentMessage={hasSentMessage} isDarkMode={isDarkMode} />
 
         {/* ── Send-burst orb flash (triggered on each send) ── */}
         {showOrbs && (
@@ -1559,10 +1559,9 @@ export default function HomePage() {
         </div>
 
         <div
-          id="smooth-wrapper"
-          className="flex-1 w-full h-full overflow-y-auto overflow-x-hidden no-scrollbar relative z-10 bg-white dark:bg-[#1a1a1a] transition-colors duration-300 scroll-smooth"
+          className="flex-1 w-full h-full overflow-y-auto overflow-x-hidden no-scrollbar relative z-10 bg-white dark:bg-[#1a1a1a] transition-colors duration-300 scroll-smooth flex flex-col"
         >
-          <div id="smooth-content" className="w-full flex flex-col min-h-full">
+          <div className="w-full flex-1 flex flex-col min-h-full">
 
             <header className={"flex items-center justify-center px-6 shrink-0 " + (hasSentMessage ? "h-16" : "h-6 md:h-8")} style={{ position: 'relative', zIndex: 10 }}>
               {hasSentMessage && (
@@ -1672,7 +1671,7 @@ export default function HomePage() {
             {!hasSentMessage && (
               <div
                 ref={heroRef}
-                className="flex-1 flex flex-col items-center justify-center px-4 md:px-8 py-8 min-h-[calc(100vh-2.5rem)] relative my-auto"
+                className="flex-1 flex flex-col items-center justify-center px-4 md:px-8 py-8 min-h-[calc(100vh-2.5rem)] relative my-auto w-full"
                 style={{ position: 'relative', zIndex: 10 }}
               >
                 {/* ── Apple-style Floating Status Badge (Bottom-Right) ── */}
@@ -1687,35 +1686,35 @@ export default function HomePage() {
                   PhishLens AI Agent
                 </div>
 
-            <div className="w-full max-w-3xl flex flex-col items-center justify-center text-center select-none relative my-auto py-4">
+                <div className="w-full max-w-3xl mx-auto flex flex-col items-center justify-center text-center select-none relative my-auto py-4">
 
-              {/* ── Greeting Title (Renders First with 3D Char Flip & Inline Character Animation) ── */}
-              <h1
-                ref={heroTitleRef}
-                className="relative z-10 text-3xl md:text-5xl font-black tracking-tight mb-6 min-h-[1.2em] w-full font-habibi"
-                aria-label={`Good evening, ${userFirstName}`}
-              >
-                <WelcomeTitle
-                  name={userFirstName}
-                  isInputFocused={isInputFocused}
-                  isTyping={isTyping}
-                  isDarkMode={isDarkMode}
-                />
-              </h1>
+                  {/* ── Greeting Title (Renders First with 3D Char Flip & Inline Character Animation) ── */}
+                  <h1
+                    ref={heroTitleRef}
+                    className="relative z-10 text-3xl md:text-5xl font-black tracking-tight mb-6 min-h-[1.2em] w-full font-habibi flex items-center justify-center text-center"
+                    aria-label={`Good evening, ${userFirstName}`}
+                  >
+                    <WelcomeTitle
+                      name={userFirstName}
+                      isInputFocused={isInputFocused}
+                      isTyping={isTyping}
+                      isDarkMode={isDarkMode}
+                    />
+                  </h1>
 
-              {/* ── Input Placeholder (for floating input bar alignment) ── */}
-              <div className="w-full max-w-2xl relative z-10">
-                <div
-                  ref={inputPlaceholderRef}
-                  className="w-full h-[58px] mx-auto max-w-2xl opacity-0 pointer-events-none"
-                />
-              </div>
+                  {/* ── Input Placeholder (for floating input bar alignment) ── */}
+                  <div className="w-full max-w-2xl relative z-10 mx-auto">
+                    <div
+                      ref={inputPlaceholderRef}
+                      className="w-full h-[58px] mx-auto max-w-2xl opacity-0 pointer-events-none"
+                    />
+                  </div>
 
-              {/* ── Suggestion Chips ── */}
-              <div
-                ref={heroSuggestionsRef}
-                className="relative z-10 mt-6 sm:mt-7 flex flex-wrap items-center justify-center gap-2.5 w-full max-w-2xl px-4 sm:px-0"
-              >
+                  {/* ── Suggestion Chips ── */}
+                  <div
+                    ref={heroSuggestionsRef}
+                    className="relative z-10 mt-6 sm:mt-7 flex flex-wrap items-center justify-center gap-2.5 w-full max-w-2xl px-4 sm:px-0 mx-auto"
+                  >
                     {HERO_CHIPS.map((chip, cIdx) => {
                       const ChipIcon = chip.icon;
                       return (
@@ -1773,15 +1772,17 @@ export default function HomePage() {
             <form
               ref={inputFormRef}
               onSubmit={handleSend}
-              className="relative flex items-center shadow-lg overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500/80 dark:focus-within:ring-indigo-400/80 transition-all border border-slate-200 dark:border-zinc-800/80 backdrop-blur-xl"
+              className="relative flex items-center shadow-lg overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500/80 dark:focus-within:ring-indigo-400/80 transition-all border border-slate-200/90 dark:border-zinc-800/80 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur-xl"
               style={hasSentMessage ? {
                 borderRadius: '9999px',
-                backgroundColor: 'transparent',
-                boxShadow: '0 8px 32px 0 rgba(66,46,168,0.18), 0 1.5px 8px 0 rgba(138,43,226,0.10)',
+                boxShadow: isDarkMode
+                  ? '0 8px 32px 0 rgba(66,46,168,0.22), 0 1.5px 8px 0 rgba(138,43,226,0.12)'
+                  : '0 8px 32px 0 rgba(0,0,0,0.08), 0 1.5px 8px 0 rgba(0,0,0,0.04)',
               } : {
                 borderRadius: '28px',
-                backgroundColor: 'transparent',
-                boxShadow: '0 12px 40px 0 rgba(66,46,168,0.16), 0 2px 12px 0 rgba(138,43,226,0.12)',
+                boxShadow: isDarkMode
+                  ? '0 12px 40px 0 rgba(66,46,168,0.18), 0 2px 12px 0 rgba(138,43,226,0.12)'
+                  : '0 12px 40px 0 rgba(0,0,0,0.07), 0 2px 12px 0 rgba(0,0,0,0.04)',
               }}
             >
               {/* Shield Alert Icon (fades out and shrinks on send) */}
@@ -1810,7 +1811,7 @@ export default function HomePage() {
                   }}
                   placeholder=""
                   disabled={isLoading}
-                  className={"w-full bg-transparent py-4 pr-14 outline-none text-[15px] text-gray-700 dark:text-gray-200 placeholder-transparent " + (hasSentMessage ? "pl-5" : "pl-2")}
+                  className={"w-full bg-transparent py-4 pr-14 outline-none text-[15px] text-gray-800 dark:text-gray-200 placeholder-transparent " + (hasSentMessage ? "pl-5" : "pl-2")}
                 />
                 {!input && (
                   <PlaceholderCycler leftPaddingClass={hasSentMessage ? "left-5" : "left-2"} />

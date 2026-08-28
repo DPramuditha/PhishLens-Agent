@@ -204,12 +204,12 @@ export default function LoginPage() {
   };
 
   return (
-    <div ref={pageRef} className="flex min-h-svh w-full font-[Cabin,system-ui,sans-serif] overflow-hidden">
+    <div ref={pageRef} className="flex h-screen min-h-screen w-full max-w-full font-[Cabin,system-ui,sans-serif] overflow-hidden">
 
       {/* ====== LEFT PANEL ====== */}
       <div
         ref={leftRef}
-        className="flex-1 relative flex items-center justify-center bg-[#1a1a1a] px-8 py-10 overflow-hidden"
+        className="w-full md:w-1/2 min-w-0 h-full relative flex items-center justify-center bg-[#1a1a1a] px-6 sm:px-8 py-4 sm:py-6 overflow-hidden select-none shrink-0"
       >
         {/* floating gradient orbs */}
         <div
@@ -223,12 +223,12 @@ export default function LoginPage() {
 
         <div className="relative z-[2] w-full max-w-[420px]">
           {/* heading */}
-          <div ref={headingRef} className="mb-8">
-            <h1 className="font-[Habibi,Georgia,'Times_New_Roman',serif] font-normal text-[clamp(36px,5vw,52px)] leading-[1.15] text-stone-100 m-0 mb-4 tracking-tight">
+          <div ref={headingRef} className="mb-4 sm:mb-6">
+            <h1 className="font-[Habibi,Georgia,'Times_New_Roman',serif] font-normal text-[clamp(28px,3.5vw,42px)] leading-[1.15] text-stone-100 m-0 mb-2 sm:mb-3 tracking-tight">
               Detect fast,<br />
               protect faster
             </h1>
-            <p className="text-base text-stone-400 m-0 tracking-wide">
+            <p className="text-sm sm:text-[15px] text-stone-400 m-0 tracking-wide">
               {step === 1 ? 'AI-powered phishing detection with ' : 'Enter password for '}
               <span className="text-purple-400 font-semibold">
                 {step === 1 ? 'PhishLens' : email}
@@ -239,7 +239,7 @@ export default function LoginPage() {
           {/* form card */}
           <div
             ref={formRef}
-            className="bg-white/[0.04] border border-white/[0.08] rounded-[20px] px-7 pt-8 pb-6 backdrop-blur-[12px]"
+            className="bg-white/[0.04] border border-white/[0.08] rounded-[20px] px-6 py-5 sm:px-7 sm:py-6 backdrop-blur-[12px]"
           >
             {/* Google button */}
             <button
@@ -281,7 +281,7 @@ export default function LoginPage() {
             </button>
 
             {/* divider */}
-            <div className="flex items-center my-5 gap-3.5">
+            <div className="flex items-center my-3.5 sm:my-4 gap-3.5">
               <div className="flex-1 h-px bg-white/10" />
               <span className="text-xs font-semibold text-stone-500 tracking-widest">OR</span>
               <div className="flex-1 h-px bg-white/10" />
@@ -403,7 +403,7 @@ export default function LoginPage() {
               </div>
             </form>
 
-            <div className="mt-5 text-center text-xs text-stone-400">
+            <div className="mt-3.5 sm:mt-4 text-center text-xs text-stone-400">
               Don't have an account?{' '}
               <Link
                 to="/register"
@@ -419,7 +419,7 @@ export default function LoginPage() {
       {/* ====== RIGHT PANEL ====== */}
       <div
         ref={rightRef}
-        className="hidden md:block flex-1 relative overflow-hidden bg-[#07070b] select-none"
+        className="hidden md:block md:w-1/2 min-w-0 h-full relative overflow-hidden bg-[#07070b] select-none shrink-0"
       >
         <img
           ref={imageRef}

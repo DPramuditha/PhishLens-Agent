@@ -563,9 +563,9 @@ export default function AppleTopControls({
               </p>
             </div>
           ) : (
-            displayedNotifications.map((item) => (
+            displayedNotifications.map((item, idx) => (
               <div
-                key={item.id}
+                key={item.id ? `${item.id}-${idx}` : idx}
                 onClick={() => toggleNotificationRead(item.id)}
                 className={`group/item relative flex items-start gap-3 rounded-2xl p-3 text-left transition-all duration-200 cursor-pointer ${
                   item.unread

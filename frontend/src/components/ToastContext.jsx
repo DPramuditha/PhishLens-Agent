@@ -2,13 +2,18 @@ import { createContext, useContext, useState, useCallback, useRef, useEffect } f
 
 const ToastContext = createContext(null);
 
-let toastIdCounter = 0;
-let notifIdCounter = 100;
+const generateUniqueId = (prefix = 'id') => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+};
+
 const MAX_TOASTS = 2;
 
 const INITIAL_NOTIFICATIONS = [
   {
-    id: 1,
+    id: 'init-1',
     title: 'PhishLens Threat Shield Active',
     description: 'Real-time proactive phishing defense and SSL integrity scanning enabled.',
     time: 'Just now',
@@ -17,7 +22,7 @@ const INITIAL_NOTIFICATIONS = [
     timestamp: Date.now(),
   },
   {
-    id: 2,
+    id: 'init-2',
     title: 'ML Models Initialized',
     description: 'Stage 1 (EfficientNet-B0) and Stage 2 (ResNet-50 Siamese) models online.',
     time: '2m ago',
@@ -26,7 +31,7 @@ const INITIAL_NOTIFICATIONS = [
     timestamp: Date.now() - 120000,
   },
   {
-    id: 3,
+    id: 'init-3',
     title: 'Zero-Day Watchdog Ready',
     description: 'Autonomous multi-agent consensus verification standing by.',
     time: '15m ago',
@@ -41,7 +46,20 @@ export function ToastProvider({ children }) {
   const [notifications, setNotifications] = useState(() => {
     try {
       const saved = localStorage.getItem('phishlens_notifications');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const seenIds = new Set();
+          return parsed.map((item, idx) => {
+            let id = item.id;
+            if (!id || seenIds.has(id)) {
+              id = generateUniqueId(`notif-${idx}`);
+            }
+            seenIds.add(id);
+            return { ...item, id };
+          });
+        }
+      }
     } catch {
       // fallback
     }
@@ -79,7 +97,7 @@ export function ToastProvider({ children }) {
     }
     lastToastRef.current = { title, message, time: now };
 
-    const id = ++toastIdCounter;
+    const id = generateUniqueId('toast');
     const toast = { id, type, title, message, duration };
 
     // Add to transient floating toasts
@@ -90,7 +108,7 @@ export function ToastProvider({ children }) {
 
     // Also add to persistent real-time notification drawer
     if (!skipNotificationCenter && title) {
-      const notifId = ++notifIdCounter;
+      const notifId = generateUniqueId('notif');
       const notifItem = {
         id: notifId,
         title,
@@ -112,7 +130,7 @@ export function ToastProvider({ children }) {
   }, []);
 
   const addNotification = useCallback(({ type = 'info', title, description, url = null, chatId = null }) => {
-    const notifId = ++notifIdCounter;
+    const notifId = generateUniqueId('notif');
     const notifItem = {
       id: notifId,
       title,

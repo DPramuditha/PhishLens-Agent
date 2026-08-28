@@ -63,6 +63,12 @@
     rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
 }
 
+html, body {
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
 html.dark, body.dark {
   background-color: #1a1a1a;
 }
@@ -75,28 +81,23 @@ html.dark, body.dark {
 
 #root {
   width: 100%;
+  max-width: 100vw;
   min-height: 100svh;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+  overflow-x: hidden;
 }
 
-/* ── GSAP ScrollSmoother Essential Structure ── */
-#smooth-wrapper {
-  overflow: hidden;
-  position: fixed;
-  height: 100%;
+/* ── GSAP ScrollSmoother Essential Structure (Scoped to Landing Page) ── */
+.index-page-scope #smooth-wrapper {
   width: 100%;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
   background-color: #000000;
 }
 
-#smooth-content {
+.index-page-scope #smooth-content {
   overflow: visible;
   width: 100%;
   min-height: 100vh;

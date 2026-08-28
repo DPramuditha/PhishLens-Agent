@@ -5,6 +5,7 @@ import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ProtectedRoute from './components/ProtectedRoute';
+import ScrollToTop from './components/ScrollToTop';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './components/ToastContext';
 import ToastContainer from './components/ToastContainer';
@@ -18,6 +19,7 @@ function App() {
       <AuthProvider>
         <ToastProvider>
           <Router>
+            <ScrollToTop />
             <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/landing" element={<LandingPage />} />
