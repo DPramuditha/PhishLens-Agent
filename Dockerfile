@@ -35,10 +35,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN playwright install-deps chromium && \
     playwright install chromium
 
+# Create runtime directories for media, models and cache
+RUN mkdir -p /app/media/screenshots /app/media/reports /app/media/avatars /app/models
+
 # Copy application codebase and ML models
 COPY backend/ /app/backend/
 COPY models/ /app/models/
-COPY media/ /app/media/
 COPY manage.py pytest.ini /app/
 COPY entrypoint.sh /app/entrypoint.sh
 

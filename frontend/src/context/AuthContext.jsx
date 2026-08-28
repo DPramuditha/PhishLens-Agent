@@ -32,6 +32,26 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  // Logout
+  const logout = useCallback(() => {
+    try {
+      const storedToken = localStorage.getItem(STORAGE_TOKEN_KEY);
+      if (storedToken) {
+        fetch(`${API_BASE}/api/auth/logout/`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${storedToken}` },
+        }).catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
+
+    setToken(null);
+    setUser(null);
+    localStorage.removeItem(STORAGE_TOKEN_KEY);
+    localStorage.removeItem(STORAGE_USER_KEY);
+  }, []);
+
   // Sync / verify session on app mount
   useEffect(() => {
     async function initAuth() {
@@ -293,26 +313,6 @@ export function AuthProvider({ children }) {
       console.error('Remove avatar error:', err);
       return { success: false, error: err.message };
     }
-  };
-
-  // Logout
-  const logout = () => {
-    try {
-      const storedToken = localStorage.getItem(STORAGE_TOKEN_KEY);
-      if (storedToken) {
-        fetch(`${API_BASE}/api/auth/logout/`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${storedToken}` },
-        }).catch(() => {});
-      }
-    } catch {
-      // ignore
-    }
-
-    setToken(null);
-    setUser(null);
-    localStorage.removeItem(STORAGE_TOKEN_KEY);
-    localStorage.removeItem(STORAGE_USER_KEY);
   };
 
   // Authenticated fetch wrapper

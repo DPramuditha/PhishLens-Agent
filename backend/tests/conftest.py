@@ -25,6 +25,12 @@ from backend.agents.models import ChatSession, ChatMessage, AgentMemoryRecord, U
 from backend.core.security.jwt_utils import generate_jwt_token
 
 
+@pytest.fixture(autouse=True, scope="session")
+def django_db_setup(django_db_blocker):
+    """Unblock database access globally for all tests."""
+    django_db_blocker.unblock()
+
+
 @pytest.fixture
 def request_factory():
     """Returns Django RequestFactory instance."""

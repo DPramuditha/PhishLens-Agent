@@ -191,7 +191,7 @@ export default function RegisterPage() {
       setErrorMsg('Password must contain at least one number (0-9).');
       return;
     }
-    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/.test(password)) {
+    if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?~`]/.test(password)) {
       setErrorMsg('Password must contain at least one special character (!@#$%).');
       return;
     }
