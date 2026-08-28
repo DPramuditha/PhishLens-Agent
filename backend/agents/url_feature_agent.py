@@ -20,18 +20,134 @@ from langchain_core.tools import tool
 # ---------------------------------------------------------------------------
 
 SUSPICIOUS_KEYWORDS = [
+    # General Phishing & Auth Keywords
     "login", "verify", "secure", "account", "update", "bank", "confirm",
     "password", "signin", "sign-in", "webscr", "ebayisapi", "suspend",
     "billing", "paypal", "apple", "icloud", "recover", "unlock",
     "authenticate", "credential", "wallet", "alert", "notification",
+    "portal", "validation", "security-check", "session", "support-ticket",
+    # Sri Lankan Specific Banking & Service Keywords
+    "vishwa", "smartpay", "combankdigital", "peopleswave", "solo", "frimi",
+    "ezcash", "mcash", "cebcare", "billpayment", "electricitybill", "waterboard",
+    "trafficfine", "policefine", "parceldelivery", "slpost", "customsclearance",
+    "epf", "etf", "lankaqr", "justpay", "cbsl", "nic", "identitycard",
+    "ebanking", "ibanking", "digitalbanking", "cardverification", "otp"
 ]
 
-KNOWN_BRANDS = [
-    "google", "facebook", "apple", "microsoft", "amazon", "netflix",
-    "paypal", "instagram", "twitter", "linkedin", "dropbox", "yahoo",
-    "outlook", "chase", "wellsfargo", "bankofamerica", "citibank",
-    "whatsapp", "telegram", "spotify", "adobe", "github", "steam",
-]
+# Comprehensive Brand Definitions with official domain patterns
+# Maps brand identifiers to their authentic legitimate root domains
+OFFICIAL_BRAND_DOMAINS = {
+    # --- Sri Lankan State & Commercial Banks ---
+    "boc": ["boc.lk"],
+    "bank of ceylon": ["boc.lk"],
+    "peoplesbank": ["peoplesbank.lk"],
+    "peoples bank": ["peoplesbank.lk"],
+    "peopleswave": ["peoplesbank.lk"],
+    "combank": ["combank.lk", "commercialbank.lk", "combankdigital.com"],
+    "commercial bank": ["combank.lk", "commercialbank.lk", "combankdigital.com"],
+    "combankdigital": ["combank.lk", "commercialbank.lk", "combankdigital.com"],
+    "sampath": ["sampath.lk"],
+    "sampath bank": ["sampath.lk"],
+    "vishwa": ["sampath.lk"],
+    "hnb": ["hnb.net", "hnb.lk"],
+    "hatton national bank": ["hnb.net", "hnb.lk"],
+    "hnb solo": ["hnb.net", "hnb.lk"],
+    "ndb": ["ndbbank.com"],
+    "ndb bank": ["ndbbank.com"],
+    "ndb neos": ["ndbbank.com"],
+    "seylan": ["seylan.lk"],
+    "seylan bank": ["seylan.lk"],
+    "nationstrust": ["nationstrust.com"],
+    "nations trust bank": ["nationstrust.com"],
+    "frimi": ["frimi.lk", "nationstrust.com"],
+    "dfcc": ["dfcc.lk"],
+    "dfcc bank": ["dfcc.lk"],
+    "nsb": ["nsb.lk"],
+    "national savings bank": ["nsb.lk"],
+    "panasia": ["panasia.lk"],
+    "pan asia bank": ["panasia.lk"],
+    "unionb": ["unionb.com"],
+    "union bank": ["unionb.com"],
+    "amanabank": ["amanabank.lk"],
+    "amana bank": ["amanabank.lk"],
+    "cargillsbank": ["cargillsbank.com"],
+    "cargills bank": ["cargillsbank.com"],
+    "cbsl": ["cbsl.gov.lk"],
+    "central bank of sri lanka": ["cbsl.gov.lk"],
+    "sdb": ["sdb.lk"],
+    "rdb": ["rdb.lk"],
+    "mbsl": ["mbslbank.com"],
+
+    # --- Sri Lankan Telecom, Mobile Money & Payments ---
+    "dialog": ["dialog.lk"],
+    "dialog axiata": ["dialog.lk"],
+    "mydialog": ["dialog.lk"],
+    "ezcash": ["ezcash.lk", "dialog.lk"],
+    "slt": ["slt.lk"],
+    "mobitel": ["mobitel.lk", "slt.lk"],
+    "slt-mobitel": ["slt.lk", "mobitel.lk"],
+    "mcash": ["mcash.lk", "mobitel.lk"],
+    "lankapay": ["lankapay.net", "lankaclear.com"],
+    "lankaqr": ["lankapay.net", "lankaclear.com"],
+    "justpay": ["lankapay.net", "lankaclear.com"],
+    "airtel": ["airtel.lk", "airtel.in"],
+    "hutch": ["hutch.lk"],
+
+    # --- Sri Lankan Utilities & Government Portals ---
+    "ceb": ["ceb.lk"],
+    "cebcare": ["ceb.lk"],
+    "waterboard": ["waterboard.lk"],
+    "nwsdb": ["waterboard.lk"],
+    "slpost": ["slpost.gov.lk"],
+    "sri lanka post": ["slpost.gov.lk"],
+    "police": ["police.lk", "police.gov.lk"],
+    "sri lanka police": ["police.lk", "police.gov.lk"],
+    "customs": ["customs.gov.lk"],
+    "ird": ["ird.gov.lk"],
+    "cert": ["cert.gov.lk"],
+    "dmt": ["dmt.gov.lk"],
+    "gic": ["gic.gov.lk"],
+    "gov.lk": ["gov.lk"],
+
+    # --- Sri Lankan E-Commerce & Services ---
+    "daraz": ["daraz.lk"],
+    "ikman": ["ikman.lk"],
+    "kapruka": ["kapruka.com"],
+    "pickme": ["pickme.lk"],
+
+    # --- Major Global Target Brands ---
+    "google": ["google.com", "google.lk", "accounts.google.com"],
+    "microsoft": ["microsoft.com", "live.com", "office.com", "azure.com"],
+    "apple": ["apple.com", "icloud.com"],
+    "paypal": ["paypal.com"],
+    "amazon": ["amazon.com", "aws.amazon.com"],
+    "netflix": ["netflix.com"],
+    "facebook": ["facebook.com", "fb.com", "meta.com"],
+    "instagram": ["instagram.com"],
+    "whatsapp": ["whatsapp.com"],
+    "twitter": ["twitter.com", "x.com"],
+    "linkedin": ["linkedin.com"],
+    "dropbox": ["dropbox.com"],
+    "yahoo": ["yahoo.com"],
+    "chase": ["chase.com"],
+    "bankofamerica": ["bankofamerica.com"],
+    "wellsfargo": ["wellsfargo.com"],
+    "citibank": ["citi.com", "citibank.com"],
+    "binance": ["binance.com"],
+    "coinbase": ["coinbase.com"],
+    "steam": ["steampowered.com", "steamcommunity.com"],
+    "docusign": ["docusign.com"],
+}
+
+KNOWN_BRANDS = list(OFFICIAL_BRAND_DOMAINS.keys())
+
+# High-Risk / Abused Free & Disposable TLDs commonly seen in phishing & smishing
+SUSPICIOUS_TLDS = {
+    "xyz", "top", "tk", "ml", "ga", "cf", "gq", "buzz", "club", "work",
+    "click", "live", "shop", "vip", "icu", "cam", "monster", "fit", "rest",
+    "online", "site", "website", "space", "fun", "uno", "link", "info",
+    "kim", "bid", "loan", "stream", "gdn", "date", "racing", "download"
+}
 
 
 # ---------------------------------------------------------------------------
@@ -121,19 +237,29 @@ def analyze_url_features(url: str) -> str:
         url_lower = url.lower()
         url_suspicious_keywords = [kw for kw in SUSPICIOUS_KEYWORDS if kw in url_lower]
 
-        # --- Typosquatting detection ---
+        # --- Typosquatting & Brand Spoofing Detection ---
         typosquatting_matches = []
         domain_lower = hostname.lower()
-        for brand in KNOWN_BRANDS:
-            if brand in domain_lower and brand + "." not in domain_lower.split(".")[-2] + ".":
-                # Brand appears in domain but is not the exact domain
-                # e.g. "google-login.com" or "paypal.secure-verify.com"
-                if not domain_lower.endswith(f"{brand}.com") and \
-                   not domain_lower.endswith(f"{brand}.org") and \
-                   not domain_lower.endswith(f"{brand}.net"):
+
+        # Helper to check if domain is an official domain of the brand
+        def _is_official_domain(d: str, valid_domains: list) -> bool:
+            for vd in valid_domains:
+                if d == vd or d.endswith("." + vd):
+                    return True
+            return False
+
+        for brand_key, official_domains in OFFICIAL_BRAND_DOMAINS.items():
+            # Check if brand keyword appears in hostname (or path with security keywords)
+            if len(brand_key) >= 3 and brand_key in domain_lower:
+                # If the domain is NOT one of the authentic registered domains for this brand
+                if not _is_official_domain(domain_lower, official_domains):
+                    official_desc = ", ".join(official_domains[:2])
                     typosquatting_matches.append({
-                        "brand": brand,
-                        "pattern": f"Brand '{brand}' found in domain '{hostname}' -- possible impersonation",
+                        "brand": brand_key.title(),
+                        "target_entity": brand_key,
+                        "official_domain": official_desc,
+                        "pattern": f"Suspicious domain '{hostname}' mimics '{brand_key.title()}' but is not an authorized official domain ({official_desc}).",
+                        "severity": "critical" if any(b in brand_key for b in ["boc", "combank", "sampath", "peoples", "hnb", "seylan", "dialog", "ceb", "slpost", "paypal", "google", "apple", "microsoft"]) else "high"
                     })
 
         # --- WHOIS lookup ---
@@ -151,10 +277,22 @@ def analyze_url_features(url: str) -> str:
             if isinstance(updated_date, list):
                 updated_date = updated_date[0]
 
-            from datetime import datetime
+            from datetime import datetime, timezone
             domain_age_days = None
             if creation_date:
-                domain_age_days = (datetime.now() - creation_date).days
+                try:
+                    if hasattr(creation_date, "tzinfo") and creation_date.tzinfo is not None:
+                        now_dt = datetime.now(creation_date.tzinfo)
+                    else:
+                        now_dt = datetime.now()
+                    domain_age_days = max(0, (now_dt - creation_date).days)
+                except Exception:
+                    # Fallback naive comparison
+                    try:
+                        naive_creation = creation_date.replace(tzinfo=None) if hasattr(creation_date, "replace") else creation_date
+                        domain_age_days = max(0, (datetime.now() - naive_creation).days)
+                    except Exception:
+                        domain_age_days = None
 
             # Extract the registered domain name from WHOIS
             registered_domain = None
@@ -289,6 +427,8 @@ def analyze_url_features(url: str) -> str:
 
         # --- Risk indicators ---
         risk_indicators = []
+        if tld.lower() in SUSPICIOUS_TLDS:
+            risk_indicators.append(f"Domain uses high-risk disposable/abused TLD (.{tld}) commonly used in phishing campaigns")
         if url_length > 75:
             risk_indicators.append(f"Suspiciously long URL ({url_length} characters)")
         if has_ip:
@@ -306,15 +446,47 @@ def analyze_url_features(url: str) -> str:
         if len(url_suspicious_keywords) > 0:
             risk_indicators.append(f"Suspicious keywords in URL: {', '.join(url_suspicious_keywords)}")
         if len(typosquatting_matches) > 0:
-            risk_indicators.append(f"Possible typosquatting of: {', '.join(m['brand'] for m in typosquatting_matches)}")
+            for tm in typosquatting_matches:
+                risk_indicators.append(tm["pattern"])
         if scheme != "https":
-            risk_indicators.append("Site does not use HTTPS")
+            risk_indicators.append("Initial URL scheme is insecure HTTP")
         if whois_data.get("domain_age_days") is not None and whois_data["domain_age_days"] < 30:
             risk_indicators.append(f"Very young domain -- registered only {whois_data['domain_age_days']} days ago")
+
+        # Compute standardized 12-dimensional URL Feature Vector
+        domain_age_val = whois_data.get("domain_age_days")
+        if domain_age_val is not None:
+            age_risk = 1.0 if domain_age_val < 30 else (0.5 if domain_age_val < 180 else 0.0)
+        else:
+            age_risk = 0.5 # Unknown/anonymized WHOIS slight risk
+
+        url_vector = [
+            round(min(1.0, url_length / 150.0), 4),                                # 1. url_length_norm
+            round(min(1.0, len(hostname) / 60.0), 4),                               # 2. hostname_length_norm
+            round(min(1.0, dot_count / 5.0), 4),                                   # 3. dot_count_norm
+            round(min(1.0, hyphen_count / 4.0), 4),                                # 4. hyphen_count_norm
+            1.0 if has_ip else 0.0,                                                # 5. is_ip_address_flag
+            round(min(1.0, entropy / 5.0), 4),                                     # 6. domain_entropy_norm
+            1.0 if at_sign else 0.0,                                                # 7. at_sign_flag
+            round(min(1.0, subdomain_depth / 4.0), 4),                             # 8. subdomain_depth_norm
+            round(min(1.0, len(url_suspicious_keywords) / 3.0), 4),                # 9. suspicious_keywords_norm
+            1.0 if len(typosquatting_matches) > 0 else 0.0,                        # 10. typosquatting_flag
+            1.0 if (ssl_certificate.get("status") == "success" and ssl_certificate.get("is_trusted")) else 0.0,  # 11. ssl_valid_flag
+            round(age_risk, 4),                                                     # 12. domain_age_risk_norm
+        ]
+
+        url_feature_names = [
+            "url_length_norm", "hostname_length_norm", "dot_count_norm",
+            "hyphen_count_norm", "is_ip_address_flag", "domain_entropy_norm",
+            "at_sign_flag", "subdomain_depth_norm", "suspicious_keywords_norm",
+            "typosquatting_flag", "ssl_valid_flag", "domain_age_risk_norm"
+        ]
 
         result = {
             "status": "success",
             "url": url,
+            "url_feature_vector": url_vector,
+            "url_feature_names": url_feature_names,
             "lexical_features": {
                 "url_length": url_length,
                 "hostname": hostname,

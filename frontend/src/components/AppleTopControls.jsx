@@ -1,5 +1,18 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import gsap from 'gsap';
+import { useToast } from './ToastContext';
+
+function formatRelativeNotifTime(timestamp, fallbackTime = 'Just now') {
+  if (!timestamp) return fallbackTime;
+  const elapsedSec = Math.floor((Date.now() - Number(timestamp)) / 1000);
+  if (elapsedSec < 30) return 'Just now';
+  if (elapsedSec < 60) return `${elapsedSec}s ago`;
+  const elapsedMin = Math.floor(elapsedSec / 60);
+  if (elapsedMin < 60) return `${elapsedMin}m ago`;
+  const elapsedHours = Math.floor(elapsedMin / 60);
+  if (elapsedHours < 24) return `${elapsedHours}h ago`;
+  return `${Math.floor(elapsedHours / 24)}d ago`;
+}
 
 /**
  * Heroicons outline icons
@@ -199,15 +212,46 @@ export default function AppleTopControls({
   className = '',
 }) {
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
-  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
   const [filter, setFilter] = useState('all'); // 'all' | 'unread'
+
+  const {
+    notifications,
+    unreadCount,
+    markAllAsRead,
+    clearAllNotifications,
+    toggleNotificationRead,
+    deleteNotification,
+  } = useToast();
 
   const containerRef = useRef(null);
   const popoverRef = useRef(null);
   const bellButtonRef = useRef(null);
   const toggleThumbRef = useRef(null);
+  const prevUnreadRef = useRef(unreadCount);
 
-  const unreadCount = notifications.filter((n) => n.unread).length;
+  // Trigger real-time bell animation on new unread notification
+  useEffect(() => {
+    if (unreadCount > prevUnreadRef.current && bellButtonRef.current) {
+      const bellSvg = bellButtonRef.current.querySelector('.bell-icon-svg');
+      if (bellSvg) {
+        gsap.fromTo(
+          bellSvg,
+          { rotation: 0 },
+          {
+            keyframes: [
+              { rotation: -18, duration: 0.08 },
+              { rotation: 16, duration: 0.08 },
+              { rotation: -12, duration: 0.08 },
+              { rotation: 8, duration: 0.08 },
+              { rotation: 0, duration: 0.08 },
+            ],
+            ease: 'power1.out',
+          }
+        );
+      }
+    }
+    prevUnreadRef.current = unreadCount;
+  }, [unreadCount]);
 
   /* ── Animate Popover Entrance / Exit with GSAP spring ── */
   useEffect(() => {
@@ -287,26 +331,6 @@ export default function AppleTopControls({
     }
     setIsNotificationOpen((prev) => !prev);
   }, []);
-
-  /* ── Notification action handlers ── */
-  const handleMarkAllAsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
-  };
-
-  const handleClearAll = () => {
-    setNotifications([]);
-  };
-
-  const handleToggleReadItem = (id) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, unread: !n.unread } : n))
-    );
-  };
-
-  const handleDeleteItem = (e, id) => {
-    e.stopPropagation();
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
-  };
 
   const displayedNotifications =
     filter === 'unread'
@@ -421,14 +445,14 @@ export default function AppleTopControls({
 
         {/* Apple Red Notification Badge Dot */}
         {unreadCount > 0 && (
-          <span className="absolute top-1.5 right-1.5 flex h-2 w-2 items-center justify-center">
-            {/* Animated subtle ping ring */}
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-500 opacity-60" />
-            {/* Solid vibrant Apple red dot */}
+          <span
+            className="absolute top-[4.5px] right-[4.5px] pointer-events-none flex h-[6.5px] w-[6.5px] items-center justify-center"
+            title={`${unreadCount} unread notifications`}
+          >
             <span
-              className="relative inline-flex h-2 w-2 rounded-full bg-[#ff3b30] shadow-sm"
+              className="h-[6.5px] w-[6.5px] rounded-full bg-[#ff3b30] ring-[1.5px] ring-white dark:ring-[#24242a]"
               style={{
-                boxShadow: '0 0 5px rgba(255, 59, 48, 0.7), inset 0 0.5px 0.5px rgba(255, 255, 255, 0.6)',
+                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.12)',
               }}
             />
           </span>
@@ -476,7 +500,7 @@ export default function AppleTopControls({
             {unreadCount > 0 && (
               <button
                 type="button"
-                onClick={handleMarkAllAsRead}
+                onClick={markAllAsRead}
                 title="Mark all as read"
                 className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/15 transition-colors cursor-pointer"
               >
@@ -487,7 +511,7 @@ export default function AppleTopControls({
             {notifications.length > 0 && (
               <button
                 type="button"
-                onClick={handleClearAll}
+                onClick={clearAllNotifications}
                 title="Clear all notifications"
                 className="flex items-center justify-center rounded-lg p-1.5 text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/15 transition-colors cursor-pointer"
               >
@@ -539,10 +563,10 @@ export default function AppleTopControls({
               </p>
             </div>
           ) : (
-            displayedNotifications.map((item) => (
+            displayedNotifications.map((item, idx) => (
               <div
-                key={item.id}
-                onClick={() => handleToggleReadItem(item.id)}
+                key={item.id ? `${item.id}-${idx}` : idx}
+                onClick={() => toggleNotificationRead(item.id)}
                 className={`group/item relative flex items-start gap-3 rounded-2xl p-3 text-left transition-all duration-200 cursor-pointer ${
                   item.unread
                     ? isDarkMode
@@ -578,7 +602,7 @@ export default function AppleTopControls({
                       {item.title}
                     </p>
                     <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">
-                      {item.time}
+                      {formatRelativeNotifTime(item.timestamp, item.time)}
                     </span>
                   </div>
                   <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2 mt-0.5 leading-relaxed">
@@ -596,7 +620,10 @@ export default function AppleTopControls({
 
                   <button
                     type="button"
-                    onClick={(e) => handleDeleteItem(e, item.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteNotification(item.id);
+                    }}
                     title="Dismiss"
                     className="opacity-0 group-hover/item:opacity-100 text-gray-400 hover:text-rose-500 transition-opacity p-0.5 cursor-pointer"
                   >

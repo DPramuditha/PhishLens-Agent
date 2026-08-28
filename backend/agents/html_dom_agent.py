@@ -19,17 +19,49 @@ from langchain_core.tools import tool
 # ---------------------------------------------------------------------------
 
 SUSPICIOUS_KEYWORDS = [
+    # General Phishing & Auth
     "login", "verify", "secure", "account", "update", "bank", "confirm",
     "password", "signin", "sign-in", "webscr", "ebayisapi", "suspend",
     "billing", "paypal", "apple", "icloud", "recover", "unlock",
     "authenticate", "credential", "wallet", "alert", "notification",
+    "security question", "enter your password", "enter pin", "verify identity",
+    # Sri Lankan Banking & Financial Terms
+    "bank of ceylon", "boc", "smartpay", "boc online", "peoples bank",
+    "peoples wave", "peoples web", "commercial bank", "combank", "combank digital",
+    "sampath", "sampath bank", "vishwa", "sampath vishwa", "hatton national bank",
+    "hnb", "hnb solo", "ndb", "ndb neos", "seylan", "seylan online",
+    "nations trust", "frimi", "dfcc", "nsb", "pan asia bank", "union bank",
+    "amana bank", "cargills bank", "central bank of sri lanka", "cbsl",
+    # Sri Lankan Mobile Money, Telco & Utilities
+    "dialog", "mydialog", "ez cash", "ezcash", "slt", "mobitel", "mcash",
+    "lankapay", "lankaqr", "justpay", "ceb", "ceb care", "cebcare",
+    "water board", "nwsdb", "sri lanka post", "sl post", "parcel delivery",
+    # Sri Lankan Identity & Credential Harvesting
+    "national identity card", "nic number", "nic", "identity card",
+    "cif number", "account number", "debit card number", "atm pin", "cvv",
+    "one time password", "otp", "sms code", "security code",
+    "police fine", "traffic fine", "customs fee", "electricity bill payment"
 ]
 
 KNOWN_BRANDS = [
+    # Sri Lankan State & Commercial Banks
+    "boc", "bank of ceylon", "peoples bank", "peoplesbank", "commercial bank",
+    "combank", "sampath", "sampath bank", "vishwa", "hnb", "hatton national bank",
+    "ndb", "seylan", "nations trust", "frimi", "dfcc", "nsb", "pan asia",
+    "union bank", "amana bank", "cargills bank", "cbsl", "sdb", "rdb",
+    # Sri Lankan Telcos & Fintech
+    "dialog", "slt", "mobitel", "ez cash", "mcash", "lankapay", "lankaqr", "justpay",
+    # Sri Lankan Utilities & Government
+    "ceb", "ceb care", "water board", "nwsdb", "sri lanka post", "slpost",
+    "sri lanka police", "customs", "ird", "cert.gov.lk",
+    # Sri Lankan E-Commerce
+    "daraz", "ikman", "kapruka", "pickme",
+    # Major Global Brands
     "google", "facebook", "apple", "microsoft", "amazon", "netflix",
     "paypal", "instagram", "twitter", "linkedin", "dropbox", "yahoo",
     "outlook", "chase", "wellsfargo", "bankofamerica", "citibank",
     "whatsapp", "telegram", "spotify", "adobe", "github", "steam",
+    "binance", "coinbase", "docusign"
 ]
 
 
@@ -189,12 +221,38 @@ def extract_html_features(url: str) -> str:
         if len(suspicious_text_matches) >= 3:
             risk_indicators.append(f"Multiple suspicious keywords found: {', '.join(suspicious_text_matches[:5])}")
 
+        # Compute standardized 12-dimensional DOM Feature Vector
+        total_links_count = max(1, len(links))
+        dom_vector = [
+            round(min(1.0, len(form_details) / 5.0), 4),                          # 1. form_count_norm
+            1.0 if len(password_fields) > 0 else 0.0,                             # 2. password_field_flag
+            1.0 if len(email_fields) > 0 else 0.0,                                # 3. email_field_flag
+            round(min(1.0, len(hidden_fields) / 10.0), 4),                         # 4. hidden_fields_norm
+            1.0 if any(f.get("action_is_external") for f in form_details) else 0.0,# 5. external_form_action_flag
+            round(null_links / total_links_count, 4),                              # 6. null_links_ratio
+            round(external_links / total_links_count, 4),                          # 7. external_links_ratio
+            round(min(1.0, len(iframe_details) / 3.0), 4),                         # 8. iframe_count_norm
+            1.0 if any(i.get("is_hidden") for i in iframe_details) else 0.0,       # 9. hidden_iframe_flag
+            1.0 if favicon_is_external else 0.0,                                   # 10. favicon_external_flag
+            round(min(1.0, len(suspicious_text_matches) / 5.0), 4),                # 11. suspicious_keywords_norm
+            round(min(1.0, len(brand_mentions) / 3.0), 4),                         # 12. brand_mentions_norm
+        ]
+
+        dom_feature_names = [
+            "form_count_norm", "password_field_flag", "email_field_flag",
+            "hidden_fields_norm", "external_form_action_flag", "null_links_ratio",
+            "external_links_ratio", "iframe_count_norm", "hidden_iframe_flag",
+            "favicon_external_flag", "suspicious_keywords_norm", "brand_mentions_norm"
+        ]
+
         result = {
             "status": "success",
             "url": url,
             "base_domain": base_domain,
             "page_title": title_tag.string if title_tag else None,
             "meta_description": meta_desc.get("content", "") if meta_desc else None,
+            "dom_feature_vector": dom_vector,
+            "dom_feature_names": dom_feature_names,
             "forms": {
                 "count": len(form_details),
                 "details": form_details,

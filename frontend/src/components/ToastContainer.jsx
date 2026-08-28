@@ -11,14 +11,17 @@ function ToastItem({ toast, onDismiss }) {
   /* ── dismiss with exit animation ── */
   const dismiss = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
-    if (!wrapRef.current) { onDismiss(toast.id); return; }
+    if (!wrapRef.current) {
+      onDismiss(toast.id);
+      return;
+    }
 
     gsap.to(wrapRef.current, {
       scale: 0.88,
       opacity: 0,
-      y: -14,
-      duration: 0.3,
-      ease: 'back.in(1.4)',
+      y: -12,
+      duration: 0.25,
+      ease: 'power2.in',
       onComplete: () => onDismiss(toast.id),
     });
   }, [toast.id, onDismiss]);
@@ -29,8 +32,8 @@ function ToastItem({ toast, onDismiss }) {
 
     gsap.fromTo(
       wrapRef.current,
-      { scale: 0.8, opacity: 0, y: -20 },
-      { scale: 1, opacity: 1, y: 0, duration: 0.45, ease: 'back.out(1.6)' }
+      { scale: 0.85, opacity: 0, y: -16 },
+      { scale: 1, opacity: 1, y: 0, duration: 0.35, ease: 'back.out(1.6)' }
     );
 
     if (toast.duration > 0) {
@@ -54,26 +57,32 @@ function ToastItem({ toast, onDismiss }) {
   );
 }
 
-/* ─── Toast Container — Top-Right Stack ─── */
+/* ─── Toast Container — Top-Right Stack (Max 2 displayed) ─── */
 export default function ToastContainer() {
   const { toasts, removeToast } = useToast();
 
+  // Enforce maximum 2 notifications displayed
+  const visibleToasts = toasts.slice(-2);
+
   return (
     <div
+      className="popup-title-scope font-inter"
       style={{
         position: 'fixed',
-        top: 64,
+        top: 20,
         right: 20,
         zIndex: 99999,
         display: 'flex',
         flexDirection: 'column',
+        alignItems: 'flex-end',
         gap: 10,
         pointerEvents: 'none',
-        maxHeight: 'calc(100vh - 80px)',
+        maxHeight: 'calc(100vh - 40px)',
         overflow: 'visible',
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
       }}
     >
-      {toasts.map((toast) => (
+      {visibleToasts.map((toast) => (
         <div key={toast.id} style={{ pointerEvents: 'auto' }}>
           <ToastItem toast={toast} onDismiss={removeToast} />
         </div>

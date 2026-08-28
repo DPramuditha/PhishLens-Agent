@@ -1,0 +1,21 @@
+"""
+PhishLens Agent — Core Middleware Layer.
+"""
+
+from backend.core.middleware.jwt_auth import (
+    JWTAuthenticationMiddleware,
+    jwt_required,
+    optional_jwt,
+)
+from backend.core.middleware.cors import CORSMiddleware
+from backend.core.middleware.rate_limit import RateLimitMiddleware
+from backend.core.middleware.request_logging import RequestLoggingMiddleware
+
+__all__ = [
+    "JWTAuthenticationMiddleware",
+    "jwt_required",
+    "optional_jwt",
+    "CORSMiddleware",
+    "RateLimitMiddleware",
+    "RequestLoggingMiddleware",
+]
