@@ -1,39 +1,102 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Menu, X, ChevronRight } from 'lucide-react';
+import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { ScrollSmoother } from 'gsap/ScrollSmoother';
 import { useAuth } from '../context/AuthContext';
+
+if (typeof window !== 'undefined') {
+  gsap.registerPlugin(ScrollTrigger);
+}
 
 export default function Navbar({ brandName = "PhishLens", onActionClick }) {
   const navigate = useNavigate();
   const { isAuthenticated, user } = useAuth();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const navCapsuleRef = useRef(null);
+
+  /* GSAP Scroll Animation: Only reduces width smoothly on scroll, height stays strictly unchanged */
+  useLayoutEffect(() => {
+    const ctx = gsap.context(() => {
+      if (navCapsuleRef.current) {
+        gsap.fromTo(
+          navCapsuleRef.current,
+          {
+            maxWidth: '1020px',
+          },
+          {
+            maxWidth: '720px',
+            ease: 'power1.out',
+            scrollTrigger: {
+              start: 'top top',
+              end: '+=160',
+              scrub: 0.4,
+              invalidateOnRefresh: true,
+            },
+          }
+        );
+      }
+    });
+
+    return () => ctx.revert();
+  }, []);
 
   useEffect(() => {
-    const handleScroll = () => {
+    // Synchronize scroll threshold with ScrollTrigger
+    const st = ScrollTrigger.create({
+      start: 'top -20',
+      onUpdate: (self) => {
+        setIsScrolled(self.scroll() > 20);
+      },
+    });
+
+    const handleScrollFallback = () => {
       if (window.scrollY > 20) {
         setIsScrolled(true);
       } else {
         setIsScrolled(false);
       }
     };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', handleScrollFallback, { passive: true });
+
+    return () => {
+      st.kill();
+      window.removeEventListener('scroll', handleScrollFallback);
+    };
   }, []);
+
+  const handleNavClick = (e, href) => {
+    if (href.startsWith('#')) {
+      e.preventDefault();
+      setIsMobileMenuOpen(false);
+      const targetId = href;
+      const smoother = ScrollSmoother.get();
+      if (smoother) {
+        smoother.scrollTo(targetId, true, 'top top');
+      } else {
+        const targetEl = document.querySelector(targetId);
+        if (targetEl) {
+          targetEl.scrollIntoView({ behavior: 'smooth' });
+        }
+      }
+    }
+  };
 
   const navLinks = [
     { label: 'Overview', href: '#overview' },
     { label: 'Features', href: '#features' },
-    { label: 'Integrations', href: '#integrations' },
-    { label: 'Security', href: '#security' },
-    { label: 'Docs', href: '#docs' },
+    { label: 'Security', href: '#features' },
+    { label: 'Docs', href: '#overview' },
   ];
 
   return (
     <header className="fixed top-4 left-0 right-0 z-50 flex flex-col items-center px-4 pointer-events-none">
-      {/* ── Floating Rounded Capsule Navbar ── */}
+      {/* ── Floating Rounded Capsule Navbar (Animated Width, Fixed Height) ── */}
       <div
-        className={`w-full max-w-5xl h-14 px-4 sm:px-6 flex items-center justify-between rounded-full pointer-events-auto transition-all duration-300 ${
+        ref={navCapsuleRef}
+        className={`w-full max-w-[1020px] h-12 px-3.5 sm:px-5 flex items-center justify-between rounded-full pointer-events-auto transition-colors duration-300 ${
           isScrolled
             ? 'bg-[#0e0e10]/90 backdrop-blur-2xl border border-white/[0.14] shadow-[0_12px_40px_rgba(0,0,0,0.7),inset_0_1px_1px_rgba(255,255,255,0.12)]'
             : 'bg-[#141416]/75 backdrop-blur-xl border border-white/[0.10] shadow-[0_8px_30px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.08)]'
@@ -42,20 +105,21 @@ export default function Navbar({ brandName = "PhishLens", onActionClick }) {
         {/* Brand Logo */}
         <Link
           to="/"
-          className="flex items-center gap-2.5 group cursor-pointer"
+          className="flex items-center gap-2 group cursor-pointer"
         >
-          <span className="text-white font-semibold text-[15px] sm:text-[16px] tracking-[-0.02em]">
+          <span className="text-white font-semibold text-[14px] sm:text-[15px] tracking-[-0.02em]">
             {brandName}
           </span>
         </Link>
 
         {/* Desktop Navigation Links */}
-        <nav className="hidden md:flex items-center gap-6">
+        <nav className="hidden md:flex items-center gap-5">
           {navLinks.map((link) => (
             <a
               key={link.label}
               href={link.href}
-              className="text-zinc-400 hover:text-white text-[13.5px] font-medium tracking-[-0.01em] transition-colors duration-200"
+              onClick={(e) => handleNavClick(e, link.href)}
+              className="text-zinc-400 hover:text-white text-[13px] font-medium tracking-[-0.01em] transition-colors duration-200"
             >
               {link.label}
             </a>
@@ -63,15 +127,15 @@ export default function Navbar({ brandName = "PhishLens", onActionClick }) {
         </nav>
 
         {/* Right Action Buttons */}
-        <div className="hidden sm:flex items-center gap-2.5">
+        <div className="hidden sm:flex items-center gap-2">
           {isAuthenticated ? (
             <button
               type="button"
               onClick={() => navigate('/chat')}
-              className="flex items-center gap-2 bg-white text-black font-semibold text-[13px] px-4 py-1.5 rounded-full hover:bg-zinc-100 active:scale-[0.97] transition-all duration-150 cursor-pointer"
+              className="flex items-center gap-1.5 bg-white text-black font-semibold text-[12.5px] px-3.5 py-1.5 rounded-full hover:bg-zinc-100 active:scale-[0.97] transition-all duration-150 cursor-pointer"
             >
               {user?.picture && (
-                <img src={user.picture} alt="" className="w-4 h-4 rounded-full object-cover shrink-0" />
+                <img src={user.picture} alt="" className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
               )}
               <span>Go to Chat</span>
             </button>
@@ -79,7 +143,7 @@ export default function Navbar({ brandName = "PhishLens", onActionClick }) {
             <>
               <Link
                 to="/login"
-                className="text-[13.5px] font-medium text-zinc-300 hover:text-white px-3 py-1.5 transition-colors duration-200"
+                className="text-[13px] font-medium text-zinc-300 hover:text-white px-2.5 py-1 transition-colors duration-200"
               >
                 Sign in
               </Link>
@@ -89,7 +153,7 @@ export default function Navbar({ brandName = "PhishLens", onActionClick }) {
                   if (onActionClick) onActionClick();
                   else navigate('/chat');
                 }}
-                className="bg-white text-black font-semibold text-[13px] px-4 py-1.5 rounded-full hover:bg-zinc-100 active:scale-[0.97] transition-all duration-150 cursor-pointer"
+                className="bg-white text-black font-semibold text-[12.5px] px-3.5 py-1.5 rounded-full hover:bg-zinc-100 active:scale-[0.97] transition-all duration-150 cursor-pointer"
               >
                 Get Started
               </button>
@@ -102,22 +166,22 @@ export default function Navbar({ brandName = "PhishLens", onActionClick }) {
           type="button"
           aria-label="Toggle navigation menu"
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="md:hidden flex items-center justify-center w-8 h-8 rounded-full bg-white/[0.08] text-zinc-300 hover:text-white border border-white/[0.08] active:scale-95 transition-all cursor-pointer"
+          className="md:hidden flex items-center justify-center w-7 h-7 rounded-full bg-white/[0.08] text-zinc-300 hover:text-white border border-white/[0.08] active:scale-95 transition-all cursor-pointer"
         >
-          {isMobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+          {isMobileMenuOpen ? <X className="w-3.5 h-3.5" /> : <Menu className="w-3.5 h-3.5" />}
         </button>
       </div>
 
       {/* Mobile Drawer Menu (Rounded Floating Card) */}
       {isMobileMenuOpen && (
-        <div className="w-full max-w-5xl mt-2 rounded-3xl bg-[#121214]/95 backdrop-blur-2xl border border-white/[0.12] p-5 shadow-2xl pointer-events-auto animate-in fade-in zoom-in-95 duration-200">
+        <div className="w-full max-w-3xl mt-2 rounded-3xl bg-[#121214]/95 backdrop-blur-2xl border border-white/[0.12] p-5 shadow-2xl pointer-events-auto animate-in fade-in zoom-in-95 duration-200">
           <div className="flex flex-col gap-3">
             {navLinks.map((link) => (
               <a
                 key={link.label}
                 href={link.href}
-                onClick={() => setIsMobileMenuOpen(false)}
-                className="text-zinc-300 hover:text-white text-[15px] font-medium py-2 px-2 rounded-xl flex items-center justify-between hover:bg-white/[0.05] transition-colors"
+                onClick={(e) => handleNavClick(e, link.href)}
+                className="text-zinc-300 hover:text-white text-[14px] font-medium py-2 px-2 rounded-xl flex items-center justify-between hover:bg-white/[0.05] transition-colors"
               >
                 <span>{link.label}</span>
                 <ChevronRight className="w-4 h-4 text-zinc-500" />
@@ -127,7 +191,7 @@ export default function Navbar({ brandName = "PhishLens", onActionClick }) {
               <Link
                 to="/login"
                 onClick={() => setIsMobileMenuOpen(false)}
-                className="w-full text-center py-2.5 rounded-full text-zinc-300 bg-white/[0.06] border border-white/10 font-medium text-[14px]"
+                className="w-full text-center py-2.5 rounded-full text-zinc-300 bg-white/[0.06] border border-white/10 font-medium text-[13.5px]"
               >
                 Sign in
               </Link>
@@ -138,7 +202,7 @@ export default function Navbar({ brandName = "PhishLens", onActionClick }) {
                   if (onActionClick) onActionClick();
                   else navigate('/chat');
                 }}
-                className="w-full py-2.5 rounded-full bg-white text-black font-semibold text-[14px] shadow-lg active:scale-[0.98]"
+                className="w-full py-2.5 rounded-full bg-white text-black font-semibold text-[13.5px] shadow-lg active:scale-[0.98]"
               >
                 Get Started
               </button>

@@ -88,6 +88,38 @@ vi.mock('gsap', () => ({
   },
 }));
 
+// Mock gsap/ScrollTrigger
+vi.mock('gsap/ScrollTrigger', () => ({
+  ScrollTrigger: {
+    create: vi.fn(() => ({
+      kill: vi.fn(),
+      revert: vi.fn(),
+      refresh: vi.fn(),
+    })),
+    registerPlugin: vi.fn(),
+    getAll: vi.fn(() => []),
+    getById: vi.fn(),
+    refresh: vi.fn(),
+    update: vi.fn(),
+    batch: vi.fn(),
+  },
+}));
+
+// Mock gsap/ScrollSmoother
+vi.mock('gsap/ScrollSmoother', () => ({
+  ScrollSmoother: {
+    create: vi.fn(() => ({
+      kill: vi.fn(),
+      revert: vi.fn(),
+      paused: vi.fn(),
+      scrollTo: vi.fn(),
+      scrollTop: vi.fn(() => 0),
+    })),
+    get: vi.fn(() => null),
+    registerPlugin: vi.fn(),
+  },
+}));
+
 // Mock @react-oauth/google
 vi.mock('@react-oauth/google', () => ({
   GoogleOAuthProvider: ({ children }) => children,
