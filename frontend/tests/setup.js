@@ -63,6 +63,43 @@ vi.mock('gsap', () => ({
     })),
     set: vi.fn(),
     killTweensOf: vi.fn(),
+    registerPlugin: vi.fn(),
+    context: vi.fn((fn) => {
+      if (typeof fn === 'function') fn();
+      return { revert: vi.fn(), add: vi.fn(), clear: vi.fn(), kill: vi.fn() };
+    }),
+  },
+}));
+
+// Mock gsap/ScrollTrigger
+vi.mock('gsap/ScrollTrigger', () => ({
+  ScrollTrigger: {
+    create: vi.fn(() => ({
+      kill: vi.fn(),
+      revert: vi.fn(),
+      refresh: vi.fn(),
+    })),
+    registerPlugin: vi.fn(),
+    getAll: vi.fn(() => []),
+    getById: vi.fn(),
+    refresh: vi.fn(),
+    update: vi.fn(),
+    batch: vi.fn(),
+  },
+}));
+
+// Mock gsap/ScrollSmoother
+vi.mock('gsap/ScrollSmoother', () => ({
+  ScrollSmoother: {
+    create: vi.fn(() => ({
+      kill: vi.fn(),
+      revert: vi.fn(),
+      paused: vi.fn(),
+      scrollTo: vi.fn(),
+      scrollTop: vi.fn(() => 0),
+    })),
+    get: vi.fn(() => null),
+    registerPlugin: vi.fn(),
   },
 }));
 
