@@ -38,9 +38,8 @@ RUN playwright install-deps chromium && \
 # Create runtime directories for media, models and cache
 RUN mkdir -p /app/media/screenshots /app/media/reports /app/media/avatars /app/models
 
-# Copy application codebase and ML models
+# Copy application codebase
 COPY backend/ /app/backend/
-COPY models/ /app/models/
 COPY manage.py pytest.ini /app/
 COPY entrypoint.sh /app/entrypoint.sh
 

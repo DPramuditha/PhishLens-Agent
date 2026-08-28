@@ -85,6 +85,10 @@ jobs:
           # Treat other stylistic issues with report
           flake8 backend --count --exit-zero --max-complexity=15 --max-line-length=127 --statistics
 
+      - name: Apply Database Migrations
+        run: |
+          python manage.py migrate --no-input
+
       - name: Run All Pytest Suites with Coverage
         run: |
           pytest -v \
