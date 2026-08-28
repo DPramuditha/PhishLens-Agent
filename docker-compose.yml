@@ -1,0 +1,102 @@
+services:
+  # =============================================================================
+  # PostgreSQL Database Service
+  # =============================================================================
+  db:
+    image: postgres:16-alpine
+    container_name: phishlens_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-phishlens_db}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-dimuthu}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-phishlens_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - phishlens_net
+
+  # =============================================================================
+  # Django Multi-Agent Backend Service (PyTorch + Playwright + LangGraph)
+  # =============================================================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: phishlens_backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - DEBUG=${DEBUG:-False}
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-phishlens_django_secret_key_docker_prod_2026}
+      - DB_ENGINE=django.db.backends.postgresql
+      - DB_NAME=${DB_NAME:-phishlens_db}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-dimuthu}
+      - DB_HOST=db
+      - DB_PORT=5432
+      - LLM_PROVIDER=${LLM_PROVIDER:-openrouter}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-nvidia/nemotron-3-ultra-550b-a55b:free}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY:-}
+      - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-2024-12-01-preview}
+      - AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT:-gpt-5.4-mini}
+      - TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY:-}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-http://localhost:5173/login}
+      - JWT_SECRET=${JWT_SECRET:-phishlens_jwt_secret_token_key_2026}
+      - JWT_EXPIRY_HOURS=${JWT_EXPIRY_HOURS:-24}
+    ports:
+      - "8000:8000"
+    volumes:
+      - media_data:/app/media
+    networks:
+      - phishlens_net
+
+  # =============================================================================
+  # React Frontend Service (Served via Nginx Reverse Proxy)
+  # =============================================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_BASE_URL=
+    container_name: phishlens_frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "5173:80"
+    networks:
+      - phishlens_net
+
+# =============================================================================
+# Persistent Storage Volumes & Network Definition
+# =============================================================================
+volumes:
+  postgres_data:
+    driver: local
+  media_data:
+    driver: local
+
+networks:
+  phishlens_net:
+    driver: bridge
