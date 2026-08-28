@@ -103,6 +103,19 @@ vi.mock('gsap/ScrollSmoother', () => ({
   },
 }));
 
+// Mock gsap/SplitText
+vi.mock('gsap/SplitText', () => ({
+  SplitText: {
+    create: vi.fn(() => ({
+      words: [],
+      chars: [],
+      lines: [],
+      revert: vi.fn(),
+    })),
+    registerPlugin: vi.fn(),
+  },
+}));
+
 // Mock @react-oauth/google
 vi.mock('@react-oauth/google', () => ({
   GoogleOAuthProvider: ({ children }) => children,
