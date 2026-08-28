@@ -225,7 +225,7 @@ export default function ReportDashboard({
 
   // Helper to extract clean URL from summary text
   const getUrlFromSummary = (summaryText) => {
-    const match = summaryText?.match(/https?:\/\/[a-zA-Z0-9\-\.]+/);
+    const match = summaryText?.match(/https?:\/\/[a-zA-Z0-9\-.]+/);
     return match ? match[0] : 'https://secure-login-update-bank.com';
   };
 

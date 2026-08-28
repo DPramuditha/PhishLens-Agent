@@ -19,10 +19,28 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
 import django
 django.setup()
 
+from django.core.management import call_command
+
+# Apply migrations automatically so SQLite has all required tables
+try:
+    call_command('migrate', verbosity=0, interactive=False)
+except Exception:
+    pass
+
 from django.contrib.auth.models import User
 from django.test import RequestFactory, Client
 from backend.agents.models import ChatSession, ChatMessage, AgentMemoryRecord, UserFeedback
 from backend.core.security.jwt_utils import generate_jwt_token
+
+
+@pytest.fixture(autouse=True, scope="session")
+def django_db_setup(django_db_blocker):
+    """Unblock database access and ensure migrations are applied globally."""
+    django_db_blocker.unblock()
+    try:
+        call_command('migrate', verbosity=0, interactive=False)
+    except Exception:
+        pass
 
 
 @pytest.fixture
