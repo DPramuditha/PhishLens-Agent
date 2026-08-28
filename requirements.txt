@@ -4,7 +4,7 @@
 
 # Django & Web Framework
 Django>=5.0,<5.3
-gunicorn>=21.2.0
+gunicorn>=26.2.0
 
 # Database Connectors (PostgreSQL & SQLite)
 psycopg2-binary>=2.9.9
