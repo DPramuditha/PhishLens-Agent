@@ -223,7 +223,7 @@ export default function SearchChat({ isOpen, onClose, isDarkMode }) {
         </div>
 
         {/* Search Results / History List */}
-        <div className="max-h-[60vh] overflow-y-auto p-2">
+        <div className="max-h-[60vh] overflow-y-auto p-2 no-scrollbar">
           {isLoading ? (
             <div className="py-12 px-6 text-center text-gray-400 text-sm flex items-center justify-center gap-2">
               <div className="w-4 h-4 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
