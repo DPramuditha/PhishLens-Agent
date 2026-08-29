@@ -1,10 +1,8 @@
-# PhishLens Agent 🛡️🔍
-
 <p align="center">
-  <img src="frontend/src/assets/bloub-hexagone-attentif-orange-anime-light.svg" alt="PhishLens Agent Logo" width="120" height="120" />
+  <img src="docs/screenshots/readme-banner.png" alt="PhishLens Agent Banner" width="100%" />
 </p>
 
-<h3 align="center">Autonomous Multi-Agent AI Cybersecurity Platform for Deep Phishing Threat Investigation & Visual Brand Impersonation Verification</h3>
+<h1 align="center">PhishLens Agent: A Visual Similarity-Based Phishing Website Detection System Using Deep Learning and an Agentic AI Framework</h1>
 
 <p align="center">
   <a href="https://github.com/DPramuditha/PhishLens-Agent/actions"><img src="https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-blue?logo=github-actions&style=flat-square" alt="GitHub Actions CI/CD" /></a>
@@ -50,23 +48,20 @@ PhishLens Agent overcomes these limitations through a **cognitive multi-agent co
 
 ## 📸 Application Screenshots
 
-> [!TIP]
-> Place your two screenshot files inside `./docs/screenshots/dashboard.png` and `./docs/screenshots/threat_report.png` to automatically display them in your README.
-
 <p align="center">
-  <img src="./docs/screenshots/dashboard.png" alt="PhishLens Agent - Interactive Threat Analysis Dashboard" width="100%" style="border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.12);" />
+  <img src="./docs/screenshots/Chat_screenshort.png" alt="PhishLens Agent - Interactive Multi-Agent Threat Investigation Chat Interface" width="100%" style="border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.12);" />
 </p>
 <p align="center">
-  <em>Figure 1: Interactive Cyber Intelligence Dashboard featuring real-time multi-agent execution tracking, live browser screenshot capture, risk scoring gauge, and conversational AI investigation.</em>
+  <em>Figure 1: Interactive Cyber Intelligence Dashboard featuring real-time multi-agent execution tracking, live browser analysis, risk scoring, and conversational AI threat investigation.</em>
 </p>
 
 <br />
 
 <p align="center">
-  <img src="./docs/screenshots/threat_report.png" alt="PhishLens Agent - Forensic Threat Report and Brand Verification" width="100%" style="border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.12);" />
+  <img src="./docs/screenshots/Chat-screenshort.png" alt="PhishLens Agent - Threat Analysis and Deep Verification" width="100%" style="border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.12);" />
 </p>
 <p align="center">
-  <em>Figure 2: Forensic Threat Assessment Report displaying two-stage visual brand verification (Siamese cosine similarity), DOM heuristic breakdown, and one-click PDF export.</em>
+  <em>Figure 2: Multi-Agent Deep Threat Investigation & Verification Workflow with detailed agentic chain-of-thought breakdown and forensic evidence assessment.</em>
 </p>
 
 ---
@@ -402,7 +397,7 @@ PhishLens-Agent/
 │   ├── tests/                 # Backend Pytest Test Suites (180+ tests)
 │   └── urls.py                # API Routing Configuration
 ├── docs/
-│   └── screenshots/           # Screenshot assets (dashboard.png, threat_report.png)
+│   └── screenshots/           # Screenshot assets (readme-banner.png, Chat_screenshort.png, Chat-screenshort.png)
 ├── frontend/
 │   ├── src/
 │   │   ├── components/        # UI Components (Modals, Steppers, Dashboards)

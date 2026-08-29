@@ -80,7 +80,7 @@ STAGE1_MODEL_PATH = MODELS_DIR / "phishing_model_stage1.pth"
 STAGE2_MODEL_PATH = MODELS_DIR / "resnet50_siamese_brand_model.pth"
 
 STAGE1_THRESHOLD = 0.60
-STAGE2_SIMILARITY_THRESHOLD = 0.70
+STAGE2_SIMILARITY_THRESHOLD = 0.85
 
 # Image Preprocessing Transform for 224x224 CNN input
 val_test_transform = transforms.Compose([
@@ -260,12 +260,31 @@ TARGET_BRAND_PROFILES = [
 
 
 
-def _generate_canonical_brand_canvas(brand_name: str, bg: Tuple[int, int, int], fg: Tuple[int, int, int]) -> Image.Image:
-    """Generates a standardized high-contrast brand anchor image for gallery indexing."""
+def has_logo_structure(crop_img: Image.Image, min_variance: float = 12.0) -> bool:
+    """
+    Checks whether an image crop contains meaningful visual structure and edge contrast
+    (e.g., logo, text, glyph, emblem) rather than a solid/blank background.
+    """
+    try:
+        import numpy as np
+        arr = np.array(crop_img.convert("L"))
+        return float(np.std(arr)) > min_variance
+    except Exception:
+        return True
+
+
+def _generate_canonical_brand_canvas(brand_info: Dict[str, Any]) -> Image.Image:
+    """Generates a standardized high-contrast brand anchor image with structured emblem for gallery indexing."""
+    name = brand_info["name"]
+    bg = brand_info["bg"]
+    fg = brand_info["fg"]
     img = Image.new("RGB", (224, 224), color=bg)
     draw = ImageDraw.Draw(img)
+    # Draw geometric emblem border & badge container
+    draw.rectangle([30, 30, 194, 194], fill=fg, outline=bg, width=3)
+    draw.rectangle([45, 45, 179, 179], fill=bg, outline=fg, width=2)
     # Draw centered brand textual descriptor
-    draw.text((25, 95), brand_name[:16], fill=fg)
+    draw.text((55, 95), name[:14], fill=fg)
     return img
 
 
@@ -281,10 +300,7 @@ def _get_brand_gallery_embeddings() -> Dict[str, torch.Tensor]:
     with torch.no_grad():
         for brand_info in TARGET_BRAND_PROFILES:
             name = brand_info["name"]
-            bg = brand_info["bg"]
-            fg = brand_info["fg"]
-
-            anchor_img = _generate_canonical_brand_canvas(name, bg, fg)
+            anchor_img = _generate_canonical_brand_canvas(brand_info)
             tensor = val_test_transform(anchor_img).unsqueeze(0)
             emb = siamese_model.forward_one(tensor)  # (1, 128) unit vector
             gallery[name] = emb
@@ -294,16 +310,17 @@ def _get_brand_gallery_embeddings() -> Dict[str, torch.Tensor]:
 
 
 # ---------------------------------------------------------------------------
-# Logo Region Localization Heuristic
+# Logo & Viewport Region Localization Heuristic
 # ---------------------------------------------------------------------------
 def extract_logo_candidate_regions(screenshot: Image.Image) -> List[Tuple[str, Image.Image]]:
     """
-    Extracts high-probability candidate brand logo regions from a website screenshot:
+    Extracts high-probability candidate brand logo and viewport regions from a website screenshot:
     1. Top-Left Header Logo (Standard web convention for brand logos)
     2. Top-Center Header Logo (Common for mobile & modern centered login portals)
     3. Center Form/Auth Box Region (Common for OAuth & Login card banners)
     4. Top Navigation Bar strip
-    5. Full Screenshot fallback
+    5. Top-of-fold viewport (top 850px)
+    6. Full Screenshot fallback
     """
     w, h = screenshot.size
     candidates: List[Tuple[str, Image.Image]] = []
@@ -349,9 +366,12 @@ def predict_brand_impersonation(screenshot_input: Any, threshold: float = STAGE2
     Identifies the brand being impersonated in a webpage screenshot using the
     ResNet-50 Siamese Network in 128-dimensional Cosine Similarity space.
 
+    Requires both high similarity (>= 0.85) AND margin over secondary candidate (>= 0.04),
+    or near-perfect similarity (>= 0.95) to prevent false brand matches on generic layouts.
+
     Args:
         screenshot_input: Base64 data URI, raw bytes, PIL Image, or file path.
-        threshold: Minimum cosine similarity threshold (default 0.70) to declare brand match.
+        threshold: Minimum cosine similarity threshold (default 0.85) to declare brand match.
 
     Returns:
         dict: Brand identification results containing detected brand name,
@@ -380,15 +400,25 @@ def predict_brand_impersonation(screenshot_input: Any, threshold: float = STAGE2
         best_crop_name = "top_left_header"
         all_brand_scores: Dict[str, float] = {}
 
+        # Focus brand matching on header, logo strip, login card, and full image for isolated logos
+        w, h = img.size
+        logo_candidates = [c for c in candidates if c[0] in ["top_left_header", "top_center_header", "top_navbar", "center_auth_box"]]
+        if w <= 600 or h <= 600 or len(candidates) <= 1:
+            logo_candidates.append(("full_page", img))
+
         with torch.no_grad():
-            for crop_name, crop_img in candidates:
+            for crop_name, crop_img in logo_candidates:
+                # Filter out solid/blank regions with no visual logo structure
+                if not has_logo_structure(crop_img, min_variance=15.0):
+                    continue
+
                 crop_tensor = val_test_transform(crop_img).unsqueeze(0)
                 crop_emb = siamese_model.forward_one(crop_tensor)  # (1, 128)
 
                 for brand_name, brand_emb in gallery.items():
                     # Cosine similarity in normalized L2 space
                     sim = F.cosine_similarity(crop_emb, brand_emb, dim=1).item()
-                    
+
                     if brand_name not in all_brand_scores or sim > all_brand_scores[brand_name]:
                         all_brand_scores[brand_name] = sim
 
@@ -397,21 +427,42 @@ def predict_brand_impersonation(screenshot_input: Any, threshold: float = STAGE2
                         best_brand = brand_name
                         best_crop_name = crop_name
 
-        # Sort top candidates
-        sorted_candidates = sorted(all_brand_scores.items(), key=lambda x: x[1], reverse=True)[:5]
-        top_candidates_list = [{"brand": b, "similarity": round(s, 4)} for b, s in sorted_candidates]
+        # If no valid structured region found or no matches
+        if not all_brand_scores:
+            return {
+                "status": "success",
+                "brand_impersonation_detected": False,
+                "identified_brand": None,
+                "similarity_score": 0.0,
+                "confidence": 0.0,
+                "best_region": "top_left_header",
+                "threshold": threshold,
+                "top_candidates": []
+            }
 
-        detected = best_similarity >= threshold and best_brand is not None
-        confidence = max(0.0, min(1.0, (best_similarity - 0.50) / 0.50)) if detected else 0.0
+        # Sort top candidates
+        sorted_candidates = sorted(all_brand_scores.items(), key=lambda x: x[1], reverse=True)
+        top_candidates_list = [{"brand": b, "similarity": round(s, 4)} for b, s in sorted_candidates[:5]]
+
+        top_brand, top_sim = sorted_candidates[0]
+        second_sim = sorted_candidates[1][1] if len(sorted_candidates) > 1 else 0.0
+        margin = top_sim - second_sim
+
+        # Distinctive brand match requires either:
+        # 1. Similarity >= threshold (0.85) AND clear margin >= 0.04 over runner-up, OR
+        # 2. Near-perfect canonical match (similarity >= 0.95)
+        detected = (top_sim >= threshold and margin >= 0.04) or (top_sim >= 0.95)
+        confidence = max(0.0, min(1.0, (top_sim - 0.50) / 0.50)) if detected else 0.0
 
         return {
             "status": "success",
             "brand_impersonation_detected": detected,
-            "identified_brand": best_brand if detected else None,
-            "similarity_score": round(best_similarity, 4),
+            "identified_brand": top_brand if detected else None,
+            "similarity_score": round(top_sim, 4),
             "confidence": round(confidence, 4),
             "best_region": best_crop_name,
             "threshold": threshold,
+            "margin": round(margin, 4),
             "top_candidates": top_candidates_list,
         }
 
@@ -513,21 +564,25 @@ def generate_annotated_screenshot(
 
 
 # ---------------------------------------------------------------------------
-# Integrated Two-Stage Prediction Pipeline (In-Memory Base64 Support)
+# Integrated Two-Stage Prediction Pipeline (Multi-Crop & Decision Fusion)
 # ---------------------------------------------------------------------------
 def predict_screenshot(screenshot_input: Any) -> Dict[str, Any]:
     """
     Executes the complete Two-Stage Computer Vision Phishing & Brand Identification Pipeline:
 
     Stage 1: Binary Classification (EfficientNet-B0)
-      - Predicts phishing probability score p in [0.0, 1.0].
-      - If p >= 0.60: Website is classified as PHISHING and escalates to Stage 2.
-      - If p < 0.60: Website is classified as LEGITIMATE.
+      - Evaluates full screenshot as primary classifier.
+      - If full page has high height, evaluates top-fold viewport.
+      - Predicts phishing probability score p_stage1 in [0.0, 1.0].
 
     Stage 2: Brand Identification (ResNet-50 Siamese Network)
-      - Only executed when Stage 1 flags the site as phishing (probability >= 0.60).
-      - Localizes logo regions, extracts 128-D embedding, and compares with brand gallery.
-      - Identifies the specific impersonated brand and similarity confidence score.
+      - Evaluates candidate header and logo regions.
+      - Measures 128-D cosine similarity against reference brand gallery.
+      - Requires distinctive margin to avoid false positive brand matches.
+
+    Two-Stage Decision Fusion:
+      - Phishing is declared if Stage 1 >= 0.60 OR Stage 2 detects brand impersonation.
+      - Calibrates final probability and confidence.
 
     Args:
         screenshot_input: Base64 data URI, raw bytes, PIL Image, or file path.
@@ -549,82 +604,97 @@ def predict_screenshot(screenshot_input: Any) -> Dict[str, Any]:
         }
 
     try:
+        img_rgb = img.convert("RGB")
+        w, h = img_rgb.size
+        stage1_model = _get_stage1_model()
+
         # -----------------------------------------------------------------------
         # STAGE 1: EfficientNet-B0 Binary Classification
         # -----------------------------------------------------------------------
-        img_rgb = img.convert("RGB")
-        transformed_img = val_test_transform(img_rgb).unsqueeze(0)
-
-        stage1_model = _get_stage1_model()
         with torch.no_grad():
-            logits = stage1_model(transformed_img)
-            prob = torch.sigmoid(logits).item()
+            t_full = val_test_transform(img_rgb).unsqueeze(0)
+            p_full = torch.sigmoid(stage1_model(t_full)).item()
 
-        prediction = "phishing" if prob >= STAGE1_THRESHOLD else "legitimate"
-        binary_confidence = prob if prediction == "phishing" else (1.0 - prob)
+            p_view = 0.0
+            if h >= 400:
+                view_img = img_rgb.crop((0, 0, w, min(h, 750)))
+                t_view = val_test_transform(view_img).unsqueeze(0)
+                p_view = torch.sigmoid(stage1_model(t_view)).item()
+
+        prob_stage1 = max(p_full, p_view)
+        stage1_pred = "phishing" if prob_stage1 >= STAGE1_THRESHOLD else "legitimate"
 
         # -----------------------------------------------------------------------
-        # STAGE 2: ResNet-50 Siamese Brand Identification (if phishing >= 0.60)
+        # STAGE 2: ResNet-50 Siamese Brand Identification
         # -----------------------------------------------------------------------
+        stage2_out = predict_brand_impersonation(img_rgb, threshold=STAGE2_SIMILARITY_THRESHOLD)
+        brand_detected = bool(stage2_out.get("brand_impersonation_detected", False))
+        identified_brand = stage2_out.get("identified_brand")
+        brand_conf = stage2_out.get("confidence") or 0.0
+        best_similarity = stage2_out.get("similarity_score") or 0.0
+        best_region = stage2_out.get("best_region", "top_left_header")
+
         stage2_result: Dict[str, Any] = {
-            "triggered": False,
-            "brand_impersonation_detected": False,
-            "identified_brand": None,
-            "similarity_score": None,
-            "confidence": None,
-            "top_candidates": []
+            "triggered": True,
+            "brand_impersonation_detected": brand_detected,
+            "identified_brand": identified_brand,
+            "similarity_score": best_similarity,
+            "confidence": brand_conf,
+            "best_region": best_region,
+            "top_candidates": stage2_out.get("top_candidates", []),
         }
 
-        if prediction == "phishing":
-            stage2_out = predict_brand_impersonation(img_rgb, threshold=STAGE2_SIMILARITY_THRESHOLD)
-            stage2_result = {
-                "triggered": True,
-                "brand_impersonation_detected": stage2_out.get("brand_impersonation_detected", False),
-                "identified_brand": stage2_out.get("identified_brand"),
-                "similarity_score": stage2_out.get("similarity_score"),
-                "confidence": stage2_out.get("confidence"),
-                "best_region": stage2_out.get("best_region"),
-                "top_candidates": stage2_out.get("top_candidates", [])
-            }
-
-        # Formulate synthesized message
-        identified_brand = stage2_result.get("identified_brand")
-        if prediction == "phishing" and identified_brand:
-            brand_conf = stage2_result.get("confidence", 0.0)
+        # -----------------------------------------------------------------------
+        # UNIFIED TWO-STAGE DECISION FUSION
+        # -----------------------------------------------------------------------
+        if brand_detected and identified_brand:
+            # High-confidence brand impersonation detected
+            prediction = "phishing"
+            effective_prob = max(prob_stage1, 0.75 + 0.20 * brand_conf)
+            effective_prob = min(0.99, effective_prob)
+            confidence = effective_prob
             message = (
-                f"Stage 1 Visual ML classified screenshot as PHISHING (probability: {prob:.4f}). "
-                f"Stage 2 ResNet-50 Siamese Network identified brand impersonation of '{identified_brand}' "
-                f"with similarity confidence of {brand_conf:.4f}."
+                f"Stage 2 Siamese Network detected brand impersonation of '{identified_brand}' "
+                f"(similarity: {best_similarity:.4f}, confidence: {brand_conf:.4f}). "
+                f"Stage 1 Visual ML phishing probability: {prob_stage1:.4f}."
             )
-        elif prediction == "phishing":
+        elif stage1_pred == "phishing":
+            # Stage 1 binary classifier flagged phishing
+            prediction = "phishing"
+            effective_prob = prob_stage1
+            confidence = prob_stage1
             message = (
-                f"Stage 1 Visual ML classified screenshot as PHISHING (probability: {prob:.4f}). "
+                f"Stage 1 Visual ML classified screenshot as PHISHING (probability: {prob_stage1:.4f}). "
                 f"Stage 2 Siamese Network did not match a specific known brand gallery logo (generic phishing design)."
             )
         else:
+            # Both stages verified legitimate
+            prediction = "legitimate"
+            effective_prob = prob_stage1
+            confidence = 1.0 - prob_stage1
             message = (
-                f"Stage 1 Visual ML classified screenshot as LEGITIMATE (phishing probability: {prob:.4f}, "
-                f"confidence: {binary_confidence:.4f}). Stage 2 Brand Identification bypassed."
+                f"Stage 1 Visual ML classified screenshot as LEGITIMATE (phishing probability: {prob_stage1:.4f}, "
+                f"confidence: {confidence:.4f}). No brand impersonation detected in Stage 2."
             )
 
         brand_impersonation_dict = {
-            "detected": stage2_result.get("brand_impersonation_detected", False),
-            "brand": stage2_result.get("identified_brand"),
-            "confidence": stage2_result.get("confidence")
+            "detected": brand_detected,
+            "brand": identified_brand,
+            "confidence": brand_conf,
+            "similarity_score": best_similarity,
         }
 
         # Generate Visual Annotation Evidence (In-Memory Base64)
         annotated_screenshot_data = generate_annotated_screenshot(
             screenshot_input=img_rgb,
             prediction=prediction,
-            prob=prob,
+            prob=effective_prob,
             brand_impersonation=brand_impersonation_dict,
-            best_region=stage2_result.get("best_region")
+            best_region=best_region
         )
 
         screenshot_data_str = screenshot_input if isinstance(screenshot_input, str) and screenshot_input.startswith("data:image/") else None
         if screenshot_data_str is None:
-            # Convert img to base64 if needed
             buf = io.BytesIO()
             img_rgb.save(buf, format="PNG")
             screenshot_data_str = f"data:image/png;base64,{base64.b64encode(buf.getvalue()).decode('utf-8')}"
@@ -637,16 +707,16 @@ def predict_screenshot(screenshot_input: Any) -> Dict[str, Any]:
             "annotated_screenshot_path": None,
             "annotated_screenshot_url": annotated_screenshot_data,
             "stage1_binary_classification": {
-                "prediction": prediction,
-                "phishing_probability": round(prob, 4),
-                "confidence": round(binary_confidence, 4),
+                "prediction": stage1_pred,
+                "phishing_probability": round(prob_stage1, 4),
+                "confidence": round(prob_stage1 if stage1_pred == "phishing" else (1.0 - prob_stage1), 4),
                 "threshold": STAGE1_THRESHOLD
             },
             "stage2_brand_identification": stage2_result,
-            # Backward-compatible keys for orchestrator and report generator
+            # Synthesized decision keys for orchestrator and report generator
             "prediction": prediction,
-            "probability": round(prob, 4),
-            "confidence": round(binary_confidence, 4),
+            "probability": round(effective_prob, 4),
+            "confidence": round(confidence, 4),
             "brand_impersonation": brand_impersonation_dict,
             "message": message,
         }
@@ -661,4 +731,5 @@ def predict_screenshot(screenshot_input: Any) -> Dict[str, Any]:
             "annotated_screenshot_data": None,
             "annotated_screenshot_path": None,
         }
+
 
