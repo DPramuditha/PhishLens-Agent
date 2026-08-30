@@ -21,6 +21,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(os.path.join(BASE_DIR, 'backend', '.env'))
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 
+# ===== LangSmith Tracing Configuration =====
+if os.getenv('LANGSMITH_TRACING', '').lower() in ('true', '1', 'yes') or os.getenv('LANGCHAIN_TRACING_V2', '').lower() in ('true', '1', 'yes'):
+    os.environ['LANGCHAIN_TRACING_V2'] = 'true'
+    os.environ['LANGSMITH_TRACING'] = 'true'
+    if os.getenv('LANGSMITH_API_KEY'):
+        os.environ['LANGCHAIN_API_KEY'] = os.getenv('LANGSMITH_API_KEY')
+    if os.getenv('LANGSMITH_PROJECT'):
+        os.environ['LANGCHAIN_PROJECT'] = os.getenv('LANGSMITH_PROJECT', 'PhishLens-Agent')
+    if os.getenv('LANGSMITH_ENDPOINT'):
+        os.environ['LANGCHAIN_ENDPOINT'] = os.getenv('LANGSMITH_ENDPOINT', 'https://api.smith.langchain.com')
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 

@@ -259,9 +259,13 @@ body, p, div, button, input, select, textarea, a, li, .font-outfit {
 .no-scrollbar::-webkit-scrollbar,
 .custom-scrollbar::-webkit-scrollbar,
 .scan-logs-scope::-webkit-scrollbar,
+.scan-logs-scope *::-webkit-scrollbar,
 .screenshots-scope::-webkit-scrollbar,
+.screenshots-scope *::-webkit-scrollbar,
 .history-scope::-webkit-scrollbar,
-.popup-scope::-webkit-scrollbar {
+.history-scope *::-webkit-scrollbar,
+.popup-scope::-webkit-scrollbar,
+.popup-scope *::-webkit-scrollbar {
   display: none !important;
   width: 0 !important;
   height: 0 !important;
@@ -271,9 +275,13 @@ body, p, div, button, input, select, textarea, a, li, .font-outfit {
 .no-scrollbar,
 .custom-scrollbar,
 .scan-logs-scope,
+.scan-logs-scope *,
 .screenshots-scope,
+.screenshots-scope *,
 .history-scope,
-.popup-scope {
+.history-scope *,
+.popup-scope,
+.popup-scope * {
   -ms-overflow-style: none !important;  /* IE and Edge */
   scrollbar-width: none !important;  /* Firefox */
 }

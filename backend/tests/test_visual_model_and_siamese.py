@@ -120,7 +120,7 @@ class TestVisualPipeline:
     def test_threshold_constants(self):
         """Test threshold constants."""
         assert STAGE1_THRESHOLD == 0.60
-        assert STAGE2_SIMILARITY_THRESHOLD == 0.70
+        assert STAGE2_SIMILARITY_THRESHOLD == 0.85
 
     def test_extract_logo_candidate_regions(self):
         """extract_logo_candidate_regions crops potential header and logo areas."""
@@ -149,6 +149,47 @@ class TestVisualPipeline:
         assert "probability" in res
         assert "brand_impersonation" in res
 
+    def test_predict_screenshot_phishing_login_interface(self):
+        """predict_screenshot correctly flags a phishing login page as phishing with high probability."""
+        from PIL import ImageDraw
+        login_img = Image.new("RGB", (1280, 800), color=(240, 242, 245))
+        draw = ImageDraw.Draw(login_img)
+        draw.rectangle([400, 200, 880, 600], fill=(255, 255, 255), outline=(200, 200, 200), width=2)
+        draw.rectangle([450, 300, 830, 350], fill=(250, 250, 250), outline=(150, 150, 150), width=1)
+        draw.rectangle([450, 380, 830, 430], fill=(250, 250, 250), outline=(150, 150, 150), width=1)
+        draw.rectangle([450, 470, 830, 520], fill=(24, 119, 242))
+        draw.text((460, 240), "Sign in to your account", fill=(0, 0, 0))
+        draw.text((460, 315), "Email or Phone", fill=(120, 120, 120))
+        draw.text((460, 395), "Password", fill=(120, 120, 120))
+        draw.text((600, 485), "Log In", fill=(255, 255, 255))
+
+        res = predict_screenshot(login_img)
+        assert res["status"] == "success"
+        assert res["prediction"] == "phishing"
+        assert res["probability"] >= 0.60
+        assert res["stage1_binary_classification"]["prediction"] == "phishing"
+
+    def test_predict_screenshot_brand_impersonation_detection(self):
+        """predict_screenshot detects brand impersonation when a brand logo is present."""
+        from backend.agents.visual_model import _generate_canonical_brand_canvas, TARGET_BRAND_PROFILES
+        boc_profile = next(b for b in TARGET_BRAND_PROFILES if "Ceylon" in b["name"])
+        boc_canvas = _generate_canonical_brand_canvas(boc_profile)
+
+        res = predict_screenshot(boc_canvas)
+        assert res["status"] == "success"
+        assert res["prediction"] == "phishing"
+        assert res["brand_impersonation"]["detected"] is True
+        assert res["brand_impersonation"]["brand"] == "Bank of Ceylon (BOC)"
+        assert res["probability"] >= 0.70
+
+    def test_predict_screenshot_blank_image_legitimate(self):
+        """predict_screenshot does not false-positive on blank/plain images."""
+        blank_white = Image.new("RGB", (1280, 800), (255, 255, 255))
+        res = predict_screenshot(blank_white)
+        assert res["status"] == "success"
+        assert res["prediction"] == "legitimate"
+        assert res["brand_impersonation"]["detected"] is False
+
     def test_generate_annotated_screenshot(self):
         """generate_annotated_screenshot creates an annotated PNG base64 string."""
         img = Image.new("RGB", (400, 300), color="white")
@@ -160,3 +201,29 @@ class TestVisualPipeline:
         )
         assert isinstance(annotated_b64, str)
         assert annotated_b64.startswith("data:image/png;base64,")
+
+    def test_predict_screenshot_brand_impersonation_when_weights_unreadable(self, monkeypatch):
+        """predict_screenshot operates safely even when .pth weight files are unreadable (e.g. Git LFS pointers in CI)."""
+        import backend.agents.visual_model as vm
+
+        # Reset cached model instances
+        monkeypatch.setattr(vm, "_stage1_model", None)
+        monkeypatch.setattr(vm, "_stage2_model", None)
+        monkeypatch.setattr(vm, "_brand_gallery_embeddings", None)
+
+        def mock_torch_load(*args, **kwargs):
+            raise RuntimeError("Corrupted weights or Git LFS pointer file")
+
+        monkeypatch.setattr(torch, "load", mock_torch_load)
+
+        from backend.agents.visual_model import _generate_canonical_brand_canvas, TARGET_BRAND_PROFILES
+        boc_profile = next(b for b in TARGET_BRAND_PROFILES if "Ceylon" in b["name"])
+        boc_canvas = _generate_canonical_brand_canvas(boc_profile)
+
+        res = predict_screenshot(boc_canvas)
+        assert res["status"] == "success"
+        assert res["prediction"] == "phishing"
+        assert res["brand_impersonation"]["detected"] is True
+        assert res["brand_impersonation"]["brand"] == "Bank of Ceylon (BOC)"
+
+

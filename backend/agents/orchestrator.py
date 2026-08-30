@@ -58,6 +58,18 @@ nest_asyncio.apply()
 
 # Load environment variables
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+
+# ===== LangSmith Tracing Configuration =====
+if os.getenv("LANGSMITH_TRACING", "").lower() in ("true", "1", "yes") or os.getenv("LANGCHAIN_TRACING_V2", "").lower() in ("true", "1", "yes"):
+    os.environ["LANGCHAIN_TRACING_V2"] = "true"
+    os.environ["LANGSMITH_TRACING"] = "true"
+    if os.getenv("LANGSMITH_API_KEY"):
+        os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGSMITH_API_KEY")
+    if os.getenv("LANGSMITH_PROJECT"):
+        os.environ["LANGCHAIN_PROJECT"] = os.getenv("LANGSMITH_PROJECT", "PhishLens-Agent")
+    if os.getenv("LANGSMITH_ENDPOINT"):
+        os.environ["LANGCHAIN_ENDPOINT"] = os.getenv("LANGSMITH_ENDPOINT", "https://api.smith.langchain.com")
+
 logger = logging.getLogger(__name__)
 
 
@@ -125,18 +137,19 @@ class OrchestratorAgent:
                 api_key=openrouter_api_key or "dummy_key",
                 base_url=openrouter_base_url,
                 temperature=0,
-                max_retries=2,
+                max_retries=1,
                 default_headers={
                     "HTTP-Referer": "https://github.com/DPramuditha/PhishLens-Agent",
                     "X-Title": "PhishLens Agent",
                 },
             )
-            # Reliable fallback models pool on OpenRouter
+            # Reliable verified fallback models pool on OpenRouter
             fallback_model_names = [
-                "google/gemma-4-26b-a4b-it:free",
-                "minimax/minimax-m2.7:free",
                 "nvidia/nemotron-3.5-lightning:free",
-                "liquid/lfm-2.5-2.6b:free",
+                "minimax/minimax-m3:free",
+                "poolside/laguna-s-2.1:free",
+                "inclusionai/ling-3.0-flash-fin:free",
+                "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
             ]
             self.fallback_llms = [
                 ChatOpenAI(
@@ -540,11 +553,13 @@ You MUST output your final answer as a JSON object with this exact structure:
 ```
 
 ## Scoring Guidelines:
-- **0-20 (SAFE)**: Legitimate website with no phishing indicators
-- **21-40 (LOW)**: Minor suspicious elements but likely safe
-- **41-60 (MEDIUM)**: Multiple suspicious indicators, exercise caution
-- **61-80 (HIGH)**: Strong phishing indicators, likely malicious
-- **81-100 (CRITICAL)**: Clear phishing attempt, do not interact
+- **0-20 (SAFE)**: Legitimate website with no phishing indicators (valid SSL, established domain, verified visual legitimacy, no typosquatting, no brand impersonation, and no external form actions). Standard login forms and benign brand references on legitimate sites MUST receive a low score (0-15).
+- **21-40 (LOW)**: Minor suspicious elements (e.g. young domain or missing WHOIS) but interface and behavior are likely safe.
+- **41-60 (MEDIUM)**: Multiple suspicious indicators (e.g. suspicious TLD, unusual redirects, multiple unverified forms), exercise caution.
+- **61-80 (HIGH)**: Strong phishing indicators (e.g. visual ML phishing classification, suspicious brand lookalike domain, stealth iframes), likely malicious.
+- **81-100 (CRITICAL)**: Clear phishing attack (e.g. brand impersonation on unauthorized domain, typosquatting targeting financial/bank entities, or external credential theft), do not interact.
+
+IMPORTANT: Do NOT penalize legitimate websites with high risk scores simply because they have standard login password fields, mention common technology brand names in text, or link to social media profiles.
 
 Be thorough, precise, and evidence-based.
 """
@@ -552,7 +567,7 @@ Be thorough, precise, and evidence-based.
         raw_content = ""
         llm_error_detail = None
 
-        # 1. Try Primary LLM
+        # 1. Try Primary LLM & verified fallback models
         models_to_try = [self.llm] + getattr(self, "fallback_llms", [])
 
         for idx, current_llm in enumerate(models_to_try):
@@ -570,7 +585,8 @@ Be thorough, precise, and evidence-based.
                         break
             except Exception as llm_err:
                 llm_error_detail = str(llm_err)
-                logger.warning(f"[Orchestrator] LLM synthesis attempt {idx+1}/{len(models_to_try)} failed ({llm_err}).")
+                logger.warning(f"[Orchestrator] LLM synthesis attempt {idx+1}/{len(models_to_try)} failed ({llm_err}). Trying next fallback model...")
+                time.sleep(0.3)
 
         # If LLM returned empty, unparseable, or invalid report, use the complete deterministic multi-agent report
         used_fallback = False
@@ -867,16 +883,15 @@ Be thorough, precise, and evidence-based.
         password_count = input_fields.get("password_fields", 0)
         email_count = input_fields.get("email_fields", 0)
 
-        if password_count > 0:
-            if not is_whitelisted and not is_official_brand_match:
-                risk_score += 15
-                findings.append({
-                    "category": "HTML Structure",
-                    "detail": f"Page contains {password_count} credential/password input field(s) on an unverified domain.",
-                    "severity": "medium"
-                })
-        elif email_count > 0 and not is_whitelisted:
-            risk_score += 5
+        # Check if domain has suspicious indicators
+        has_suspicious_context = (
+            visual_pred == "phishing" or
+            brand_detected or
+            bool(typosquatting) or
+            (domain_age is not None and domain_age < 60) or
+            ssl_cert.get("is_trusted") is False or
+            tld in SUSPICIOUS_TLDS
+        )
 
         forms = html_features.get("forms") or {}
         form_details = forms.get("details", [])
@@ -890,6 +905,23 @@ Be thorough, precise, and evidence-based.
                 "severity": "critical"
             })
 
+        if password_count > 0:
+            if has_suspicious_context and not is_whitelisted and not is_official_brand_match:
+                risk_score += 15
+                findings.append({
+                    "category": "HTML Structure",
+                    "detail": f"Page contains {password_count} credential/password input field(s) in a suspicious context.",
+                    "severity": "high"
+                })
+            else:
+                findings.append({
+                    "category": "HTML Structure",
+                    "detail": f"Standard login/authentication interface detected ({password_count} password field(s)).",
+                    "severity": "low"
+                })
+        elif email_count > 0 and has_suspicious_context and not is_whitelisted:
+            risk_score += 5
+
         # Iframes
         iframes = html_features.get("iframes") or {}
         iframe_details = iframes.get("details", [])
@@ -901,7 +933,7 @@ Be thorough, precise, and evidence-based.
                 "detail": f"Detected {len(hidden_iframes)} hidden iframe(s) in DOM, often used for stealth clickjacking or credential harvesting.",
                 "severity": "high"
             })
-        elif len(iframe_details) > 0 and not is_whitelisted:
+        elif len(iframe_details) > 0 and has_suspicious_context and not is_whitelisted:
             risk_score += 5
 
         # External Resources & Links
@@ -910,7 +942,7 @@ Be thorough, precise, and evidence-based.
         ext_links = links_info.get("external", 0)
         null_links = links_info.get("null_or_dead", 0)
 
-        if total_links > 3 and not is_whitelisted:
+        if total_links > 3 and has_suspicious_context and not is_whitelisted:
             if ext_links / total_links > 0.60:
                 risk_score += 10
                 findings.append({
@@ -928,25 +960,32 @@ Be thorough, precise, and evidence-based.
 
         # DOM Text Suspicious Keywords & Brand Mentions
         dom_keywords = html_features.get("suspicious_keywords_found") or []
-        if len(dom_keywords) >= 3 and not is_whitelisted:
+        if len(dom_keywords) >= 3 and has_suspicious_context and not is_whitelisted:
             risk_score += 15
             findings.append({
                 "category": "HTML Structure",
                 "detail": f"Multiple phishing-related keywords present in page text: {', '.join(dom_keywords[:5])}.",
                 "severity": "high"
             })
-        elif len(dom_keywords) >= 1 and not is_whitelisted:
+        elif len(dom_keywords) >= 1 and has_suspicious_context and not is_whitelisted:
             risk_score += 5
 
         brand_mentions = html_features.get("brand_mentions_in_text") or []
         foreign_brand_mentions = [b for b in brand_mentions if b not in domain.lower()]
         if foreign_brand_mentions and not is_whitelisted and not is_official_brand_match:
-            risk_score += 20
-            findings.append({
-                "category": "HTML Structure",
-                "detail": f"Page text prominently references brand(s) {', '.join(foreign_brand_mentions)} not matching domain '{domain}'.",
-                "severity": "high"
-            })
+            if has_suspicious_context or password_count > 0:
+                risk_score += 20
+                findings.append({
+                    "category": "HTML Structure",
+                    "detail": f"Page text prominently references brand(s) {', '.join(foreign_brand_mentions)} not matching domain '{domain}'.",
+                    "severity": "high"
+                })
+            else:
+                findings.append({
+                    "category": "HTML Structure",
+                    "detail": f"Page text references brand/service name(s): {', '.join(foreign_brand_mentions)}.",
+                    "severity": "low"
+                })
 
         # -------------------------------------------------------------------
         # 4. LONG-TERM THREAT MEMORY SIGNALS (Weight: +/- 20 pts)
@@ -962,7 +1001,7 @@ Be thorough, precise, and evidence-based.
             past_scans = domain_intel.get("scan_count", 0)
             last_risk = domain_intel.get("latest_risk_level", "SAFE")
             last_score = domain_intel.get("latest_risk_score", 0)
-            if last_score >= 61:
+            if last_score >= 61 and has_suspicious_context:
                 risk_score += 15
                 findings.append({
                     "category": "Long-Term Memory",
@@ -1032,6 +1071,17 @@ Be thorough, precise, and evidence-based.
         # Whitelist guarantee: If domain is verified whitelisted without external form tampering, cap to SAFE range
         if is_whitelisted and not external_forms:
             risk_score = min(risk_score, 5)
+
+        # Verified Legitimacy Guard: If visual ML verified legitimacy, SSL is valid, no typosquatting, no brand impersonation, and no external forms, ensure SAFE range
+        if (
+            visual_pred == "legitimate" and
+            ssl_cert.get("is_trusted") and
+            not typosquatting and
+            not brand_detected and
+            not external_forms and
+            not is_sl_impersonation
+        ):
+            risk_score = min(risk_score, 15)
 
         # -------------------------------------------------------------------
         # 7. FINAL SCORE NORMALIZATION & VERDICT
@@ -1252,6 +1302,28 @@ Be thorough, precise, and evidence-based.
                 "tool_trace": [],
             }
 
+    def _invoke_llm_with_fallback(self, messages: List[BaseMessage]) -> tuple[Optional[AIMessage], Optional[str]]:
+        """
+        Invokes LLMs with intelligent fallback across primary and backup models.
+        Handles RateLimitError (429), timeouts, and transient API issues gracefully.
+        """
+        models_to_try = [self.llm] + getattr(self, "fallback_llms", [])
+        last_error = None
+
+        for idx, current_llm in enumerate(models_to_try):
+            try:
+                response = current_llm.invoke(messages)
+                if response and response.content:
+                    return response, None
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(
+                    f"[Orchestrator] LLM attempt {idx+1}/{len(models_to_try)} failed ({e}). Switching to next model..."
+                )
+                time.sleep(0.3)
+
+        return None, last_error
+
     def run_followup_chat(self, chat_id: str, user_message: str, user=None) -> Dict[str, Any]:
         """
         Processes a follow-up conversational message within an existing chat thread (/chat/<id>).
@@ -1328,7 +1400,10 @@ Your task:
         ]
 
         try:
-            response = self.llm.invoke(messages_payload)
+            response, err = self._invoke_llm_with_fallback(messages_payload)
+            if not response or not response.content:
+                raise Exception(err or "Unable to generate response from available LLM models.")
+
             reply_text = response.content
             duration = round(time.time() - start_time, 2)
 
