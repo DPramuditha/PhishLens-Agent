@@ -228,8 +228,11 @@ def _get_stage2_siamese_model() -> ResNet50SiameseNetwork:
 
     model = ResNet50SiameseNetwork(embedding_dim=128, pretrained=False, dropout_rate=0.25)
     if STAGE2_MODEL_PATH.exists():
-        state_dict = torch.load(STAGE2_MODEL_PATH, map_location="cpu")
-        model.load_state_dict(state_dict)
+        try:
+            state_dict = torch.load(STAGE2_MODEL_PATH, map_location="cpu")
+            model.load_state_dict(state_dict)
+        except Exception:
+            pass
     model.eval()
 
     _stage2_model = model

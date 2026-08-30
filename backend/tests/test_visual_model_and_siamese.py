@@ -202,3 +202,28 @@ class TestVisualPipeline:
         assert isinstance(annotated_b64, str)
         assert annotated_b64.startswith("data:image/png;base64,")
 
+    def test_predict_screenshot_brand_impersonation_when_weights_unreadable(self, monkeypatch):
+        """predict_screenshot operates safely even when .pth weight files are unreadable (e.g. Git LFS pointers in CI)."""
+        import backend.agents.visual_model as vm
+
+        # Reset cached model instances
+        monkeypatch.setattr(vm, "_stage1_model", None)
+        monkeypatch.setattr(vm, "_stage2_model", None)
+        monkeypatch.setattr(vm, "_brand_gallery_embeddings", None)
+
+        def mock_torch_load(*args, **kwargs):
+            raise RuntimeError("Corrupted weights or Git LFS pointer file")
+
+        monkeypatch.setattr(torch, "load", mock_torch_load)
+
+        from backend.agents.visual_model import _generate_canonical_brand_canvas, TARGET_BRAND_PROFILES
+        boc_profile = next(b for b in TARGET_BRAND_PROFILES if "Ceylon" in b["name"])
+        boc_canvas = _generate_canonical_brand_canvas(boc_profile)
+
+        res = predict_screenshot(boc_canvas)
+        assert res["status"] == "success"
+        assert res["prediction"] == "phishing"
+        assert res["brand_impersonation"]["detected"] is True
+        assert res["brand_impersonation"]["brand"] == "Bank of Ceylon (BOC)"
+
+
