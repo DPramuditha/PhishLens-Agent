@@ -25,7 +25,7 @@ torchvision>=0.17.0
 pillow>=10.2.0
 
 # Web Scraping & Browser Automation
-playwright>=1.40.0
+playwright>=1.62.0
 beautifulsoup4>=4.12.0
 requests>=2.31.0
 urllib3>=2.0.0
